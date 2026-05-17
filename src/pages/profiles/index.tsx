@@ -13,6 +13,7 @@ import {
 } from "@/components";
 import { useProfiles } from "@/hooks";
 import {
+  BriefcaseIcon,
   DownloadIcon,
   MoreHorizontal,
   Pencil,
@@ -216,6 +217,16 @@ const Profiles = () => {
                   {moment(profile.updatedAt).format("MMM D, YYYY")}
                 </span>
                 <div className="flex items-center gap-1">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-7 text-xs gap-1 px-2"
+                    onClick={() => navigate(`/profiles/${profile.id}/jobs`)}
+                    title="Find jobs matching this profile"
+                  >
+                    <BriefcaseIcon className="size-3.5" />
+                    Find Jobs
+                  </Button>
                   <Button
                     size="sm"
                     className="h-7 text-xs gap-1 px-2"

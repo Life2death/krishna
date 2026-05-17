@@ -21,6 +21,7 @@ export const STORAGE_KEYS = {
   RESPONSE_SETTINGS: "response_settings",
   SUPPORTS_IMAGES: "supports_images",
   ACTIVE_PROFILE_ID: "active_profile_id",
+  JOB_PROVIDER: "job_provider",
 } as const;
 
 // Max number of files that can be attached to a message
