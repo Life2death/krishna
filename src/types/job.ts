@@ -19,4 +19,5 @@ export interface JobListing {
   scheduleType?: string; // "Full-time", "Contract", etc.
   matchScore?: number; // 0-100, computed locally
   isScoring?: boolean; // true while AI is computing the score
+  clicked?: boolean; // true if previously opened in this session/history
 }

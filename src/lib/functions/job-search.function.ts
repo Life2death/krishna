@@ -243,3 +243,125 @@ export function extractTopSkills(text: string, max: number = 10): string[] {
   const lower = text.toLowerCase();
   return SKILL_KEYWORDS.filter((k) => lower.includes(k)).slice(0, max);
 }
+
+/**
+ * AI-powered skills extraction. Uses the user's configured LLM to read the
+ * resume + goals and return the 10–15 most relevant skills. Falls back to
+ * keyword matching on parse failure.
+ */
+export async function extractSkillsWithAI(
+  resumeText: string,
+  goals: string,
+  provider: TYPE_PROVIDER,
+  selectedProvider: { provider: string; variables: Record<string, string> }
+): Promise<string[]> {
+  if (!resumeText.trim()) return [];
+
+  const prompt =
+    `You are an expert technical recruiter. Read the candidate's GOALS and RESUME and return the TOP 12 most important professional skills/keywords for a job search.\n\n` +
+    `Rules:\n` +
+    `- Include technical skills (languages, frameworks, tools, platforms, methodologies)\n` +
+    `- Include domain/industry expertise if relevant (e.g. "fintech", "healthcare", "service delivery")\n` +
+    `- Include leadership/seniority signals ONLY if the candidate is clearly senior (e.g. "people management", "p&l", "stakeholder management")\n` +
+    `- Lowercase, no duplicates, no explanations\n` +
+    `- Return ONLY a JSON array of strings, nothing else\n\n` +
+    `=== GOALS ===\n${goals.substring(0, 600)}\n\n` +
+    `=== RESUME (excerpt) ===\n${resumeText.substring(0, 4000)}\n\n` +
+    `JSON array:`;
+
+  let full = "";
+  try {
+    for await (const chunk of fetchAIResponse({
+      provider,
+      selectedProvider,
+      systemPrompt: undefined,
+      history: [],
+      userMessage: prompt,
+      imagesBase64: [],
+    })) {
+      full += chunk;
+    }
+  } catch {
+    return extractTopSkills(`${goals} ${resumeText}`, 12);
+  }
+
+  // Find first JSON array in response
+  const match = full.match(/\[[\s\S]*?\]/);
+  if (!match) return extractTopSkills(`${goals} ${resumeText}`, 12);
+  try {
+    const parsed = JSON.parse(match[0]);
+    if (Array.isArray(parsed)) {
+      const cleaned = parsed
+        .filter((s) => typeof s === "string")
+        .map((s: string) => s.trim().toLowerCase())
+        .filter((s) => s.length > 0 && s.length < 40);
+      // De-duplicate while preserving order
+      const seen = new Set<string>();
+      const unique: string[] = [];
+      for (const s of cleaned) {
+        if (!seen.has(s)) {
+          seen.add(s);
+          unique.push(s);
+        }
+      }
+      return unique.slice(0, 15);
+    }
+  } catch {}
+  return extractTopSkills(`${goals} ${resumeText}`, 12);
+}
+
+/**
+ * Parse a job's posted-at string into "days ago".
+ * Returns null when unparseable (callers should treat null as "unknown — include").
+ */
+export function parseJobAgeDays(postedAt?: string): number | null {
+  if (!postedAt) return null;
+  const raw = postedAt.trim();
+  if (!raw) return null;
+
+  // ISO / RFC date (Tavily often returns ISO)
+  const iso = Date.parse(raw);
+  if (!Number.isNaN(iso)) {
+    const days = (Date.now() - iso) / (24 * 60 * 60 * 1000);
+    return Math.max(0, days);
+  }
+
+  const lower = raw.toLowerCase();
+  if (/just\s+now|moments?\s+ago|today/.test(lower)) return 0;
+  if (/yesterday/.test(lower)) return 1;
+
+  const rel = lower.match(/(\d+)\s*\+?\s*(minute|hour|day|week|month|year)s?\s*ago/);
+  if (rel) {
+    const num = parseInt(rel[1], 10);
+    switch (rel[2]) {
+      case "minute":
+        return num / (60 * 24);
+      case "hour":
+        return num / 24;
+      case "day":
+        return num;
+      case "week":
+        return num * 7;
+      case "month":
+        return num * 30;
+      case "year":
+        return num * 365;
+    }
+  }
+  return null;
+}
+
+/**
+ * Filter listings to those posted within `maxDays`. Jobs with unparseable
+ * posted_at are kept (inclusive default — better to show than hide).
+ */
+export function filterJobsByAge(
+  listings: JobListing[],
+  maxDays: number
+): JobListing[] {
+  return listings.filter((j) => {
+    const age = parseJobAgeDays(j.postedAt);
+    if (age === null) return true;
+    return age <= maxDays;
+  });
+}

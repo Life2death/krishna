@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback, useEffect, useRef, useMemo } from "react";
 import { Button, Input } from "@/components";
 import { PageLayout } from "@/layouts";
 import { useApp } from "@/contexts";
@@ -9,8 +9,16 @@ import {
   getJobProviderConfig,
   getProfileById,
   extractTopSkills,
+  extractSkillsWithAI,
+  filterJobsByAge,
+  recordJobView,
+  recordJobClick,
+  getSavedJobSkills,
+  setSavedJobSkills,
+  getJobHistory,
 } from "@/lib";
 import { InterviewProfile, JobListing } from "@/types";
+import { JOB_MAX_AGE_DAYS } from "@/config";
 import {
   BriefcaseIcon,
   SearchIcon,
@@ -25,12 +33,13 @@ import {
   XIcon,
   PlusIcon,
   ArrowLeftIcon,
+  SaveIcon,
+  CheckCheckIcon,
 } from "lucide-react";
 import { useNavigate, useParams } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { openUrl } from "@tauri-apps/plugin-opener";
-
-// ─── Score badge ─────────────────────────────────────────────────────────────
+import { JobHistorySection } from "./JobHistorySection";
 
 const ScoreBadge = ({
   score,
@@ -51,7 +60,6 @@ const ScoreBadge = ({
 
   const label =
     score >= 85 ? "Excellent" : score >= 70 ? "Good" : score >= 50 ? "Fair" : "Low";
-
   const barColor =
     score >= 85
       ? "bg-green-500"
@@ -60,7 +68,6 @@ const ScoreBadge = ({
       : score >= 50
       ? "bg-yellow-500"
       : "bg-muted-foreground";
-
   const textColor =
     score >= 85
       ? "text-green-600 dark:text-green-400"
@@ -105,12 +112,24 @@ const SkillChip = ({
   </span>
 );
 
-const JobCard = ({ job }: { job: JobListing }) => (
+const JobCard = ({
+  job,
+  onApply,
+}: {
+  job: JobListing;
+  onApply: (job: JobListing) => void;
+}) => (
   <div className="rounded-xl border border-border bg-card p-4 space-y-3 hover:border-primary/40 transition-colors">
     <div className="flex items-start justify-between gap-3">
       <div className="flex-1 min-w-0">
-        <h3 className="text-sm font-semibold leading-snug truncate">
+        <h3 className="text-sm font-semibold leading-snug truncate flex items-center gap-1.5">
           {job.title}
+          {job.clicked ? (
+            <CheckCheckIcon
+              className="h-3 w-3 text-blue-500 flex-shrink-0"
+              aria-label="Previously opened"
+            />
+          ) : null}
         </h3>
         {job.company && (
           <div className="flex items-center gap-1 mt-0.5 text-xs text-muted-foreground">
@@ -164,14 +183,7 @@ const JobCard = ({ job }: { job: JobListing }) => (
         size="sm"
         variant="default"
         className="h-7 text-xs"
-        onClick={async () => {
-          if (!job.url) return;
-          try {
-            await openUrl(job.url);
-          } catch {
-            // fallback
-          }
-        }}
+        onClick={() => onApply(job)}
         disabled={!job.url}
       >
         <ExternalLinkIcon className="h-3 w-3" />
@@ -180,8 +192,6 @@ const JobCard = ({ job }: { job: JobListing }) => (
     </div>
   </div>
 );
-
-// ─── Main page ────────────────────────────────────────────────────────────────
 
 const Jobs = () => {
   const navigate = useNavigate();
@@ -192,29 +202,102 @@ const Jobs = () => {
   const [keywords, setKeywords] = useState("");
   const [location, setLocation] = useState("");
   const [skills, setSkills] = useState<string[]>([]);
+  const [savedSkillsSnapshot, setSavedSkillsSnapshot] = useState<string[]>([]);
+  const [skillsLoading, setSkillsLoading] = useState(false);
   const [skillInput, setSkillInput] = useState("");
   const [jobs, setJobs] = useState<JobListing[]>([]);
+  const [totalBeforeFilter, setTotalBeforeFilter] = useState(0);
   const [isSearching, setIsSearching] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [hasSearched, setHasSearched] = useState(false);
+  const [skillsJustSaved, setSkillsJustSaved] = useState(false);
+  const [historyRefreshKey, setHistoryRefreshKey] = useState(0);
   const skillInputRef = useRef<HTMLInputElement>(null);
 
-  // Load profile by URL :id and pre-fill keywords + skills
+  // Load profile + skills (saved override > AI-extract > keyword fallback)
   useEffect(() => {
     if (!profileId) return;
-    getProfileById(profileId).then((p) => {
-      if (!p) return;
+    let cancelled = false;
+    (async () => {
+      const p = await getProfileById(profileId);
+      if (!p || cancelled) return;
       setProfile(p);
+
       if (p.goals) {
         const firstLine = p.goals.split("\n")[0].trim().substring(0, 80);
         if (firstLine) setKeywords(firstLine);
       }
-      if (p.resumeText) {
-        const extracted = extractTopSkills(p.resumeText, 10);
-        if (extracted.length > 0) setSkills(extracted);
+
+      // Skills resolution priority:
+      // 1. User's saved override (if any)
+      // 2. AI extraction (if AI provider configured)
+      // 3. Regex keyword fallback
+      const saved = getSavedJobSkills(profileId);
+      if (saved && saved.length > 0) {
+        setSkills(saved);
+        setSavedSkillsSnapshot(saved);
+        return;
       }
-    });
-  }, [profileId]);
+
+      const aiProvider = allAiProviders.find(
+        (x) => x.id === selectedAIProvider.provider
+      );
+      if (aiProvider && p.resumeText) {
+        setSkillsLoading(true);
+        try {
+          const extracted = await extractSkillsWithAI(
+            p.resumeText,
+            p.goals,
+            aiProvider,
+            selectedAIProvider
+          );
+          if (cancelled) return;
+          if (extracted.length > 0) {
+            setSkills(extracted);
+            setSavedSkillsSnapshot(extracted);
+          } else {
+            const fallback = extractTopSkills(
+              `${p.goals} ${p.resumeText}`,
+              10
+            );
+            setSkills(fallback);
+            setSavedSkillsSnapshot(fallback);
+          }
+        } catch {
+          const fallback = extractTopSkills(
+            `${p.goals} ${p.resumeText}`,
+            10
+          );
+          setSkills(fallback);
+          setSavedSkillsSnapshot(fallback);
+        } finally {
+          if (!cancelled) setSkillsLoading(false);
+        }
+      } else if (p.resumeText) {
+        const fallback = extractTopSkills(`${p.goals} ${p.resumeText}`, 10);
+        setSkills(fallback);
+        setSavedSkillsSnapshot(fallback);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [profileId, allAiProviders, selectedAIProvider]);
+
+  const skillsDirty = useMemo(() => {
+    if (skills.length !== savedSkillsSnapshot.length) return true;
+    const a = [...skills].sort();
+    const b = [...savedSkillsSnapshot].sort();
+    return a.some((s, i) => s !== b[i]);
+  }, [skills, savedSkillsSnapshot]);
+
+  const handleSaveSkills = () => {
+    if (!profileId) return;
+    setSavedJobSkills(profileId, skills);
+    setSavedSkillsSnapshot(skills);
+    setSkillsJustSaved(true);
+    setTimeout(() => setSkillsJustSaved(false), 2000);
+  };
 
   const addSkill = useCallback((value: string) => {
     const trimmed = value.trim().toLowerCase();
@@ -236,6 +319,21 @@ const Jobs = () => {
     }
   };
 
+  const handleApply = useCallback(
+    async (job: JobListing) => {
+      if (!job.url || !profileId || !profile) return;
+      recordJobClick(job.url, profileId);
+      setJobs((prev) =>
+        prev.map((j) => (j.url === job.url ? { ...j, clicked: true } : j))
+      );
+      setHistoryRefreshKey((k) => k + 1);
+      try {
+        await openUrl(job.url);
+      } catch {}
+    },
+    [profileId, profile]
+  );
+
   const handleSearch = useCallback(async () => {
     const config = getJobProviderConfig();
     if (!config) {
@@ -244,7 +342,6 @@ const Jobs = () => {
       );
       return;
     }
-
     const activeKey =
       config.activeProvider === "tavily" ? config.tavilyKey : config.serperKey;
     if (!activeKey) {
@@ -253,7 +350,6 @@ const Jobs = () => {
       );
       return;
     }
-
     if (!keywords.trim()) {
       setError("Enter a job title or keywords to search.");
       return;
@@ -263,11 +359,45 @@ const Jobs = () => {
     setError(null);
     setHasSearched(true);
     setJobs([]);
+    setTotalBeforeFilter(0);
 
     try {
       const query = buildJobQuery(keywords, location, skills);
-      const results = await searchJobs(config, query);
-      setJobs(results.map((j) => ({ ...j, isScoring: false })));
+      const rawResults = await searchJobs(config, query);
+      setTotalBeforeFilter(rawResults.length);
+
+      // Age filter
+      const fresh = filterJobsByAge(rawResults, JOB_MAX_AGE_DAYS);
+
+      // Annotate with history (mark previously-clicked jobs)
+      const history = profileId ? getJobHistory(profileId) : [];
+      const clickedUrls = new Set(
+        history.filter((h) => h.clickedAt).map((h) => h.url)
+      );
+      const annotated: JobListing[] = fresh.map((j) => ({
+        ...j,
+        isScoring: false,
+        clicked: clickedUrls.has(j.url),
+      }));
+      setJobs(annotated);
+
+      // Record views for these jobs (per current profile)
+      if (profile && profileId) {
+        for (const j of annotated) {
+          recordJobView({
+            id: j.id,
+            profileId,
+            profileName: profile.name,
+            title: j.title,
+            company: j.company,
+            location: j.location,
+            url: j.url,
+            via: j.via,
+            postedAt: j.postedAt,
+          });
+        }
+        setHistoryRefreshKey((k) => k + 1);
+      }
 
       if (!profile?.resumeText) return;
 
@@ -276,7 +406,7 @@ const Jobs = () => {
       );
       if (!aiProvider) return;
 
-      const toScore = results.slice(0, 10);
+      const toScore = annotated.slice(0, 10);
       setJobs((prev) =>
         prev.map((j, i) => (i < 10 ? { ...j, isScoring: true } : j))
       );
@@ -297,6 +427,21 @@ const Jobs = () => {
                   : j
               )
             );
+            // Persist score back to history
+            if (profileId) {
+              recordJobView({
+                id: job.id,
+                profileId,
+                profileName: profile.name,
+                title: job.title,
+                company: job.company,
+                location: job.location,
+                url: job.url,
+                via: job.via,
+                postedAt: job.postedAt,
+                matchScore: score,
+              });
+            }
           } catch {
             setJobs((prev) =>
               prev.map((j) =>
@@ -312,6 +457,7 @@ const Jobs = () => {
           (a, b) => (b.matchScore ?? -1) - (a.matchScore ?? -1)
         )
       );
+      setHistoryRefreshKey((k) => k + 1);
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Job search failed";
       setError(msg);
@@ -323,16 +469,18 @@ const Jobs = () => {
     location,
     skills,
     profile,
+    profileId,
     allAiProviders,
     selectedAIProvider,
   ]);
 
   const hasProvider = !!getJobProviderConfig();
+  const filteredOut = totalBeforeFilter - jobs.length;
 
   return (
     <PageLayout
       title={profile ? `Find Jobs · ${profile.name}` : "Find Jobs"}
-      description="Search live job listings and score them against your profile resume."
+      description={`Showing only jobs posted within the last ${JOB_MAX_AGE_DAYS} days. AI scores each result against your resume.`}
       rightSlot={
         <div className="flex items-center gap-2">
           <Button
@@ -373,6 +521,7 @@ const Jobs = () => {
         </div>
       )}
 
+      {/* Search bar */}
       <div className="flex flex-col sm:flex-row gap-2">
         <div className="relative flex-1">
           <BriefcaseIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -408,15 +557,36 @@ const Jobs = () => {
         </Button>
       </div>
 
+      {/* Skills editor */}
       <div className="space-y-2">
-        <div className="flex items-center gap-2">
-          <SparklesIcon className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
-          <p className="text-xs text-muted-foreground font-medium">
-            Core competencies / skills
-            {profile && skills.length > 0
-              ? " · extracted from resume"
-              : " · add skills to refine search"}
-          </p>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <SparklesIcon className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+            <p className="text-xs text-muted-foreground font-medium">
+              Core competencies / skills
+              {skillsLoading
+                ? " · extracting with AI…"
+                : profile && skills.length > 0
+                ? savedSkillsSnapshot === skills
+                  ? " · AI-extracted from resume"
+                  : " · edited"
+                : ""}
+            </p>
+            {skillsLoading && (
+              <Loader2Icon className="h-3 w-3 animate-spin text-primary" />
+            )}
+          </div>
+          {skillsDirty && (
+            <Button
+              size="sm"
+              variant={skillsJustSaved ? "outline" : "default"}
+              className="h-6 text-[10px] px-2 gap-1"
+              onClick={handleSaveSkills}
+            >
+              <SaveIcon className="h-3 w-3" />
+              {skillsJustSaved ? "Saved!" : "Save skills"}
+            </Button>
+          )}
         </div>
         <div
           className="flex flex-wrap gap-1.5 p-2 rounded-lg border border-border bg-muted/30 min-h-[36px] cursor-text"
@@ -432,11 +602,14 @@ const Jobs = () => {
               onChange={(e) => setSkillInput(e.target.value)}
               onKeyDown={handleSkillKeyDown}
               placeholder={
-                skills.length === 0
+                skillsLoading
+                  ? "AI is reading your resume…"
+                  : skills.length === 0
                   ? "Type a skill and press Enter…"
                   : "Add skill…"
               }
               className="bg-transparent text-[11px] outline-none flex-1 placeholder:text-muted-foreground/60 min-w-[80px]"
+              disabled={skillsLoading}
             />
             {skillInput.trim() && (
               <button
@@ -450,17 +623,10 @@ const Jobs = () => {
           </div>
         </div>
         <p className="text-[10px] text-muted-foreground">
-          Press Enter or comma to add a skill, Backspace to remove last.
+          Enter/comma to add, Backspace to remove last. Edits are saved
+          per-profile when you click "Save skills".
         </p>
       </div>
-
-      {profile && (
-        <p className="text-xs text-muted-foreground flex items-center gap-1.5 -mt-1">
-          <SparklesIcon className="h-3 w-3" />
-          Profile <span className="font-semibold">{profile.name}</span> loaded —
-          jobs will be scored against your resume.
-        </p>
-      )}
 
       {error && (
         <div className="flex items-start gap-2 rounded-lg border border-destructive/30 bg-destructive/10 p-3">
@@ -469,39 +635,59 @@ const Jobs = () => {
         </div>
       )}
 
+      {/* Results */}
       {hasSearched && !isSearching && jobs.length === 0 && !error && (
         <p className="text-sm text-muted-foreground text-center py-8">
-          No jobs found. Try different keywords or location.
+          {totalBeforeFilter > 0
+            ? `All ${totalBeforeFilter} results were older than ${JOB_MAX_AGE_DAYS} days and were hidden. Try different keywords.`
+            : "No jobs found. Try different keywords or location."}
         </p>
       )}
 
       {jobs.length > 0 && (
         <div className="space-y-3">
           <p className="text-xs text-muted-foreground">
-            {jobs.length} jobs found
+            {jobs.length} fresh job{jobs.length !== 1 ? "s" : ""}
+            {filteredOut > 0 && (
+              <>
+                {" "}
+                · {filteredOut} hidden (older than {JOB_MAX_AGE_DAYS} days)
+              </>
+            )}
             {profile ? " · scoring against your resume…" : ""}
           </p>
           {jobs.map((job) => (
-            <JobCard key={job.id} job={job} />
+            <JobCard key={job.id} job={job} onApply={handleApply} />
           ))}
         </div>
       )}
 
       {!hasSearched && (
-        <div className="flex flex-col items-center justify-center gap-3 py-16 text-center">
+        <div className="flex flex-col items-center justify-center gap-3 py-12 text-center">
           <div className="rounded-full bg-muted p-4">
             <BriefcaseIcon className="h-8 w-8 text-muted-foreground" />
           </div>
           <div>
             <p className="text-sm font-medium">Find your next role</p>
             <p className="text-xs text-muted-foreground mt-1 max-w-xs">
-              Search live job listings from LinkedIn, Naukri, Indeed and more.
-              Your resume is used to score each result — no data ever leaves
-              your device.
+              Live job listings from LinkedIn, Naukri, Indeed and more.
+              AI-scored against your resume. Only jobs posted within the last{" "}
+              {JOB_MAX_AGE_DAYS} days are shown.
             </p>
           </div>
         </div>
       )}
+
+      {/* History */}
+      <div className="pt-4 border-t border-border/60">
+        <JobHistorySection
+          profileId={profileId}
+          title={
+            profile ? `History · ${profile.name}` : "Recently viewed jobs"
+          }
+          refreshKey={historyRefreshKey}
+        />
+      </div>
     </PageLayout>
   );
 };

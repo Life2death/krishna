@@ -22,7 +22,14 @@ export const STORAGE_KEYS = {
   SUPPORTS_IMAGES: "supports_images",
   ACTIVE_PROFILE_ID: "active_profile_id",
   JOB_PROVIDER: "job_provider",
+  JOB_HISTORY: "job_history",
+  JOB_SEARCH_SKILLS: "job_search_skills",
 } as const;
+
+// Maximum age for jobs shown in search results (days)
+export const JOB_MAX_AGE_DAYS = 5;
+// History retention window (days)
+export const JOB_HISTORY_RETENTION_DAYS = 7;
 
 // Max number of files that can be attached to a message
 export const MAX_FILES = 6;

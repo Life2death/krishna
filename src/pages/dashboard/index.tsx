@@ -1,4 +1,4 @@
-import { NaukriLeloApiSetup } from "./components";
+import { NaukriLeloApiSetup, RecentJobs } from "./components";
 import { PageLayout } from "@/layouts";
 
 const Dashboard = () => {
@@ -8,6 +8,7 @@ const Dashboard = () => {
       description="Naukri Lelo — free, open-source AI interview assistant. Configure your BYOK API keys to get started."
     >
       <NaukriLeloApiSetup />
+      <RecentJobs />
     </PageLayout>
   );
 };

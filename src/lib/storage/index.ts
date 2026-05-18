@@ -5,3 +5,5 @@ export * from "./customizable.storage";
 export * from "./shortcuts.storage";
 export * from "./response-settings.storage";
 export * from "./job-providers";
+export * from "./job-history";
+export * from "./job-search-skills";
