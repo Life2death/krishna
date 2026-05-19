@@ -21,7 +21,7 @@ if (windowLabel.startsWith("capture-overlay-")) {
 } else {
   ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
     <React.StrictMode>
-      <ThemeProvider>
+      <ThemeProvider defaultTheme="light">
         <AppProvider>
           <ExpandedLayoutProvider>
             <AppRoutes />

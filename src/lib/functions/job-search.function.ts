@@ -2,6 +2,54 @@ import { fetch as tauriFetch } from "@tauri-apps/plugin-http";
 import { JobListing, JobProviderConfig, TYPE_PROVIDER } from "@/types";
 import { fetchAIResponse } from "./ai-response.function";
 
+// ─── URL filter ──────────────────────────────────────────────────────────────
+// Tavily/Serper sometimes return non-job pages (LinkedIn member profiles,
+// company About pages, etc.). isJobUrl() rejects those so the result list
+// stays focused on actual openings.
+
+const NON_JOB_PATH_PATTERNS: RegExp[] = [
+  /linkedin\.com\/(in|pub|sales|school|posts|feed|learning)\b/i,
+  /linkedin\.com\/company\/[^/]+\/?$/i, // company landing (no /jobs after)
+  /naukri\.com\/(profile|recruiter|mnj|nlogin)\b/i,
+  /indeed\.com\/cmp\/[^/]+\/?$/i, // company landing on Indeed
+  /glassdoor\.com\/Overview\/Working-at/i,
+];
+
+const JOB_PATH_HINTS: RegExp[] = [
+  /\/job/i,
+  /\/career/i,
+  /\/opening/i,
+  /\/vacanc/i,
+  /\/hiring/i,
+  /\/position/i,
+  /\/recruit/i,
+  /\/apply/i,
+  /\/listing/i,
+  /\/role/i,
+];
+
+export function isJobUrl(url: string | undefined): boolean {
+  if (!url) return false;
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return false;
+  }
+  const full = `${parsed.hostname}${parsed.pathname}`;
+  // Reject obvious non-job pages first
+  if (NON_JOB_PATH_PATTERNS.some((re) => re.test(full))) return false;
+  // For LinkedIn specifically, require a job-listing path
+  if (/linkedin\.com/i.test(parsed.hostname)) {
+    return /\/jobs\/(view|collections|search|apply)/i.test(parsed.pathname);
+  }
+  // For other domains, accept if it looks like a job-listing path OR has typical
+  // query params used by ATS systems (rare in URL hostname, common in path).
+  if (JOB_PATH_HINTS.some((re) => re.test(parsed.pathname))) return true;
+  // Tavily/Serper already filter by job-board domain; default to accepting.
+  return true;
+}
+
 // ─── Tavily ──────────────────────────────────────────────────────────────────
 
 interface TavilyResult {
@@ -48,16 +96,18 @@ async function searchViaTavily(
   }
 
   const data: TavilyResponse = await res.json();
-  return (data.results || []).map((r, i) => ({
-    id: `tavily-${i}-${Date.now()}`,
-    title: r.title,
-    company: extractCompanyFromTitle(r.title),
-    location: extractLocationFromSnippet(r.content),
-    snippet: r.content?.substring(0, 300) || "",
-    url: r.url,
-    via: extractDomainLabel(r.url),
-    postedAt: r.published_date,
-  }));
+  return (data.results || [])
+    .filter((r) => isJobUrl(r.url))
+    .map((r, i) => ({
+      id: `tavily-${i}-${Date.now()}`,
+      title: r.title,
+      company: extractCompanyFromTitle(r.title),
+      location: extractLocationFromSnippet(r.content),
+      snippet: r.content?.substring(0, 300) || "",
+      url: r.url,
+      via: extractDomainLabel(r.url),
+      postedAt: r.published_date,
+    }));
 }
 
 // ─── Serper ──────────────────────────────────────────────────────────────────
@@ -100,18 +150,23 @@ async function searchViaSerper(
   }
 
   const data: SerperResponse = await res.json();
-  return (data.jobs || []).map((j, i) => ({
-    id: `serper-${i}-${Date.now()}`,
-    title: j.title,
-    company: j.company_name,
-    location: j.location,
-    snippet: j.description?.substring(0, 300) || "",
-    url: j.link || j.apply_options?.[0]?.link || "",
-    via: j.via,
-    postedAt: j.detected_extensions?.posted_at,
-    salary: j.detected_extensions?.salary,
-    scheduleType: j.detected_extensions?.schedule_type,
-  }));
+  return (data.jobs || [])
+    .map((j, i) => {
+      const url = j.link || j.apply_options?.[0]?.link || "";
+      return {
+        id: `serper-${i}-${Date.now()}`,
+        title: j.title,
+        company: j.company_name,
+        location: j.location,
+        snippet: j.description?.substring(0, 300) || "",
+        url,
+        via: j.via,
+        postedAt: j.detected_extensions?.posted_at,
+        salary: j.detected_extensions?.salary,
+        scheduleType: j.detected_extensions?.schedule_type,
+      };
+    })
+    .filter((j) => isJobUrl(j.url));
 }
 
 // ─── Public API ──────────────────────────────────────────────────────────────
