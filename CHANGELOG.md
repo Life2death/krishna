@@ -95,6 +95,17 @@ src/
 
 ## Release history
 
+### v2.1.4 (May 19 2026)
+
+- 🐛 **Fix: Teleprompter toggle now arms the Save Changes button.** The toggle
+  was previously auto-saving on click (matching the AlwaysOnTop pattern), which
+  was inconsistent with the rest of the Settings page where Theme and
+  Transparency live behind a single "Save Changes" button. Refactored
+  `TeleprompterToggle` into a controlled component owned by the Settings
+  page — clicking the switch now flips a pending state, the Save Changes
+  button enables, and the value persists on click. Closing the teleprompter
+  window when turning off is moved into the Save handler too.
+
 ### v2.1.3 (May 19 2026)
 
 - 🪪 **Rebranded to "Focus Assistant"** — productName, identifier, bundle ID,

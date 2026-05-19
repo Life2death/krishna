@@ -1,32 +1,23 @@
 import { Switch, Label, Header } from "@/components";
-import { getTeleprompterEnabled, setTeleprompterEnabled } from "@/lib";
-import { closeTeleprompterWindow } from "@/hooks";
-import { useEffect, useState } from "react";
 
 interface TeleprompterToggleProps {
+  /** Controlled pending value — driven by the Settings page. */
+  pendingEnabled: boolean;
+  /** Called when the user clicks the switch; arms Save Changes. */
+  onPendingChange: (next: boolean) => void;
   className?: string;
 }
 
-export const TeleprompterToggle = ({ className }: TeleprompterToggleProps) => {
-  const [enabled, setEnabled] = useState<boolean>(false);
-
-  useEffect(() => {
-    setEnabled(getTeleprompterEnabled());
-  }, []);
-
-  const handleChange = async (checked: boolean) => {
-    setTeleprompterEnabled(checked);
-    setEnabled(checked);
-    // Notify any listeners (footer toggle button) without a full reload
-    window.dispatchEvent(new CustomEvent("teleprompter-enabled-changed"));
-    // If user is turning it OFF, also close any open teleprompter window
-    if (!checked) {
-      try {
-        await closeTeleprompterWindow();
-      } catch {}
-    }
-  };
-
+/**
+ * Controlled toggle: the Settings page owns the pending state and persists
+ * it when the user clicks "Save Changes". This matches the theme/transparency
+ * pattern so a single Save button confirms every change on the page.
+ */
+export const TeleprompterToggle = ({
+  pendingEnabled,
+  onPendingChange,
+  className,
+}: TeleprompterToggleProps) => {
   return (
     <div id="teleprompter" className={`space-y-2 ${className ?? ""}`}>
       <Header
@@ -38,19 +29,19 @@ export const TeleprompterToggle = ({ className }: TeleprompterToggleProps) => {
         <div className="flex items-center space-x-3">
           <div>
             <Label className="text-sm font-medium">
-              {enabled ? "Disable Teleprompter" : "Enable Teleprompter"}
+              {pendingEnabled ? "Disable Teleprompter" : "Enable Teleprompter"}
             </Label>
             <p className="text-xs text-muted-foreground mt-1">
-              {enabled
-                ? 'A "Reading Mode" toggle appears at the bottom of the app. Tap it to open/close the overlay.'
-                : "When on, a small toggle appears at the bottom of the app to launch the overlay window."}
+              {pendingEnabled
+                ? 'A "Reading Mode" pill will appear at the bottom of the app. Tap it to open/close the overlay window.'
+                : "When on, a small pill appears at the bottom of the app to launch the overlay window."}
             </p>
           </div>
         </div>
         <Switch
-          checked={enabled}
-          onCheckedChange={handleChange}
-          title={`Toggle teleprompter ${enabled ? "off" : "on"}`}
+          checked={pendingEnabled}
+          onCheckedChange={onPendingChange}
+          title={`Toggle teleprompter ${pendingEnabled ? "off" : "on"}`}
         />
       </div>
     </div>
