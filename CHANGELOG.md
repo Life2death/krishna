@@ -95,6 +95,17 @@ src/
 
 ## Release history
 
+### v2.1.5 (May 19 2026)
+
+- 🧹 **Removed defunct "Naukri Lelo Prompts" section from System Prompts page.**
+  This section was a remnant from a decommissioned cloud prompt-library
+  service. The remote API was removed back in commit `f236e72` ("Free
+  version with license removed"), but the consuming UI was left in place,
+  showing a perpetual "Naukri Lelo API Not Enabled" empty state because
+  there's no UI to ever flip the flag. Deleted the unused
+  `NaukriLeloPrompts.tsx` component; the user's local SQLite-backed system
+  prompts (top of the page) are unchanged and continue to work normally.
+
 ### v2.1.4 (May 19 2026)
 
 - 🐛 **Fix: Teleprompter toggle now arms the Save Changes button.** The toggle
