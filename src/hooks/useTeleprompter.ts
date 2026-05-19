@@ -53,7 +53,7 @@ export async function openTeleprompterWindow(): Promise<void> {
   } catch {}
 
   const win = new WebviewWindow(TELEPROMPTER_LABEL, {
-    url: "index.html#/teleprompter",
+    url: "index.html",
     title: "Reading Mode",
     width: DEFAULT_WIDTH,
     height: DEFAULT_HEIGHT,

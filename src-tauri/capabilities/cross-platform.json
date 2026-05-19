@@ -17,6 +17,7 @@
     "core:window:allow-set-focus",
     "core:window:allow-outer-size",
     "core:window:allow-current-monitor",
+    "core:window:allow-start-resize-dragging",
     "core:event:default",
     "opener:default",
     "log:default",

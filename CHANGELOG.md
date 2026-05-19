@@ -95,6 +95,30 @@ src/
 
 ## Release history
 
+### v2.1.7 (May 20 2026)
+
+- 🐛 **Fix: teleprompter window never actually opened.** The WebviewWindow
+  URL was `index.html#/teleprompter` (hash routing) but the app uses
+  `BrowserRouter`, which ignores the hash. So Tauri created the window,
+  loaded `index.html`, and React Router resolved `/` → `<App />` instead
+  of `<Teleprompter />` — the window was invisible/empty so it looked
+  like nothing happened.
+  - Switched to the same pattern the `capture-overlay-*` windows already
+    use: URL is plain `index.html`, and `main.tsx` dispatches on the
+    window label to render `<Teleprompter />` directly without the
+    router/AppProvider tree.
+  - Removed the now-redundant `/teleprompter` route from `AppRoutes`.
+- 🖱️ **Fix: window can now be resized with the mouse.** The overlay had
+  `resizable: true` but `decorations: false`, so the OS drew no grab
+  handles. Added eight CSS-positioned hot-zones (4 edges + 4 corners)
+  inside the teleprompter; each one calls Tauri's
+  `start_resize_dragging` IPC with the appropriate direction on
+  `mousedown`. The bottom-right corner also shows a subtle three-line
+  visual grip so it's discoverable. The required permission
+  `core:window:allow-start-resize-dragging` was added to both
+  capability files.
+- The overlay is also fully draggable — grab the header bar to move it.
+
 ### v2.1.6 (May 19 2026)
 
 - 🩹 **Restored bundle identifier to `com.naukrilelo.app`.** v2.1.3 renamed

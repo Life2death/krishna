@@ -6,10 +6,39 @@
 import { useEffect, useRef, useState } from "react";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
+import { invoke } from "@tauri-apps/api/core";
 import {
   TELEPROMPTER_CLEAR_EVENT,
   TELEPROMPTER_EVENT,
 } from "@/config";
+
+// Tauri 2 resize-drag directions
+type ResizeDirection =
+  | "North"
+  | "South"
+  | "East"
+  | "West"
+  | "NorthEast"
+  | "NorthWest"
+  | "SouthEast"
+  | "SouthWest";
+
+async function startResize(direction: ResizeDirection) {
+  // Use the IPC command directly so this works whether or not the JS
+  // helper is included in the bundled API tree.
+  try {
+    await invoke("plugin:window|start_resize_dragging", { direction });
+  } catch {
+    try {
+      const win = getCurrentWebviewWindow();
+      // @ts-expect-error — newer Tauri versions expose this on the window class
+      if (typeof win.startResizeDragging === "function") {
+        // @ts-expect-error
+        await win.startResizeDragging(direction);
+      }
+    } catch {}
+  }
+}
 import {
   getTeleprompterFontSize,
   getTeleprompterOpacity,
@@ -175,6 +204,86 @@ const Teleprompter = () => {
             Waiting for the next answer — ask a question in the main window.
           </p>
         )}
+      </div>
+
+      {/* ─── Resize handles ─────────────────────────────────────────────
+          The window has no OS decorations, so we render eight invisible
+          handles around the edges. Each one calls startResizeDragging()
+          on mousedown — Tauri then takes over the drag.                */}
+      {/* Edges */}
+      <div
+        onMouseDown={(e) => {
+          e.preventDefault();
+          void startResize("North");
+        }}
+        className="absolute top-0 left-2 right-2 h-1.5 cursor-n-resize"
+      />
+      <div
+        onMouseDown={(e) => {
+          e.preventDefault();
+          void startResize("South");
+        }}
+        className="absolute bottom-0 left-2 right-2 h-1.5 cursor-s-resize"
+      />
+      <div
+        onMouseDown={(e) => {
+          e.preventDefault();
+          void startResize("West");
+        }}
+        className="absolute top-2 bottom-2 left-0 w-1.5 cursor-w-resize"
+      />
+      <div
+        onMouseDown={(e) => {
+          e.preventDefault();
+          void startResize("East");
+        }}
+        className="absolute top-2 bottom-2 right-0 w-1.5 cursor-e-resize"
+      />
+      {/* Corners */}
+      <div
+        onMouseDown={(e) => {
+          e.preventDefault();
+          void startResize("NorthWest");
+        }}
+        className="absolute top-0 left-0 h-2 w-2 cursor-nw-resize"
+      />
+      <div
+        onMouseDown={(e) => {
+          e.preventDefault();
+          void startResize("NorthEast");
+        }}
+        className="absolute top-0 right-0 h-2 w-2 cursor-ne-resize"
+      />
+      <div
+        onMouseDown={(e) => {
+          e.preventDefault();
+          void startResize("SouthWest");
+        }}
+        className="absolute bottom-0 left-0 h-2 w-2 cursor-sw-resize"
+      />
+      <div
+        onMouseDown={(e) => {
+          e.preventDefault();
+          void startResize("SouthEast");
+        }}
+        className="absolute bottom-0 right-0 h-3 w-3 cursor-se-resize z-10 flex items-end justify-end pr-0.5 pb-0.5"
+        title="Drag to resize"
+      >
+        {/* Subtle visual grip — three diagonal lines */}
+        <svg
+          width="10"
+          height="10"
+          viewBox="0 0 10 10"
+          fill="none"
+          className="opacity-60"
+        >
+          <path
+            d="M9 1 L1 9 M9 4 L4 9 M9 7 L7 9"
+            stroke="currentColor"
+            strokeWidth="1"
+            className="text-primary"
+          />
+        </svg>
       </div>
     </div>
   );
