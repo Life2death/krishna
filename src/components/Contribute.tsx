@@ -6,11 +6,11 @@ const Contribute = () => {
       <CardContent className="flex flex-col gap-4 p-4 py-0 md:flex-row md:items-center md:justify-between">
         <div className="space-y-2 md:max-w-[70%]">
           <CardTitle className="text-xs lg:text-sm">
-            Contribute to Naukri Lelo
+            Contribute to Focus Assistant
           </CardTitle>
           <CardDescription className="text-[10px] lg:text-xs">
-            Fix a listed issue and help make Naukri Lelo better for everyone. 
-            This is a free, open-source project. read more at github.com/Life2death/naukri-lelo
+            Fix a listed issue and help make Focus Assistant better for everyone.
+            This is a free, open-source project.
           </CardDescription>
         </div>
         <Button asChild className="w-full md:w-auto text-[10px] lg:text-xs">

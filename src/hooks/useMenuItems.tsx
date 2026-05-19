@@ -96,7 +96,7 @@ export const useMenuItems = () => {
     },
     {
       icon: PowerIcon,
-      label: "Quit Naukri Lelo",
+      label: "Quit Focus Assistant",
       action: async () => {
         await invoke("exit_app");
       },

@@ -5,6 +5,7 @@ import {
   AlwaysOnTopToggle,
   AppIconToggle,
   AutostartToggle,
+  TeleprompterToggle,
 } from "./components";
 import { PageLayout } from "@/layouts";
 import { Button } from "@/components";
@@ -72,6 +73,9 @@ const Settings = () => {
 
       {/* Always On Top Toggle */}
       <AlwaysOnTopToggle />
+
+      {/* Teleprompter (reading mode overlay) */}
+      <TeleprompterToggle />
     </PageLayout>
   );
 };

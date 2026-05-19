@@ -10,7 +10,12 @@ import {
   generateMessageId,
   generateRequestId,
   getResponseSettings,
+  getTeleprompterEnabled,
 } from "@/lib";
+import {
+  pushTeleprompterText,
+  clearTeleprompterText,
+} from "./useTeleprompter";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 
@@ -221,6 +226,11 @@ export const useChatCompletion = (
 
         let fullResponse = "";
 
+        // Reset the teleprompter for a fresh answer
+        if (getTeleprompterEnabled()) {
+          void clearTeleprompterText();
+        }
+
         try {
           // Use the fetchAIResponse function with signal
           for await (const chunk of fetchAIResponse({
@@ -243,6 +253,12 @@ export const useChatCompletion = (
             }
 
             fullResponse += chunk;
+
+            // Mirror the answer into the teleprompter window when enabled —
+            // throttled implicitly because chunks are typically token-sized.
+            if (getTeleprompterEnabled()) {
+              void pushTeleprompterText(fullResponse);
+            }
 
             // Update the last message (assistant's response) in real-time
             const assistantMsg: ChatMessage = {

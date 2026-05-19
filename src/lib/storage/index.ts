@@ -7,3 +7,4 @@ export * from "./response-settings.storage";
 export * from "./job-providers";
 export * from "./job-history";
 export * from "./job-search-skills";
+export * from "./teleprompter";

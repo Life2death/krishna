@@ -5,7 +5,7 @@ const Dashboard = () => {
   return (
     <PageLayout
       title="Dashboard"
-      description="Naukri Lelo — free, open-source AI interview assistant. Configure your BYOK API keys to get started."
+      description="Focus Assistant — configure your API keys to get started."
     >
       <NaukriLeloApiSetup />
       <RecentJobs />

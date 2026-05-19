@@ -14,6 +14,7 @@ import {
   Profiles,
   PrepSession,
   Jobs,
+  Teleprompter,
 } from "@/pages";
 import { DashboardLayout } from "@/layouts";
 
@@ -22,6 +23,8 @@ export default function AppRoutes() {
     <Router>
       <Routes>
         <Route path="/" element={<App />} />
+        {/* Teleprompter — rendered in its own Tauri window without the sidebar */}
+        <Route path="/teleprompter" element={<Teleprompter />} />
         <Route element={<DashboardLayout />}>
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/chats" element={<Chats />} />

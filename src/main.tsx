@@ -10,7 +10,18 @@ const currentWindow = getCurrentWindow();
 const windowLabel = currentWindow.label;
 
 // Render different components based on window label
-if (windowLabel.startsWith("capture-overlay-")) {
+const isTeleprompter = windowLabel === "teleprompter";
+
+if (isTeleprompter) {
+  // Teleprompter window: minimal shell, no AppProvider (no SQL, no audio)
+  ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
+    <React.StrictMode>
+      <ThemeProvider defaultTheme="light">
+        <AppRoutes />
+      </ThemeProvider>
+    </React.StrictMode>
+  );
+} else if (windowLabel.startsWith("capture-overlay-")) {
   const monitorIndex = parseInt(windowLabel.split("-")[2], 10) || 0;
   // Render overlay without providers
   ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(

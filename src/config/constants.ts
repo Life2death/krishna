@@ -24,7 +24,14 @@ export const STORAGE_KEYS = {
   JOB_PROVIDER: "job_provider",
   JOB_HISTORY: "job_history",
   JOB_SEARCH_SKILLS: "job_search_skills",
+  TELEPROMPTER_ENABLED: "teleprompter_enabled",
+  TELEPROMPTER_FONT_SIZE: "teleprompter_font_size",
+  TELEPROMPTER_OPACITY: "teleprompter_opacity",
 } as const;
+
+// Cross-window event channel for teleprompter text updates
+export const TELEPROMPTER_EVENT = "teleprompter:update";
+export const TELEPROMPTER_CLEAR_EVENT = "teleprompter:clear";
 
 // Maximum age for jobs shown in search results (days)
 export const JOB_MAX_AGE_DAYS = 5;

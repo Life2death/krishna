@@ -25,11 +25,11 @@ const Promote = () => {
       <CardContent className="flex flex-col gap-4 p-4 py-0 md:flex-row md:items-center md:justify-between">
         <div className="space-y-2 md:max-w-[70%]">
           <CardTitle className="text-xs lg:text-sm">
-            Support Naukri Lelo
+            Support Focus Assistant
           </CardTitle>
           <CardDescription className="text-[10px] lg:text-xs">
-            Share Naukri Lelo on social media and help others discover this free, 
-            open-source interview assistant. Star us on GitHub!
+            Share Focus Assistant and help others discover this free,
+            open-source productivity tool. Star us on GitHub!
           </CardDescription>
         </div>
         <Button asChild className="w-full md:w-auto text-[10px] lg:text-xs">
