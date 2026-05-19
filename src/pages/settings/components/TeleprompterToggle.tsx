@@ -1,9 +1,6 @@
 import { Switch, Label, Header } from "@/components";
-import {
-  getTeleprompterEnabled,
-  setTeleprompterEnabled,
-  closeTeleprompterWindow,
-} from "@/lib";
+import { getTeleprompterEnabled, setTeleprompterEnabled } from "@/lib";
+import { closeTeleprompterWindow } from "@/hooks";
 import { useEffect, useState } from "react";
 
 interface TeleprompterToggleProps {
