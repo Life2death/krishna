@@ -95,6 +95,23 @@ src/
 
 ## Release history
 
+### v2.1.6 (May 19 2026)
+
+- 🩹 **Restored bundle identifier to `com.naukrilelo.app`.** v2.1.3 renamed
+  the bundle ID to `com.focusassistant.app` along with the visible rebrand.
+  Tauri scopes per-user data (SQLite database + WebView2 localStorage) by
+  bundle ID, so upgraders found their interview profiles, system prompts,
+  chat history, API keys, and job history appearing "empty" — the data was
+  actually intact at the old `%APPDATA%\com.naukrilelo.app\` path; the new
+  build was just reading from a fresh `com.focusassistant.app\` folder.
+  Reverting the identifier makes the app read from the original location
+  again, so all previously-stored data reappears with no manual migration.
+- Task Manager display, window title, sidebar header and installer name
+  continue to show "Focus Assistant" — only the under-the-hood bundle ID
+  string changes. The `naukrilelo` token in the bundle ID is not surfaced
+  anywhere visible to a user during normal use (it shows only deep in the
+  Windows registry under `Installer/UserData`).
+
 ### v2.1.5 (May 19 2026)
 
 - 🧹 **Removed defunct "Naukri Lelo Prompts" section from System Prompts page.**

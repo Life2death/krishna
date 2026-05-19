@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Focus Assistant",
-  "version": "2.1.5",
-  "identifier": "com.focusassistant.app",
+  "version": "2.1.6",
+  "identifier": "com.naukrilelo.app",
   "build": {
     "beforeDevCommand": "npm run dev",
     "devUrl": "http://localhost:1420",
