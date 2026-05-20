@@ -24,20 +24,23 @@ type ResizeDirection =
   | "SouthWest";
 
 async function startResize(direction: ResizeDirection) {
-  // Use the IPC command directly so this works whether or not the JS
-  // helper is included in the bundled API tree.
+  // Prefer the typed API on the WebviewWindow when available, fall back to
+  // the raw IPC command — both call the same Tauri core implementation.
+  try {
+    const win = getCurrentWebviewWindow();
+    // Cast through `unknown` because some Tauri 2.x type-bundles ship the
+    // method while others only expose it via the plugin IPC channel.
+    const fn = (win as unknown as {
+      startResizeDragging?: (d: ResizeDirection) => Promise<void>;
+    }).startResizeDragging;
+    if (typeof fn === "function") {
+      await fn.call(win, direction);
+      return;
+    }
+  } catch {}
   try {
     await invoke("plugin:window|start_resize_dragging", { direction });
-  } catch {
-    try {
-      const win = getCurrentWebviewWindow();
-      // @ts-expect-error — newer Tauri versions expose this on the window class
-      if (typeof win.startResizeDragging === "function") {
-        // @ts-expect-error
-        await win.startResizeDragging(direction);
-      }
-    } catch {}
-  }
+  } catch {}
 }
 import {
   getTeleprompterFontSize,

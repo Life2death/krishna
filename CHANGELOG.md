@@ -95,6 +95,16 @@ src/
 
 ## Release history
 
+### v2.1.8 (May 20 2026)
+
+- 🔧 **Build fix for v2.1.7.** TypeScript rejected the two `@ts-expect-error`
+  directives I wrote around the `startResizeDragging` fallback because the
+  Tauri 2.x type bundle does already expose the method. Refactored the
+  fallback to use a proper structural cast and a clean `typeof fn ===
+  "function"` runtime check — no suppression directives, no type warnings,
+  same runtime behaviour. (v2.1.7 had no installer because of this; install
+  v2.1.8 instead.)
+
 ### v2.1.7 (May 20 2026)
 
 - 🐛 **Fix: teleprompter window never actually opened.** The WebviewWindow
