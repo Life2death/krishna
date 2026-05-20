@@ -1,7 +1,5 @@
-use aes_gcm::aead::{Aead, KeyInit, OsRng};
+use aes_gcm::aead::{Aead, KeyInit};
 use aes_gcm::{Aes256Gcm, Nonce};
-use base64::engine::general_purpose;
-use base64::Engine as _;
 use sha2::{Digest, Sha256};
 use std::fs;
 use std::path::PathBuf;
@@ -32,7 +30,7 @@ fn get_storage_path(app: &AppHandle) -> Result<PathBuf, String> {
 
 fn encrypt_data(plaintext: &[u8], key: &[u8; 32]) -> Result<Vec<u8>, String> {
     let cipher = Aes256Gcm::new_from_slice(key).map_err(|e| format!("AES init failed: {}", e))?;
-    let nonce_bytes: [u8; 12] = OsRng::random();
+    let nonce_bytes: [u8; 12] = rand::random();
     let nonce = Nonce::from_slice(&nonce_bytes);
     let ciphertext = cipher
         .encrypt(nonce, plaintext)
@@ -98,7 +96,6 @@ pub fn remove_storage(app: &AppHandle) -> Result<(), String> {
     }
 }
 
-// Non-command helpers for use by other Rust modules
 pub fn get_stored_value(app: &AppHandle, key: &str) -> Result<Option<String>, String> {
     let data = read_encrypted_json(app)?;
     match data.get(key) {
@@ -138,41 +135,4 @@ pub async fn secure_storage_remove_cmd(app: AppHandle, key: String) -> Result<()
     remove_stored_value(&app, &key)
 }
 
-#[tauri::command]
-pub async fn keychain_save_credential(
-    app: AppHandle,
-    service: String,
-    key: String,
-    value: String,
-) -> Result<(), String> {
-    use tauri_plugin_keychain::KeychainExt;
-    app.keychain()
-        .save_item(&service, &key, &value)
-        .map_err(|e| format!("Failed to save credential to keychain: {}", e))
-}
 
-#[tauri::command]
-pub async fn keychain_get_credential(
-    app: AppHandle,
-    service: String,
-    key: String,
-) -> Result<Option<String>, String> {
-    use tauri_plugin_keychain::KeychainExt;
-    match app.keychain().get_item(&service, &key) {
-        Ok(Some(value)) => Ok(Some(value)),
-        Ok(None) => Ok(None),
-        Err(e) => Err(format!("Failed to get credential from keychain: {}", e)),
-    }
-}
-
-#[tauri::command]
-pub async fn keychain_remove_credential(
-    app: AppHandle,
-    service: String,
-    key: String,
-) -> Result<(), String> {
-    use tauri_plugin_keychain::KeychainExt;
-    app.keychain()
-        .remove_item(&service, &key)
-        .map_err(|e| format!("Failed to remove credential from keychain: {}", e))
-}
