@@ -36,6 +36,11 @@ jobs:
       - name: Install frontend dependencies
         run: npm ci
 
+      # Fail fast on TypeScript errors before paying for Rust setup (~2 min)
+      # and the long Tauri build. `tsc --noEmit` runs in <30s.
+      - name: Frontend type check
+        run: npm run typecheck
+
       - name: Set up Rust (stable)
         uses: dtolnay/rust-toolchain@stable
         with:

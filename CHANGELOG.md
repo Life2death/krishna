@@ -95,6 +95,27 @@ src/
 
 ## Release history
 
+### v2.1.9 (May 20 2026)
+
+- 📌 **Profile context banner in the overlay chat.** The floating overlay has
+  been combining the active Interview Profile (resume + goals + custom docs
+  + reference conversations) with the selected System Prompt for a while —
+  `useCompletion.ts → buildEffectiveSystemPrompt() → buildProfileKnowledgeContext()`.
+  But nothing in the UI told you it was happening. Added a thin banner at
+  the top of the response panel that reads e.g. "Answering as Director
+  Delivery · resume + goals + 1 doc + 2 ref convs" so you can verify the
+  AI is using the right context before asking a question.
+  - Reads `activeProfileId` from `AppContext`; renders nothing when no
+    profile is active.
+  - Pulls counts: `profile.documents.length` and the on-disk
+    `profile_refs_<id>` localStorage array (saved Prep-Session conversations).
+- ⚡ **CI: type check now runs before Rust setup.** v2.1.7 burned ~2 min on
+  Cargo cache restore + Tauri bootstrap before failing on a trivial TS2578.
+  Added `npm run typecheck` (a thin `tsc --noEmit` wrapper) as an explicit
+  step in `.github/workflows/release.yml` immediately after `npm ci`. Future
+  TypeScript errors will fail the release build in <30 s instead of ~2 min,
+  so iteration is faster. Same check now also gates every push.
+
 ### v2.1.8 (May 20 2026)
 
 - 🔧 **Build fix for v2.1.7.** TypeScript rejected the two `@ts-expect-error`
