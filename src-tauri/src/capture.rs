@@ -37,8 +37,24 @@ impl Default for CaptureState {
     }
 }
 
+/// Validates that the calling window is authorized to perform screen/audio capture.
+/// Only the main application window is trusted to invoke these commands.
+fn validate_capture_window(app: &tauri::AppHandle) -> Result<(), String> {
+    if let Some(window) = app.get_webview_window("main") {
+        if let Ok(visible) = window.is_visible() {
+            if !visible {
+                return Err("Capture not allowed when main window is hidden".to_string());
+            }
+        }
+        Ok(())
+    } else {
+        Err("Could not verify calling window for capture operation".to_string())
+    }
+}
+
 #[tauri::command]
 pub async fn start_screen_capture(app: tauri::AppHandle) -> Result<(), String> {
+    validate_capture_window(&app)?;
     // Get all monitors
     let capture_monitors = Monitor::all().map_err(|e| format!("Failed to get monitors: {}", e))?;
 
@@ -264,6 +280,9 @@ pub async fn capture_selected_area(
 
 #[tauri::command]
 pub async fn capture_to_base64(window: tauri::WebviewWindow) -> Result<String, String> {
+    if window.label() != "main" {
+        return Err("Capture not allowed from this window".to_string());
+    }
     let monitor_fallback = window
         .current_monitor()
         .ok()

@@ -8,10 +8,24 @@ interface MarkdownRendererProps {
   isStreaming?: boolean;
 }
 
+/**
+ * Strips dangerous HTML tags from AI-generated content before markdown rendering.
+ * Prevents XSS via <script>, <iframe>, <object>, <embed>, etc.
+ * Allows safe inline HTML that markdown renderers typically produce.
+ */
+function sanitizeAIOutput(text: string): string {
+  return text.replace(
+    /<\/?(script|iframe|object|embed|applet|frame|frameset|meta|link|style|base|form|input|select|option|textarea|button|label|svg|math|audio|video|source|track|canvas|marquee|isindex|xss)(\s[^>]*)?\/?>/gi,
+    ""
+  );
+}
+
 export function Markdown({
   children,
   isStreaming = false,
 }: MarkdownRendererProps) {
+  const safeContent = sanitizeAIOutput(children);
+
   return (
     <Streamdown
       isAnimating={isStreaming}
@@ -28,7 +42,7 @@ export function Markdown({
         },
       }}
     >
-      {children}
+      {safeContent}
     </Streamdown>
   );
 }

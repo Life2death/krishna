@@ -1,0 +1,10 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "teleprompter",
+  "description": "Minimal capability for the teleprompter overlay window - only event listening",
+  "windows": ["teleprompter"],
+  "permissions": [
+    "core:default",
+    "core:event:default"
+  ]
+}

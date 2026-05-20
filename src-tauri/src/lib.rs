@@ -3,6 +3,7 @@ mod activate;
 mod api;
 mod capture;
 mod db;
+mod secure;
 mod shortcuts;
 mod window;
 use std::sync::{Arc, Mutex};
@@ -130,6 +131,12 @@ pub fn run() {
             api::create_system_prompt,
             api::check_license_status,
             api::get_activity,
+            secure::secure_storage_save_cmd,
+            secure::secure_storage_get_cmd,
+            secure::secure_storage_remove_cmd,
+            secure::keychain_save_credential,
+            secure::keychain_get_credential,
+            secure::keychain_remove_credential,
             speaker::start_system_audio_capture,
             speaker::stop_system_audio_capture,
             speaker::manual_stop_continuous,

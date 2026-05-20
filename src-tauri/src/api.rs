@@ -4,8 +4,6 @@ use reqwest::multipart::{Form, Part};
 use reqwest::Url;
 use serde::{Deserialize, Serialize};
 use std::env;
-use std::fs;
-use std::path::PathBuf;
 use tauri::{AppHandle, Emitter, Manager};
 use tauri_plugin_machine_uid::MachineUidExt;
 
@@ -31,50 +29,17 @@ fn get_api_access_key() -> Result<String, String> {
     }
 }
 
-// Secure storage functions
-fn get_secure_storage_path(app: &AppHandle) -> Result<PathBuf, String> {
-    let app_data_dir = app
-        .path()
-        .app_data_dir()
-        .map_err(|e| format!("Failed to get app data directory: {}", e))?;
-
-    fs::create_dir_all(&app_data_dir)
-        .map_err(|e| format!("Failed to create app data directory: {}", e))?;
-
-    Ok(app_data_dir.join("secure_storage.json"))
-}
-
-#[derive(Debug, Serialize, Deserialize, Default)]
-struct SecureStorage {
-    license_key: Option<String>,
-    instance_id: Option<String>,
-    selected_naukri_model: Option<String>,
-}
-
-pub async fn get_stored_credentials(
+// Secure credential retrieval using encrypted storage
+pub fn get_stored_credentials(
     app: &AppHandle,
 ) -> Result<(String, String, Option<Model>), String> {
-    let storage_path = get_secure_storage_path(app)?;
+    let license_key = crate::secure::get_stored_value(app, "naukri_lelo_license_key")?
+        .ok_or_else(|| "License key not found".to_string())?;
 
-    if !storage_path.exists() {
-        return Err("No license found. Please activate your license first.".to_string());
-    }
+    let instance_id = crate::secure::get_stored_value(app, "naukri_lelo_instance_id")?
+        .ok_or_else(|| "Instance ID not found".to_string())?;
 
-    let content = fs::read_to_string(&storage_path)
-        .map_err(|e| format!("Failed to read storage file: {}", e))?;
-
-    let storage: SecureStorage = serde_json::from_str(&content)
-        .map_err(|e| format!("Failed to parse storage file: {}", e))?;
-
-    let license_key = storage
-        .license_key
-        .ok_or("License key not found".to_string())?;
-    let instance_id = storage
-        .instance_id
-        .ok_or("Instance ID not found".to_string())?;
-
-    let selected_model: Option<Model> = storage
-        .selected_naukri_model
+    let selected_model: Option<Model> = crate::secure::get_stored_value(app, "selected_naukri_model")?
         .and_then(|json_str| serde_json::from_str(&json_str).ok());
 
     Ok((license_key, instance_id, selected_model))
@@ -197,7 +162,7 @@ pub async fn transcribe_audio(
     app: AppHandle,
     audio_base64: String,
 ) -> Result<AudioResponse, String> {
-    let (_, _, selected_model) = get_stored_credentials(&app).await?;
+    let (_, _, selected_model) = get_stored_credentials(&app)?;
     let provider = selected_model.as_ref().map(|model| model.provider.clone());
     let model = selected_model.as_ref().map(|model| model.model.clone());
 
@@ -301,7 +266,7 @@ async fn fetch_api_response_config(
     let machine_id: String = app.machine_uid().get_machine_uid().unwrap().id.unwrap();
 
     // Get stored credentials
-    let (license_key, instance_id, _) = get_stored_credentials(app).await?;
+    let (license_key, instance_id, _) = get_stored_credentials(app)?;
 
     // Make HTTP request to response endpoint
     let client = reqwest::Client::new();
@@ -486,7 +451,7 @@ pub async fn chat_stream_response(
     history: Option<String>,
 ) -> Result<String, String> {
     // Get stored credentials to get selected model
-    let (_, _, selected_model) = get_stored_credentials(&app).await?;
+    let (_, _, selected_model) = get_stored_credentials(&app)?;
     let (provider, model) = selected_model.as_ref().map_or((None, None), |m| {
         (Some(m.provider.clone()), Some(m.model.clone()))
     });
@@ -763,7 +728,7 @@ async fn user_activity(
         Err(_) => return Ok(()),
     };
 
-    let (license_key, instance_id, stored_model) = match get_stored_credentials(&app).await {
+    let (license_key, instance_id, stored_model) = match get_stored_credentials(&app) {
         Ok(values) => values,
         Err(_) => return Ok(()),
     };
@@ -830,7 +795,7 @@ async fn report_api_error(
         Err(_) => return,
     };
 
-    let (license_key, instance_id, stored_model) = match get_stored_credentials(&app).await {
+    let (license_key, instance_id, stored_model) = match get_stored_credentials(&app) {
         Ok(values) => values,
         Err(_) => return,
     };
@@ -889,7 +854,7 @@ pub async fn fetch_models(app: AppHandle) -> Result<Vec<Model>, String> {
     let app_endpoint = get_app_endpoint()?;
     let api_access_key = get_api_access_key()?;
 
-    let (license_key, instance_id) = match get_stored_credentials(&app).await {
+    let (license_key, instance_id) = match get_stored_credentials(&app) {
         Ok((lk, id, _)) => (lk, id),
         Err(_) => ("".to_string(), "".to_string()),
     };
@@ -1023,7 +988,7 @@ pub async fn create_system_prompt(
     // Get environment variables
     let app_endpoint = get_app_endpoint()?;
     let api_access_key = get_api_access_key()?;
-    let (license_key, instance_id, _) = get_stored_credentials(&app).await?;
+    let (license_key, instance_id, _) = get_stored_credentials(&app)?;
     let machine_id: String = app.machine_uid().get_machine_uid().unwrap().id.unwrap();
     let app_version: String = app.package_info().version.to_string();
     // Make HTTP request to models endpoint
@@ -1089,7 +1054,7 @@ pub async fn create_system_prompt(
 // Helper command to check if license is available
 #[tauri::command]
 pub async fn check_license_status(app: AppHandle) -> Result<bool, String> {
-    match get_stored_credentials(&app).await {
+    match get_stored_credentials(&app) {
         Ok(_) => Ok(true),
         Err(_) => Ok(false),
     }
@@ -1101,7 +1066,7 @@ pub async fn get_activity(app: AppHandle) -> Result<serde_json::Value, String> {
     let app_endpoint = get_app_endpoint()?;
     let api_access_key = get_api_access_key()?;
 
-    let (license_key, instance_id, _) = get_stored_credentials(&app).await?;
+    let (license_key, instance_id, _) = get_stored_credentials(&app)?;
 
     let machine_id = match app.machine_uid().get_machine_uid() {
         Ok(id) => id.id.unwrap_or_default(),
