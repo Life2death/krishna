@@ -1,7 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
 
-const KEYCHAIN_SERVICE = "naukri-lelo";
-
 export async function saveCredential(key: string, value: string): Promise<void> {
   try {
     await invoke("plugin:keychain|save_item", {
