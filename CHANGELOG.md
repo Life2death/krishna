@@ -95,6 +95,47 @@ src/
 
 ## Release history
 
+### v2.2.1 (May 20 2026)
+
+- 🐛 **Fix: teleprompter showed an empty window when chatting from the
+  floating overlay.** v2.1.3 wired `pushTeleprompterText` into
+  `useChatCompletion.ts` (the expanded `/chats` page), but the
+  floating overlay uses a *different* hook — `useCompletion.ts` — and
+  that path never emitted the event. So the teleprompter window opened
+  correctly, the event listener registered correctly, but nothing was
+  ever sent. Added `clearTeleprompterText()` before each request and
+  `pushTeleprompterText(fullResponse)` inside both streaming loops
+  (plain text + screenshot/image-attached) in `useCompletion.ts`.
+- 🔓 **Restored window-control permissions on the teleprompter capability.**
+  v2.2.0 created an isolated `teleprompter.json` capability with only
+  `core:default` + `core:event:default`. That was too strict — it broke
+  the in-window X button, drag-to-move, and resize-handles that
+  v2.1.8 added. Added back the three permissions the UI actually
+  needs: `core:window:allow-close`, `allow-start-dragging`,
+  `allow-start-resize-dragging`. The window still cannot create
+  sub-windows, run shell, access SQL/keychain/HTTP, etc. — the
+  security envelope stays tight.
+
+### v2.2.0 (May 20 2026)
+
+- 🔐 **Security hardening release** (commit 8dff2fb, pushed from secondary
+  dev machine). Highlights:
+  - `secure_storage.json` now encrypted at rest with AES-256-GCM using a
+    machine-derived key.
+  - API keys back-stored in the OS keychain (Windows Credential Manager,
+    macOS Keychain, libsecret on Linux).
+  - XSS sanitisation for AI-generated markdown output in
+    `src/components/Markdown/index.tsx`.
+  - Screen/audio capture IPC restricted to the main window only —
+    overlay/teleprompter/sub-windows can no longer trigger capture.
+  - New isolated `teleprompter` Tauri capability (windows list scoped
+    to `teleprompter` only).
+  - Runtime permission validation for capture commands.
+  - `reqwest` switched to `rustls-tls` (avoids transitive `openssl` CVEs).
+- 🩹 Follow-up fix commits 72f2a5e + 1bcc7eb addressed Rust + TS build
+  failures introduced by the rewrites (invalid keychain command names,
+  an unused `KEYCHAIN_SERVICE` constant).
+
 ### v2.1.9 (May 20 2026)
 
 - 📌 **Profile context banner in the overlay chat.** The floating overlay has
