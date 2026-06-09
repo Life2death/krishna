@@ -16,12 +16,7 @@ import {
   getProfileById,
   buildProfileKnowledgeContext,
   loadProfileRefConvTexts,
-  getTeleprompterEnabled,
 } from "@/lib";
-import {
-  pushTeleprompterText,
-  clearTeleprompterText,
-} from "./useTeleprompter";
 import { InterviewProfile } from "@/types";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
@@ -252,11 +247,6 @@ export const useCompletion = () => {
           response: "",
         }));
 
-        // Wipe the teleprompter so the previous answer doesn't leak in
-        if (getTeleprompterEnabled()) {
-          void clearTeleprompterText();
-        }
-
         try {
           // Use the fetchAIResponse function with signal
           for await (const chunk of fetchAIResponse({
@@ -283,11 +273,6 @@ export const useCompletion = () => {
               ...prev,
               response: prev.response + chunk,
             }));
-
-            // Mirror the streamed text into the teleprompter window
-            if (getTeleprompterEnabled()) {
-              void pushTeleprompterText(fullResponse);
-            }
           }
         } catch (e: any) {
           // Only show error if this is still the current request and not aborted
@@ -666,11 +651,6 @@ export const useCompletion = () => {
               response: "",
             }));
 
-            // Wipe the teleprompter so the previous answer doesn't leak in
-            if (getTeleprompterEnabled()) {
-              void clearTeleprompterText();
-            }
-
             // Use the fetchAIResponse function with image and signal
             for await (const chunk of fetchAIResponse({
               provider: provider,
@@ -691,11 +671,6 @@ export const useCompletion = () => {
                 ...prev,
                 response: prev.response + chunk,
               }));
-
-              // Mirror the streamed text into the teleprompter window
-              if (getTeleprompterEnabled()) {
-                void pushTeleprompterText(fullResponse);
-              }
             }
 
             // Only proceed if this is still the current request

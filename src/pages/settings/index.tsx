@@ -5,16 +5,10 @@ import {
   AlwaysOnTopToggle,
   AppIconToggle,
   AutostartToggle,
-  TeleprompterToggle,
 } from "./components";
 import { PageLayout } from "@/layouts";
 import { Button } from "@/components";
 import { SaveIcon, CheckIcon } from "lucide-react";
-import {
-  getTeleprompterEnabled,
-  setTeleprompterEnabled,
-} from "@/lib";
-import { closeTeleprompterWindow } from "@/hooks";
 
 type ThemeValue = "dark" | "light" | "system";
 
@@ -24,38 +18,15 @@ const Settings = () => {
   const [pendingTheme, setPendingTheme] = useState<ThemeValue>(theme);
   const [pendingTransparency, setPendingTransparency] =
     useState<number>(transparency);
-  // Teleprompter — driven from localStorage, persisted on Save Changes
-  const [savedTeleprompter, setSavedTeleprompter] = useState<boolean>(false);
-  const [pendingTeleprompter, setPendingTeleprompter] = useState<boolean>(false);
   const [saved, setSaved] = useState(false);
-
-  useEffect(() => {
-    const current = getTeleprompterEnabled();
-    setSavedTeleprompter(current);
-    setPendingTeleprompter(current);
-  }, []);
 
   const hasChanges =
     pendingTheme !== theme ||
-    pendingTransparency !== transparency ||
-    pendingTeleprompter !== savedTeleprompter;
+    pendingTransparency !== transparency;
 
   const handleSave = async () => {
     if (pendingTheme !== theme) setTheme(pendingTheme);
     onSetTransparency(pendingTransparency);
-
-    if (pendingTeleprompter !== savedTeleprompter) {
-      setTeleprompterEnabled(pendingTeleprompter);
-      setSavedTeleprompter(pendingTeleprompter);
-      // Notify the footer pill to show/hide without a reload
-      window.dispatchEvent(new CustomEvent("teleprompter-enabled-changed"));
-      // If turning OFF, also close any open overlay window
-      if (!pendingTeleprompter) {
-        try {
-          await closeTeleprompterWindow();
-        } catch {}
-      }
-    }
 
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
@@ -103,12 +74,6 @@ const Settings = () => {
 
       {/* Always On Top Toggle */}
       <AlwaysOnTopToggle />
-
-      {/* Teleprompter (reading mode overlay) — persisted on Save Changes */}
-      <TeleprompterToggle
-        pendingEnabled={pendingTeleprompter}
-        onPendingChange={setPendingTeleprompter}
-      />
     </PageLayout>
   );
 };

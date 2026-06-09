@@ -17,7 +17,7 @@ export const ProfileSelector = () => {
   const handleOpen = async (val: boolean) => {
     setOpen(val);
     resizeWindow(val);
-    if (val && profiles.length === 0) {
+    if (val) {
       try {
         const data = await getAllProfiles();
         setProfiles(data);

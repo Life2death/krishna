@@ -12,4 +12,3 @@ export { default as Responses } from "./responses";
 export { default as Profiles } from "./profiles";
 export { default as PrepSession } from "./profiles/PrepSession";
 export { default as Jobs } from "./jobs";
-export { default as Teleprompter } from "./teleprompter";

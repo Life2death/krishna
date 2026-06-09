@@ -1,4 +1,4 @@
-import { Sidebar, TeleprompterFooterToggle } from "@/components";
+import { Sidebar } from "@/components";
 import { Outlet } from "react-router-dom";
 import { ErrorBoundary } from "react-error-boundary";
 import { ErrorLayout } from "./ErrorLayout";
@@ -36,8 +36,6 @@ export const DashboardLayout = () => {
           <Outlet />
         </main>
 
-        {/* Floating bottom toggle — only shown when teleprompter is enabled */}
-        <TeleprompterFooterToggle />
       </div>
     </ErrorBoundary>
   );
