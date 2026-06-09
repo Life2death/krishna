@@ -1,5 +1,4 @@
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
-mod activate;
 mod api;
 mod capture;
 mod db;
@@ -7,7 +6,9 @@ mod secure;
 mod shortcuts;
 mod window;
 use std::sync::{Arc, Mutex};
-use tauri::{AppHandle, Manager, WebviewWindow};
+use tauri::Manager;
+#[cfg(target_os = "macos")]
+use tauri::{AppHandle, WebviewWindow};
 use tauri_plugin_posthog::{init as posthog_init, PostHogConfig, PostHogOptions};
 use tokio::task::JoinHandle;
 mod speaker;
@@ -53,6 +54,7 @@ pub fn run() {
 
     // Get PostHog API key
     let posthog_api_key = option_env!("POSTHOG_API_KEY").unwrap_or("").to_string();
+    #[allow(unused_mut)]
     let mut builder = tauri::Builder::default()
         .plugin(
             tauri_plugin_log::Builder::default()
@@ -97,13 +99,11 @@ pub fn run() {
     {
         builder = builder.plugin(tauri_nspanel::init());
     }
-    let mut builder = builder
+    let builder = builder
         .invoke_handler(tauri::generate_handler![
             get_app_version,
             window::set_window_height,
             window::open_dashboard,
-            window::toggle_dashboard,
-            window::move_window,
             capture::capture_to_base64,
             capture::start_screen_capture,
             capture::capture_selected_area,
@@ -116,34 +116,13 @@ pub fn run() {
             shortcuts::set_app_icon_visibility,
             shortcuts::set_always_on_top,
             shortcuts::exit_app,
-            activate::activate_license_api,
-            activate::deactivate_license_api,
-            activate::validate_license_api,
-            activate::mask_license_key_cmd,
-            activate::get_checkout_url,
-            activate::secure_storage_save,
-            activate::secure_storage_get,
-            activate::secure_storage_remove,
-            api::transcribe_audio,
-            api::chat_stream_response,
-            api::fetch_models,
-            api::fetch_prompts,
             api::create_system_prompt,
-            api::check_license_status,
-            api::get_activity,
-            secure::secure_storage_save_cmd,
-            secure::secure_storage_get_cmd,
-            secure::secure_storage_remove_cmd,
-
             speaker::start_system_audio_capture,
             speaker::stop_system_audio_capture,
             speaker::manual_stop_continuous,
             speaker::check_system_audio_access,
             speaker::request_system_audio_access,
-            speaker::get_vad_config,
             speaker::update_vad_config,
-            speaker::get_capture_status,
-            speaker::get_audio_sample_rate,
             speaker::get_input_devices,
             speaker::get_output_devices,
         ])
@@ -184,7 +163,7 @@ pub fn run() {
                 let tray = tauri::tray::TrayIconBuilder::with_id("main-tray") // stable ID so set_app_icon_visibility can retrieve it
                     .icon(app.default_window_icon().unwrap().clone())
                     .menu(&menu)
-                    .menu_on_left_click(false)
+                    .show_menu_on_left_click(false)
                     .tooltip("Naukri Lelo — click to open dashboard")
                     .on_menu_event(|app, event| match event.id.as_ref() {
                         "open_dashboard" => {

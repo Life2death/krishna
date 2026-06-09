@@ -555,18 +555,6 @@ pub async fn request_system_audio_access(app: AppHandle) -> Result<(), String> {
     Ok(())
 }
 
-// VAD Configuration Management
-#[tauri::command]
-pub async fn get_vad_config(app: AppHandle) -> Result<VadConfig, String> {
-    let state = app.state::<crate::AudioState>();
-    let config = state
-        .vad_config
-        .lock()
-        .map_err(|e| format!("Failed to get VAD config: {}", e))?
-        .clone();
-    Ok(config)
-}
-
 #[tauri::command]
 pub async fn update_vad_config(app: AppHandle, config: VadConfig) -> Result<(), String> {
     // Validate config
@@ -584,29 +572,6 @@ pub async fn update_vad_config(app: AppHandle, config: VadConfig) -> Result<(), 
         .map_err(|e| format!("Failed to update VAD config: {}", e))? = config;
 
     Ok(())
-}
-
-#[tauri::command]
-pub async fn get_capture_status(app: AppHandle) -> Result<bool, String> {
-    let state = app.state::<crate::AudioState>();
-    let is_capturing = *state
-        .is_capturing
-        .lock()
-        .map_err(|e| format!("Failed to get capture status: {}", e))?;
-    Ok(is_capturing)
-}
-
-#[tauri::command]
-pub fn get_audio_sample_rate(_app: AppHandle) -> Result<u32, String> {
-    let input = SpeakerInput::new().map_err(|e| {
-        error!("Failed to create speaker input: {}", e);
-        format!("Failed to access system audio: {}", e)
-    })?;
-
-    let stream = input.stream();
-    let sr = stream.sample_rate();
-
-    Ok(sr)
 }
 
 #[tauri::command]

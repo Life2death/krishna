@@ -24,6 +24,7 @@ export const STORAGE_KEYS = {
   JOB_PROVIDER: "job_provider",
   JOB_HISTORY: "job_history",
   JOB_SEARCH_SKILLS: "job_search_skills",
+  PROFILE_CONTEXT_SETTINGS: "profile_context_settings",
 } as const;
 
 // Maximum age for jobs shown in search results (days)

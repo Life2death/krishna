@@ -71,7 +71,15 @@ async function extractTextFromDOCX(file: File): Promise<string> {
 }
 
 /**
- * Extracts plain text from a PDF or DOCX/DOC file.
+ * Extracts plain text from a Markdown file.
+ * Markdown is already plain text, so we just read it directly.
+ */
+async function extractTextFromMD(file: File): Promise<string> {
+  return await file.text();
+}
+
+/**
+ * Extracts plain text from a PDF, DOCX/DOC, or Markdown file.
  * Returns the extracted text string.
  */
 export async function extractTextFromFile(file: File): Promise<string> {
@@ -82,5 +90,8 @@ export async function extractTextFromFile(file: File): Promise<string> {
   if (name.endsWith(".docx") || name.endsWith(".doc")) {
     return extractTextFromDOCX(file);
   }
-  throw new Error("Unsupported file type. Please upload a PDF or Word document (.pdf, .doc, .docx).");
+  if (name.endsWith(".md")) {
+    return extractTextFromMD(file);
+  }
+  throw new Error("Unsupported file type. Please upload a PDF, Word document, or Markdown file (.pdf, .doc, .docx, .md).");
 }

@@ -30,25 +30,6 @@ impl Default for RegisteredShortcuts {
     }
 }
 
-// LicenseState - App is free, always returns active
-pub struct LicenseState;
-
-impl Default for LicenseState {
-    fn default() -> Self {
-        LicenseState
-    }
-}
-
-impl LicenseState {
-    pub fn is_active(&self) -> bool {
-        true // Always active - app is free
-    }
-
-    pub fn set_active(&self, _active: bool) {
-        // No-op - app is always active
-    }
-}
-
 pub(crate) type MoveWindowTask = Arc<AtomicBool>;
 
 pub(crate) struct MoveWindowState {

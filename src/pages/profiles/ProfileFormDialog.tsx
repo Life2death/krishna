@@ -144,7 +144,7 @@ export const ProfileFormDialog = ({
             <label className="text-sm font-medium">
               Resume{" "}
               <span className="text-muted-foreground font-normal text-xs">
-                (optional — PDF or Word)
+                (optional — PDF, Word, or Markdown)
               </span>
             </label>
 
@@ -181,7 +181,7 @@ export const ProfileFormDialog = ({
                 ) : (
                   <>
                     <UploadIcon className="size-4" />
-                    Click to upload resume (.pdf, .doc, .docx)
+                    Click to upload resume (.pdf, .doc, .docx, .md)
                   </>
                 )}
               </button>
@@ -190,7 +190,7 @@ export const ProfileFormDialog = ({
             <input
               ref={resumeInputRef}
               type="file"
-              accept=".pdf,.doc,.docx"
+              accept=".pdf,.doc,.docx,.md"
               className="hidden"
               onChange={handleResumeFileChange}
             />
@@ -244,7 +244,7 @@ export const ProfileFormDialog = ({
               ) : (
                 <>
                   <UploadIcon className="size-4" />
-                  Add document (.pdf, .doc, .docx)
+                  Add document (.pdf, .doc, .docx, .md)
                 </>
               )}
             </button>
@@ -252,7 +252,7 @@ export const ProfileFormDialog = ({
             <input
               ref={docsInputRef}
               type="file"
-              accept=".pdf,.doc,.docx"
+              accept=".pdf,.doc,.docx,.md"
               multiple
               className="hidden"
               onChange={handleDocFilesChange}

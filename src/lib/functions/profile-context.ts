@@ -1,13 +1,6 @@
 import { InterviewProfile } from "@/types";
 import { getConversationById } from "@/lib/database/chat-history.action";
-
-// Maximum characters to include in the injected context to avoid token overload
-const MAX_CONTEXT_CHARS = 8000;
-const MAX_RESUME_CHARS = 3000;
-const MAX_GOALS_CHARS = 2000;
-const MAX_DOC_CHARS = 800;
-const MAX_REF_CONV_CHARS = 1500;
-const MAX_REF_CONVS = 3;
+import { getProfileContextSettings } from "@/lib/storage/profile-context.storage";
 
 /**
  * Builds a knowledge-hub system prompt prefix from the active interview profile.
@@ -17,6 +10,7 @@ export function buildProfileKnowledgeContext(
   profile: InterviewProfile,
   refConvTexts?: string[]
 ): string {
+  const settings = getProfileContextSettings();
   const parts: string[] = [
     `## Active Interview Profile: ${profile.name}`,
     "Use the following information as context when answering interview-related questions. Reference this profile to give tailored, specific answers.",
@@ -25,7 +19,7 @@ export function buildProfileKnowledgeContext(
 
   if (profile.goals.trim()) {
     parts.push("### Target Role / Job Description");
-    parts.push(profile.goals.trim().substring(0, MAX_GOALS_CHARS));
+    parts.push(profile.goals.trim().substring(0, settings.maxGoalsChars));
     parts.push("");
   }
 
@@ -34,7 +28,7 @@ export function buildProfileKnowledgeContext(
       ? `### Resume (${profile.resumeFileName})`
       : "### Resume";
     parts.push(label);
-    parts.push(profile.resumeText.trim().substring(0, MAX_RESUME_CHARS));
+    parts.push(profile.resumeText.trim().substring(0, settings.maxResumeChars));
     parts.push("");
   }
 
@@ -42,7 +36,7 @@ export function buildProfileKnowledgeContext(
     parts.push("### Reference Documents");
     for (const doc of profile.documents) {
       parts.push(`**${doc.name}:**`);
-      parts.push(doc.text.trim().substring(0, MAX_DOC_CHARS));
+      parts.push(doc.text.trim().substring(0, settings.maxDocChars));
       parts.push("");
     }
   }
@@ -50,8 +44,8 @@ export function buildProfileKnowledgeContext(
   if (refConvTexts && refConvTexts.length > 0) {
     parts.push("### Previous Interview Prep (Reference Knowledge)");
     parts.push("The following are insights from previous interview prep sessions for this profile. Use them to provide consistent, well-informed answers:");
-    for (const text of refConvTexts.slice(0, MAX_REF_CONVS)) {
-      parts.push(text.substring(0, MAX_REF_CONV_CHARS));
+    for (const text of refConvTexts.slice(0, settings.maxRefConvs)) {
+      parts.push(text.substring(0, settings.maxRefConvChars));
       parts.push("");
     }
   }
@@ -59,8 +53,8 @@ export function buildProfileKnowledgeContext(
   parts.push("---");
 
   const context = parts.join("\n");
-  return context.length > MAX_CONTEXT_CHARS
-    ? context.substring(0, MAX_CONTEXT_CHARS) + "\n[...profile context truncated to fit limits...]"
+  return context.length > settings.maxContextChars
+    ? context.substring(0, settings.maxContextChars) + "\n[...profile context truncated to fit limits...]"
     : context;
 }
 
@@ -101,8 +95,9 @@ export async function loadProfileRefConvTexts(profileId: string): Promise<string
   const ids = getProfileRefConvIds(profileId);
   if (ids.length === 0) return [];
 
+  const settings = getProfileContextSettings();
   const texts: string[] = [];
-  for (const id of ids.slice(0, MAX_REF_CONVS)) {
+  for (const id of ids.slice(0, settings.maxRefConvs)) {
     try {
       const conv = await getConversationById(id);
       if (!conv) continue;

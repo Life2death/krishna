@@ -29,17 +29,6 @@ export const MESSAGE_ID_OFFSET = 1;
 export const CONVERSATION_SAVE_DEBOUNCE_MS = 500;
 
 /**
- * CHUNK_POLL_INTERVAL_MS
- *
- * How frequently to check for new streaming chunks from Naukri Lelo API.
- *
- * 50ms provides smooth streaming without excessive CPU usage.
- * Lower = more responsive but higher CPU usage
- * Higher = lower CPU but choppier streaming
- */
-export const CHUNK_POLL_INTERVAL_MS = 50;
-
-/**
  * DOWNLOAD_SUCCESS_DISPLAY_MS
  *
  * How long to show the "Downloaded successfully" checkmark/indicator
@@ -120,22 +109,4 @@ export function generateRequestId(): string {
   return `req_${timestamp}_${random}`;
 }
 
-/**
- * Validate a conversation ID format
- *
- * @param id - The ID to validate
- * @returns true if the ID matches the expected format
- */
-export function isValidConversationId(id: string): boolean {
-  return /^(conv|sysaudio_conv)_\d+_[a-z0-9]{9}$/.test(id);
-}
 
-/**
- * Validate a message ID format
- *
- * @param id - The ID to validate
- * @returns true if the ID matches the expected format
- */
-export function isValidMessageId(id: string): boolean {
-  return /^msg_\d+_(user|assistant|system)$/.test(id);
-}

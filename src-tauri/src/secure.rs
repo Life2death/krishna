@@ -28,18 +28,6 @@ fn get_storage_path(app: &AppHandle) -> Result<PathBuf, String> {
     Ok(app_data_dir.join("secure_storage.enc"))
 }
 
-fn encrypt_data(plaintext: &[u8], key: &[u8; 32]) -> Result<Vec<u8>, String> {
-    let cipher = Aes256Gcm::new_from_slice(key).map_err(|e| format!("AES init failed: {}", e))?;
-    let nonce_bytes: [u8; 12] = rand::random();
-    let nonce = Nonce::from_slice(&nonce_bytes);
-    let ciphertext = cipher
-        .encrypt(nonce, plaintext)
-        .map_err(|e| format!("Encryption failed: {}", e))?;
-    let mut result = nonce_bytes.to_vec();
-    result.extend_from_slice(&ciphertext);
-    Ok(result)
-}
-
 fn decrypt_data(ciphertext: &[u8], key: &[u8; 32]) -> Result<Vec<u8>, String> {
     if ciphertext.len() < 12 {
         return Err("Ciphertext too short".to_string());
@@ -78,24 +66,6 @@ pub fn read_encrypted_json(app: &AppHandle) -> Result<serde_json::Value, String>
         .map_err(|e| format!("Failed to parse storage JSON: {}", e))
 }
 
-pub fn write_encrypted_json(app: &AppHandle, value: &serde_json::Value) -> Result<(), String> {
-    let path = get_storage_path(app)?;
-    let key = get_key(app)?;
-    let plaintext = serde_json::to_vec(value)
-        .map_err(|e| format!("Failed to serialize storage: {}", e))?;
-    let encrypted = encrypt_data(&plaintext, &key)?;
-    fs::write(&path, encrypted).map_err(|e| format!("Failed to write storage: {}", e))
-}
-
-pub fn remove_storage(app: &AppHandle) -> Result<(), String> {
-    let path = get_storage_path(app)?;
-    if path.exists() {
-        fs::remove_file(&path).map_err(|e| format!("Failed to remove storage: {}", e))
-    } else {
-        Ok(())
-    }
-}
-
 pub fn get_stored_value(app: &AppHandle, key: &str) -> Result<Option<String>, String> {
     let data = read_encrypted_json(app)?;
     match data.get(key) {
@@ -103,36 +73,4 @@ pub fn get_stored_value(app: &AppHandle, key: &str) -> Result<Option<String>, St
         _ => Ok(None),
     }
 }
-
-pub fn set_stored_value(app: &AppHandle, key: &str, value: &str) -> Result<(), String> {
-    let mut data = read_encrypted_json(app)?;
-    if let Some(obj) = data.as_object_mut() {
-        obj.insert(key.to_string(), serde_json::Value::String(value.to_string()));
-    }
-    write_encrypted_json(app, &data)
-}
-
-pub fn remove_stored_value(app: &AppHandle, key: &str) -> Result<(), String> {
-    let mut data = read_encrypted_json(app)?;
-    if let Some(obj) = data.as_object_mut() {
-        obj.remove(key);
-    }
-    write_encrypted_json(app, &data)
-}
-
-#[tauri::command]
-pub async fn secure_storage_save_cmd(app: AppHandle, key: String, value: String) -> Result<(), String> {
-    set_stored_value(&app, &key, &value)
-}
-
-#[tauri::command]
-pub async fn secure_storage_get_cmd(app: AppHandle, key: String) -> Result<Option<String>, String> {
-    get_stored_value(&app, &key)
-}
-
-#[tauri::command]
-pub async fn secure_storage_remove_cmd(app: AppHandle, key: String) -> Result<(), String> {
-    remove_stored_value(&app, &key)
-}
-
 

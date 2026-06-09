@@ -5,10 +5,15 @@ import {
   AlwaysOnTopToggle,
   AppIconToggle,
   AutostartToggle,
+  ProfileContextLimits,
 } from "./components";
 import { PageLayout } from "@/layouts";
 import { Button } from "@/components";
 import { SaveIcon, CheckIcon } from "lucide-react";
+import {
+  getProfileContextSettings,
+  setProfileContextSettings,
+} from "@/lib";
 
 type ThemeValue = "dark" | "light" | "system";
 
@@ -20,13 +25,32 @@ const Settings = () => {
     useState<number>(transparency);
   const [saved, setSaved] = useState(false);
 
+  const [savedProfileContext, setSavedProfileContext] = useState(
+    getProfileContextSettings()
+  );
+  const [pendingProfileContext, setPendingProfileContext] = useState(
+    getProfileContextSettings()
+  );
+
+  useEffect(() => {
+    const pc = getProfileContextSettings();
+    setSavedProfileContext(pc);
+    setPendingProfileContext(pc);
+  }, []);
+
   const hasChanges =
     pendingTheme !== theme ||
-    pendingTransparency !== transparency;
+    pendingTransparency !== transparency ||
+    JSON.stringify(pendingProfileContext) !== JSON.stringify(savedProfileContext);
 
-  const handleSave = async () => {
+  const handleSave = () => {
     if (pendingTheme !== theme) setTheme(pendingTheme);
     onSetTransparency(pendingTransparency);
+
+    if (JSON.stringify(pendingProfileContext) !== JSON.stringify(savedProfileContext)) {
+      setProfileContextSettings(pendingProfileContext);
+      setSavedProfileContext(pendingProfileContext);
+    }
 
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
@@ -74,6 +98,12 @@ const Settings = () => {
 
       {/* Always On Top Toggle */}
       <AlwaysOnTopToggle />
+      {/* Profile Context Limits — persisted on Save Changes */}
+      <ProfileContextLimits
+        pending={pendingProfileContext}
+        onChange={setPendingProfileContext}
+      />
+
     </PageLayout>
   );
 };
