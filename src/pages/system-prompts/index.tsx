@@ -190,6 +190,14 @@ const SystemPrompts = () => {
           Create New
         </Button>
       </div>
+      {filteredPrompts.length > 0 && selectedPromptId === null && (
+        <div className="rounded-lg border border-primary/20 bg-primary/5 px-4 py-3 text-sm text-muted-foreground mb-4">
+          No prompt is currently active.{" "}
+          <span className="font-medium text-foreground">Click any prompt below</span>{" "}
+          to make it the active system prompt.
+        </div>
+      )}
+
       {filteredPrompts.length === 0 ? (
         <Empty
           isLoading={isLoading}
@@ -291,6 +299,7 @@ const SystemPrompts = () => {
         promptId={form.id}
         promptName={form.name}
         onDelete={handleDeleteConfirm}
+        isActivePrompt={selectedPromptId === form.id}
       />
     </PageLayout>
   );

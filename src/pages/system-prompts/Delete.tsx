@@ -16,6 +16,7 @@ interface DeleteSystemPromptProps {
   promptId: number | undefined;
   promptName: string;
   onDelete: (id: number) => Promise<void>;
+  isActivePrompt: boolean;
 }
 
 export const DeleteSystemPrompt = ({
@@ -24,6 +25,7 @@ export const DeleteSystemPrompt = ({
   promptId,
   promptName,
   onDelete,
+  isActivePrompt,
 }: DeleteSystemPromptProps) => {
   const [isDeleting, setIsDeleting] = useState(false);
 
@@ -57,7 +59,15 @@ export const DeleteSystemPrompt = ({
             </div>
           </div>
         </DialogHeader>
-        <div className="py-3">
+        <div className="py-3 space-y-3">
+          {isActivePrompt && (
+            <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3">
+              <p className="text-sm font-medium text-amber-600 dark:text-amber-400">
+                This is your active prompt. Deleting it will reset the AI behavior
+                to the default system prompt.
+              </p>
+            </div>
+          )}
           <p className="text-sm text-muted-foreground">
             This action cannot be undone. This will permanently delete the
             system prompt from the database.
