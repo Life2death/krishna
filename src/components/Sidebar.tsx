@@ -81,7 +81,7 @@ export const Sidebar = () => {
           if ("action" in item) {
             return (
               <button
-                onClick={(e) => { e.preventDefault(); item.action(); }}
+                onClick={(e) => { e.preventDefault(); item.action?.(); }}
                 key={`${item.label}-${index}`}
                 className={common}
               >
