@@ -1,0 +1,6 @@
+# sqlx migration checksums hash the raw bytes of each migration file.
+# Line endings MUST be stable (LF) across every OS/checkout, otherwise the
+# tauri-plugin-sql integrity check panics at startup on Windows (CRLF) when the
+# DB recorded an LF checksum. Keep SQL — and DB migrations specifically — as LF.
+*.sql text eol=lf
+src-tauri/src/db/migrations/*.sql text eol=lf
