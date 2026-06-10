@@ -1,13 +1,9 @@
 import { Button, Header, Input, Selection, TextInput } from "@/components";
 import { UseSettingsReturn } from "@/types";
+import { useOpenRouterModels } from "@/hooks";
 import curl2Json, { ResultJSON } from "@bany/curl-to-json";
 import { KeyIcon, Loader2, SearchIcon, TrashIcon, XIcon } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
-
-interface FreeModel {
-  id: string;
-  name: string;
-}
+import { useEffect, useState } from "react";
 
 export const Providers = ({
   allAiProviders,
@@ -18,13 +14,18 @@ export const Providers = ({
   const [localSelectedProvider, setLocalSelectedProvider] =
     useState<ResultJSON | null>(null);
 
-  // Browse free models state
-  const [isFetchingModels, setIsFetchingModels] = useState(false);
-  const [freeModels, setFreeModels] = useState<FreeModel[]>([]);
-  const [showModelPicker, setShowModelPicker] = useState(false);
-  const [modelSearch, setModelSearch] = useState("");
-  const [fetchError, setFetchError] = useState("");
-  const dropdownRef = useRef<HTMLDivElement>(null);
+  const {
+    fetchModels,
+    isFetching: isFetchingModels,
+    fetchError,
+    models: freeModels,
+    filteredModels,
+    showPicker: showModelPicker,
+    closePicker: closeModelPicker,
+    search: modelSearch,
+    setSearch: setModelSearch,
+    dropdownRef,
+  } = useOpenRouterModels();
 
   useEffect(() => {
     if (selectedAIProvider?.provider) {
@@ -36,23 +37,8 @@ export const Providers = ({
         setLocalSelectedProvider(json as ResultJSON);
       }
     }
-    // Close model picker when provider changes
-    setShowModelPicker(false);
-    setFreeModels([]);
+    closeModelPicker();
   }, [selectedAIProvider?.provider]);
-
-  // Close dropdown on outside click
-  useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
-        setShowModelPicker(false);
-      }
-    };
-    if (showModelPicker) {
-      document.addEventListener("mousedown", handler);
-    }
-    return () => document.removeEventListener("mousedown", handler);
-  }, [showModelPicker]);
 
   const findKeyAndValue = (key: string) => {
     return variables?.find((v) => v?.key === key);
@@ -67,37 +53,6 @@ export const Providers = ({
   const isApiKeyEmpty = () => !getApiKeyValue().trim();
 
   const isOpenRouter = selectedAIProvider?.provider === "openrouter";
-
-  const fetchFreeModels = async () => {
-    setIsFetchingModels(true);
-    setFetchError("");
-    setFreeModels([]);
-    try {
-      const res = await fetch("https://openrouter.ai/api/v1/models");
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json();
-      const free: FreeModel[] = (data.data || [])
-        .filter((m: any) => typeof m.id === "string" && m.id.endsWith(":free"))
-        .map((m: any) => ({ id: m.id, name: m.name || m.id }))
-        .sort((a: FreeModel, b: FreeModel) => a.name.localeCompare(b.name));
-      if (free.length === 0) {
-        setFetchError("No free models found. OpenRouter may have changed their API.");
-      } else {
-        setFreeModels(free);
-        setShowModelPicker(true);
-      }
-    } catch (e) {
-      setFetchError("Failed to fetch models. Check your internet connection.");
-    } finally {
-      setIsFetchingModels(false);
-    }
-  };
-
-  const filteredModels = freeModels.filter(
-    (m) =>
-      m.id.toLowerCase().includes(modelSearch.toLowerCase()) ||
-      m.name.toLowerCase().includes(modelSearch.toLowerCase())
-  );
 
   return (
     <div className="space-y-3">
@@ -255,7 +210,7 @@ export const Providers = ({
                     <Button
                       size="sm"
                       variant="outline"
-                      onClick={fetchFreeModels}
+                      onClick={fetchModels}
                       disabled={isFetchingModels}
                       className="shrink-0 h-7 text-xs gap-1.5"
                     >
@@ -288,7 +243,7 @@ export const Providers = ({
                             autoFocus
                           />
                           <button
-                            onClick={() => { setShowModelPicker(false); setModelSearch(""); }}
+                            onClick={closeModelPicker}
                             className="text-muted-foreground hover:text-foreground"
                           >
                             <XIcon className="h-3 w-3" />
@@ -315,8 +270,7 @@ export const Providers = ({
                                       [modelVar.key]: model.id,
                                     },
                                   });
-                                  setShowModelPicker(false);
-                                  setModelSearch("");
+                                  closeModelPicker();
                                 }}
                               >
                                 <div className="text-xs font-medium truncate">{model.name}</div>

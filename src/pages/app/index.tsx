@@ -5,6 +5,8 @@ import {
   AudioVisualizer,
   StatusIndicator,
   ProfileSelector,
+  BrainSelector,
+  SystemPromptSelector,
 } from "./components";
 import { useApp } from "@/hooks";
 import { useApp as useAppContext } from "@/contexts";
@@ -69,6 +71,12 @@ const App = () => {
             }`}
           >
             <Completion isHidden={isHidden} />
+
+            {/* Brain selector — pick AI provider + model */}
+            <BrainSelector />
+
+            {/* System prompt selector — choose AI mode */}
+            <SystemPromptSelector />
 
             {/* Profile selector — injects profile knowledge hub into AI answers */}
             <ProfileSelector />

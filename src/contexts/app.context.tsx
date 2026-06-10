@@ -108,6 +108,11 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     variables: {},
   });
 
+  // Per-provider variable persistence (keys + models saved per provider)
+  const [providerVariables, setProviderVariables] = useState<
+    Record<string, Record<string, string>>
+  >({});
+
   // STT Providers
   const [customSttProviders, setCustomSttProviders] = useState<TYPE_PROVIDER[]>(
     []
@@ -265,6 +270,37 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         provider: "openrouter",
         variables: { model: "meta-llama/llama-3.3-70b-instruct:free" },
       });
+    }
+
+    // Load per-provider variable persistence map
+    const savedProviderVars = safeLocalStorage.getItem(
+      STORAGE_KEYS.PROVIDER_VARIABLES
+    );
+    if (savedProviderVars) {
+      try {
+        const parsed = JSON.parse(savedProviderVars);
+        if (typeof parsed === "object" && parsed !== null) {
+          setProviderVariables(parsed);
+        }
+      } catch {
+        console.warn("Failed to parse provider variables map");
+      }
+    } else {
+      // Seed from existing selectedAIProvider (migration from single-key storage)
+      const savedSelectedAi = safeLocalStorage.getItem(
+        STORAGE_KEYS.SELECTED_AI_PROVIDER
+      );
+      if (savedSelectedAi) {
+        try {
+          const parsed = JSON.parse(savedSelectedAi);
+          if (parsed?.provider && parsed?.variables) {
+            setProviderVariables((prev) => ({
+              ...prev,
+              [parsed.provider]: parsed.variables,
+            }));
+          }
+        } catch {}
+      }
     }
 
     // Load selected STT provider
@@ -470,6 +506,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       if (
         e.key === STORAGE_KEYS.CUSTOM_AI_PROVIDERS ||
         e.key === STORAGE_KEYS.SELECTED_AI_PROVIDER ||
+        e.key === STORAGE_KEYS.PROVIDER_VARIABLES ||
         e.key === STORAGE_KEYS.CUSTOM_SPEECH_PROVIDERS ||
         e.key === STORAGE_KEYS.SELECTED_STT_PROVIDER ||
         e.key === STORAGE_KEYS.SYSTEM_PROMPT ||
@@ -532,6 +569,14 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     }
   }, [selectedAIProvider]);
 
+  // Sync provider variables map to localStorage
+  useEffect(() => {
+    safeLocalStorage.setItem(
+      STORAGE_KEYS.PROVIDER_VARIABLES,
+      JSON.stringify(providerVariables)
+    );
+  }, [providerVariables]);
+
   // Sync selected STT to localStorage
   useEffect(() => {
     if (selectedSttProvider.provider) {
@@ -578,11 +623,28 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       }
     }
 
+    // Per-provider variable persistence:
+    // - If variables are provided (non-empty), use them and save to the map
+    // - If variables is empty (switch/restore), look up saved vars for this provider
+    const hasExplicitVars =
+      variables && Object.keys(variables).length > 0;
+    const resolvedVars = hasExplicitVars
+      ? variables
+      : providerVariables[provider] ?? {};
+
     setSelectedAIProvider((prev) => ({
       ...prev,
       provider,
-      variables,
+      variables: resolvedVars,
     }));
+
+    // Persist explicit variables to provider map
+    if (hasExplicitVars && provider) {
+      setProviderVariables((prev) => ({
+        ...prev,
+        [provider]: variables,
+      }));
+    }
   };
 
   // Setter for selected STT with validation
@@ -693,6 +755,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     allAiProviders,
     customAiProviders,
     selectedAIProvider,
+    providerVariables,
     onSetSelectedAIProvider,
     allSttProviders,
     customSttProviders,

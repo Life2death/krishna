@@ -11,6 +11,7 @@ export type IContextType = {
     provider: string;
     variables: Record<string, string>;
   };
+  providerVariables: Record<string, Record<string, string>>;
   onSetSelectedAIProvider: ({
     provider,
     variables,
