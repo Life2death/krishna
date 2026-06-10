@@ -95,6 +95,23 @@ src/
 
 ## Release history
 
+### v6.0.0 (June 10 2026)
+
+- 🐛 **Fix: app failed to launch on existing installs (startup panic).**
+  `tauri-plugin-sql` (sqlx) stores a SHA-384 of each migration's raw bytes and
+  re-verifies it on every launch. On Windows, git `autocrlf` checked out
+  `src-tauri/src/db/migrations/*.sql` with CRLF, changing the hash versus the LF
+  checksum recorded in the existing database → integrity check failed →
+  `.expect()` panic at `src-tauri/src/lib.rs:285`. Every build, even older ones,
+  crashed against an existing DB.
+- 🔧 **Added `.gitattributes` pinning `*.sql` (and the migration files) to
+  `eol=lf`** so migration checksums are byte-stable across every OS and checkout.
+  Working tree renormalized to LF. Migrations remain immutable — future schema
+  changes must be added as a new migration version, never by editing a shipped one.
+- 🔖 **Version unified to 6.0.0** across `package.json`, `tauri.conf.json`,
+  `Cargo.toml`, and `Cargo.lock` (previously drifted: 5.0.0 in the frontend vs
+  2.2.1 in the Rust crate, so the app reported itself as v2.2.1).
+
 ### v2.2.1 (May 20 2026)
 
 - 🐛 **Fix: teleprompter showed an empty window when chatting from the
