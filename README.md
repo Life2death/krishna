@@ -254,3 +254,9 @@ Licensed under the **GNU General Public License v3.0** — see [LICENSE](LICENSE
 [Issues](https://github.com/Life2death/naukri-lelo/issues) · [Discussions](https://github.com/Life2death/naukri-lelo/discussions) · [Releases](https://github.com/Life2death/naukri-lelo/releases)
 
 </div>
+
+---
+
+### Developer Reference
+
+For a complete file-by-file breakdown of the codebase, see [PROJECT_STRUCTURE.md](./PROJECT_STRUCTURE.md).
