@@ -16,6 +16,10 @@ import { saveAndConfirm } from "@/lib/resolver";
 import { getAllSkills, getSkillByName, createSkill, updateSkillUseCount } from "@/lib/database/skills.action";
 import { getAllMemories, createMemory } from "@/lib/database/memories.action";
 import { parseRememberCommand, buildMemoryPrompt } from "@/lib/memory";
+import { parseReminderCommand } from "@/lib/reminders";
+import { createReminder, getDueReminders, updateReminder, cancelReminder } from "@/lib/database/reminders.action";
+import { isLookCommand, isUndoCommand } from "@/lib/perception";
+import { createAuditEntry, getLastReversible } from "@/lib/database/audit.action";
 import type { AssistantStatus, StepAction } from "@/types/assistant";
 import type { Skill } from "@/types/skill";
 import type { Message } from "@/types";
@@ -222,13 +226,62 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
     ttsRef.current.setRate(rate);
   }, [rate]);
 
+  const schedulerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Reminder scheduler — check every 30 seconds for due reminders
+  useEffect(() => {
+    schedulerRef.current = setInterval(async () => {
+      try {
+        const due = await getDueReminders();
+        for (const reminder of due) {
+          const speak = "Reminder: " + reminder.text;
+          setLastSpoken(speak);
+          setKrishnaSpeaking(true);
+          try {
+            await ttsRef.current.speak(speak);
+          } finally {
+            setKrishnaSpeaking(false);
+          }
+          try {
+            await createAuditEntry({
+              id: String(Date.now()),
+              actionType: "reminder",
+              summary: "Reminder fired: " + reminder.text,
+              result: "ok",
+              reversible: 0,
+              undoPayload: null,
+              createdAt: Date.now(),
+            });
+          } catch { /* non-critical */ }
+          if (reminder.recurrence === "daily") {
+            const nextDue = reminder.dueAt + 86400000;
+            await updateReminder({ ...reminder, dueAt: nextDue });
+          } else if (reminder.recurrence === "weekly") {
+            const nextDue = reminder.dueAt + 604800000;
+            await updateReminder({ ...reminder, dueAt: nextDue });
+          } else {
+            await cancelReminder(reminder.id);
+          }
+        }
+      } catch {
+        // Scheduler failures are non-critical
+      }
+    }, 30000);
+    return () => {
+      if (schedulerRef.current) {
+        clearInterval(schedulerRef.current);
+      }
+    };
+  }, []);
+
   const pendingConfirmationRef = useRef<{
-    type: "action" | "plan" | "memory";
+    type: "action" | "plan" | "memory" | "reminder";
     spokenResponse: string;
     pendingResult?: { found: boolean; target?: string; displayName?: string; [key: string]: any };
     input?: string;
     steps?: StepAction[];
     memoryData?: { key: string | null; value: string };
+    reminderData?: { text: string; dueAt: number; recurrence: string | null };
   } | null>(null);
   const reAskRef = useRef(false);
   const confirmTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -368,6 +421,17 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
                 } catch {
                   // Non-critical: skill persistence failure shouldn't break UX
                 }
+                try {
+                  await createAuditEntry({
+                    id: String(Date.now()),
+                    actionType: "skill",
+                    summary: successMsg,
+                    result: "ok",
+                    reversible: 0,
+                    undoPayload: null,
+                    createdAt: Date.now(),
+                  });
+                } catch { /* non-critical */ }
                 setLastSpoken(successMsg);
                 setKrishnaSpeaking(true);
                 setStatus("speaking");
@@ -403,8 +467,9 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
             setStatus("thinking");
             try {
               const now = Date.now();
+              const memoryId = String(now);
               await createMemory({
-                id: String(now),
+                id: memoryId,
                 key: pending.memoryData.key || null,
                 value: pending.memoryData.value,
                 source: "explicit",
@@ -412,6 +477,17 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
                 createdAt: now,
                 lastUsedAt: null,
               });
+              try {
+                await createAuditEntry({
+                  id: String(Date.now()),
+                  actionType: "memory_write",
+                  summary: "Remembered " + pending.memoryData.value,
+                  result: "ok",
+                  reversible: 1,
+                  undoPayload: JSON.stringify({ kind: "memory", id: memoryId }),
+                  createdAt: Date.now(),
+                });
+              } catch { /* non-critical */ }
               const speak = "Got it, I'll remember that " + pending.memoryData.value;
               setLastSpoken(speak);
               setKrishnaSpeaking(true);
@@ -433,6 +509,51 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
             } finally {
               setStatus("idle");
             }
+          } else if (pending.type === "reminder" && pending.reminderData) {
+            setStatus("thinking");
+            try {
+              const now = Date.now();
+              await createReminder({
+                id: String(now),
+                text: pending.reminderData.text,
+                dueAt: pending.reminderData.dueAt,
+                recurrence: pending.reminderData.recurrence,
+                skillId: null,
+                enabled: 1,
+                createdAt: now,
+              });
+              try {
+                await createAuditEntry({
+                  id: String(now + 1),
+                  actionType: "reminder",
+                  summary: "Set reminder: " + pending.reminderData.text,
+                  result: "ok",
+                  reversible: 1,
+                  undoPayload: JSON.stringify({ kind: "reminder", id: String(now) }),
+                  createdAt: now + 1,
+                });
+              } catch { /* non-critical */ }
+              const speak = "Got it, I'll remind you to " + pending.reminderData.text + ".";
+              setLastSpoken(speak);
+              setKrishnaSpeaking(true);
+              setStatus("speaking");
+              try {
+                await ttsRef.current.speak(speak);
+              } finally {
+                setKrishnaSpeaking(false);
+              }
+            } catch (err) {
+              const msg = err instanceof Error ? err.message : "Failed to set reminder";
+              setStatus("speaking");
+              setKrishnaSpeaking(true);
+              try {
+                await ttsRef.current.speak("I had trouble: " + msg);
+              } finally {
+                setKrishnaSpeaking(false);
+              }
+            } finally {
+              setStatus("idle");
+            }
           } else if (pending.pendingResult?.target) {
             if (pending.input) {
               await saveAndConfirm(pending.pendingResult as any, pending.input);
@@ -440,6 +561,17 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
             setStatus("speaking");
             try {
               await invoke("open_target", { target: pending.pendingResult.target });
+              try {
+                await createAuditEntry({
+                  id: String(Date.now()),
+                  actionType: "open_target",
+                  summary: "Opening " + pending.pendingResult.displayName,
+                  result: "ok",
+                  reversible: 0,
+                  undoPayload: null,
+                  createdAt: Date.now(),
+                });
+              } catch { /* non-critical */ }
               const speak = "Opening " + pending.pendingResult.displayName;
               setLastSpoken(speak);
               setKrishnaSpeaking(true);
@@ -583,7 +715,124 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
         return;
       }
 
-      abortRef.current = new AbortController();
+      // Reminder: "remind me..."
+      const reminderResult = parseReminderCommand(command);
+      if (reminderResult) {
+        pendingConfirmationRef.current = {
+          type: "reminder",
+          spokenResponse: "Should I remind you to " + reminderResult.text + "?",
+          reminderData: reminderResult,
+          input: command,
+        };
+        reAskRef.current = false;
+        clearConfirmTimeout();
+        confirmTimeoutRef.current = setTimeout(() => {
+          pendingConfirmationRef.current = null;
+          reAskRef.current = false;
+          setStatus("idle");
+          ttsRef.current.speak("I'll forget about it.");
+        }, 15000);
+        setStatus("confirming");
+        setLastSpoken(pendingConfirmationRef.current.spokenResponse);
+        setKrishnaSpeaking(true);
+        try {
+          await ttsRef.current.speak(pendingConfirmationRef.current.spokenResponse);
+        } finally {
+          setKrishnaSpeaking(false);
+        }
+        return;
+      }
+
+      // Perception: "look at my screen"
+      if (isLookCommand(command)) {
+        setStatus("thinking");
+        try {
+          const img = await invoke<string>("capture_to_base64");
+          const visionPrompt = "Describe what's on the user's screen and answer their question.";
+          let visionResponse = "";
+          for await (const chunk of fetchAIResponse({
+            provider,
+            selectedProvider: selectedAIProvider,
+            systemPrompt: visionPrompt,
+            history: [],
+            userMessage: command,
+            imagesBase64: [img],
+            signal: new AbortController().signal,
+          })) {
+            visionResponse += chunk;
+          }
+          const { spokenText } = parseActions(visionResponse);
+          const speak = spokenText || visionResponse;
+          setLastSpoken(speak);
+          setKrishnaSpeaking(true);
+          setStatus("speaking");
+          try {
+            await ttsRef.current.speak(speak);
+          } finally {
+            setKrishnaSpeaking(false);
+          }
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : "Failed to capture screen";
+          setStatus("speaking");
+          setKrishnaSpeaking(true);
+          try {
+            await ttsRef.current.speak("I had trouble looking at your screen: " + msg);
+          } finally {
+            setKrishnaSpeaking(false);
+          }
+          } finally {
+            setStatus("idle");
+          }
+          return;
+        }
+
+        // Undo: "undo that"
+        if (isUndoCommand(command)) {
+          setStatus("thinking");
+          try {
+            const last = await getLastReversible();
+            if (!last) {
+              setStatus("speaking");
+              setKrishnaSpeaking(true);
+              try {
+                await ttsRef.current.speak("There's nothing to undo.");
+              } finally {
+                setKrishnaSpeaking(false);
+              }
+              setStatus("idle");
+              return;
+            }
+            const payload = last.undoPayload ? JSON.parse(last.undoPayload) : null;
+            let undoSuccess = false;
+            if (payload?.kind === "memory" && payload.id) {
+              const { deleteMemory } = await import("@/lib/database/memories.action");
+              await deleteMemory(payload.id);
+              undoSuccess = true;
+            }
+            const speak = undoSuccess ? "Done, I've undone that." : "I can't undo that action.";
+            setLastSpoken(speak);
+            setKrishnaSpeaking(true);
+            setStatus("speaking");
+            try {
+              await ttsRef.current.speak(speak);
+            } finally {
+              setKrishnaSpeaking(false);
+            }
+          } catch {
+            setStatus("speaking");
+            setKrishnaSpeaking(true);
+            try {
+              await ttsRef.current.speak("I had trouble undoing that.");
+            } finally {
+              setKrishnaSpeaking(false);
+            }
+          } finally {
+            setStatus("idle");
+          }
+          return;
+        }
+
+        abortRef.current = new AbortController();
       const signal = abortRef.current.signal;
 
       try {

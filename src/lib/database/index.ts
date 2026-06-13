@@ -5,3 +5,4 @@ export * from "./interview-profiles.action";
 export * from "./learned-actions.action";
 export * from "./skills.action";
 export * from "./memories.action";
+export * from "./reminders.action";

@@ -3,11 +3,15 @@ import { Switch, Label, Header, Select, SelectTrigger, SelectValue, SelectConten
 import { useKrishna } from "@/hooks";
 import { useLearnedActions } from "@/hooks/useLearnedActions";
 import { useMemories } from "@/hooks/useMemories";
+import { useAudit } from "@/hooks/useAudit";
+import { useReminders } from "@/hooks/useReminders";
 
 export const KrishnaSettings = () => {
   const { enabled, setKrishnaEnabled, voice, setVoice, rate, setRate, llmFallbackEnabled, setLlmFallbackEnabled } = useKrishna();
   const { actions, isLoading, removeAction, clearAll } = useLearnedActions();
   const { memories, isLoading: memoriesLoading, removeMemory, clearAll: clearAllMemories } = useMemories();
+  const { entries: auditEntries, isLoading: auditLoading, clearAll: clearAuditLog } = useAudit();
+  const { reminders, isLoading: remindersLoading, toggleReminder, removeReminder, clearAll: clearAllReminders } = useReminders();
   const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
 
   useEffect(() => {
@@ -125,6 +129,88 @@ export const KrishnaSettings = () => {
             </Button>
           </div>
         ))}
+      </div>
+
+      {/* Reminders list */}
+      <div className="space-y-3">
+        <div className="flex items-center justify-between">
+          <Label className="text-sm font-medium">Reminders ({reminders.length})</Label>
+          {reminders.length > 0 && (
+            <Button variant="ghost" size="sm" onClick={clearAllReminders}>
+              Clear all
+            </Button>
+          )}
+        </div>
+        {remindersLoading && <p className="text-xs text-muted-foreground">Loading...</p>}
+        {!remindersLoading && reminders.length === 0 && (
+          <p className="text-xs text-muted-foreground">
+            No reminders yet. Say "Hey Krishna, remind me to do something in 10 minutes."
+          </p>
+        )}
+        {reminders.map((r) => (
+          <div key={r.id} className="flex items-center justify-between rounded border p-2">
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-medium truncate">{r.text}</p>
+              <p className="text-xs text-muted-foreground">
+                {new Date(r.dueAt).toLocaleString()}
+                {r.recurrence && (
+                  <span className="ml-2 rounded bg-blue-100 px-1.5 py-0.5 text-xs font-medium text-blue-700">
+                    {r.recurrence}
+                  </span>
+                )}
+              </p>
+            </div>
+            <div className="flex items-center gap-2 ml-2 shrink-0">
+              <Switch
+                checked={r.enabled === 1}
+                onCheckedChange={(v) => toggleReminder(r.id, v ? 1 : 0)}
+                aria-label={"Toggle reminder " + r.text}
+              />
+              <Button variant="ghost" size="sm" onClick={() => removeReminder(r.id)}>
+                Cancel
+              </Button>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Audit log list */}
+      <div className="space-y-3">
+        <div className="flex items-center justify-between">
+          <Label className="text-sm font-medium">Audit log ({auditEntries.length})</Label>
+          {auditEntries.length > 0 && (
+            <Button variant="ghost" size="sm" onClick={clearAuditLog}>
+              Clear all
+            </Button>
+          )}
+        </div>
+        {auditLoading && <p className="text-xs text-muted-foreground">Loading...</p>}
+        {!auditLoading && auditEntries.length === 0 && (
+          <p className="text-xs text-muted-foreground">
+            No audit entries yet. Actions will be logged here as you use Krishna.
+          </p>
+        )}
+        {auditEntries.map((e) => {
+          const resultBadge = e.result === "ok"
+            ? "bg-green-100 text-green-700"
+            : e.result === "failed"
+            ? "bg-red-100 text-red-700"
+            : "bg-yellow-100 text-yellow-700";
+          return (
+            <div key={e.id} className="flex items-center justify-between rounded border p-2">
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-medium truncate">{e.actionType}</p>
+                <p className="text-xs text-muted-foreground truncate">{e.summary}</p>
+                <p className="text-xs text-muted-foreground">
+                  {new Date(e.createdAt).toLocaleString()}
+                </p>
+              </div>
+              <span className={"ml-2 shrink-0 rounded px-1.5 py-0.5 text-xs font-medium " + resultBadge}>
+                {e.result}
+              </span>
+            </div>
+          );
+        })}
       </div>
 
       {/* Learned actions list */}

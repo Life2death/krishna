@@ -59,5 +59,19 @@ pub fn migrations() -> Vec<Migration> {
             sql: include_str!("migrations/memories.sql"),
             kind: MigrationKind::Up,
         },
+        // Migration 10: Create audit_log table for Phase 5 trust layer
+        Migration {
+            version: 10,
+            description: "create_audit_log_table",
+            sql: include_str!("migrations/audit-log.sql"),
+            kind: MigrationKind::Up,
+        },
+        // Migration 11: Create reminders table for Phase 5 proactivity
+        Migration {
+            version: 11,
+            description: "create_reminders_table",
+            sql: include_str!("migrations/reminders.sql"),
+            kind: MigrationKind::Up,
+        },
     ]
 }
