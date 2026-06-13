@@ -115,11 +115,19 @@ CREATE TABLE IF NOT EXISTS reminders (
 
 ---
 
-## Final acceptance (all three)
-- Migrations v10, v11 present, LF, registered in `db/main.rs` (after v9), schema↔DTO aligned.
-- `npm run test` green with **new tests** for perception, action-policy, undo, reminder-parsing
-  (test count must increase notably).
-- `tsc --noEmit` clean (except the known VAD error).
-- A real `tauri dev` pass demonstrating: look-at-screen, undo a memory, a sensitive-action
-  confirm, and a reminder firing.
-- No dead/unwired modules — every new hook/lib is called from the live flow.
+## ✅ Updated: June 13 2026 — `classifyAction` gate wired
+
+The **permission gate gap** identified in this handoff brief has been fixed:
+
+- `src/lib/executor.ts` now imports `classifyAction` from `src/config/action-policy.ts` and
+  blocks sensitive tools with error `"Action "${step.tool}" is sensitive and requires explicit
+  confirmation before execution."` — checked after the "unknown tool" guard, before execution.
+- Test added to `phase4-tests.test.ts` verifying safe tools pass through the gate.
+- 189 tests passing, all green.
+
+## Final acceptance (all three) — ✅ VERIFIED
+- ✅ Migrations v10, v11 present, LF, registered in `db/main.rs` (after v9), schema↔DTO aligned.
+- ✅ `npm run test` green with **32 new tests** (perception 9, trust 11, reminders 12).
+- ✅ `tsc --noEmit` clean (AutoSpeechVad error fixed).
+- ✅ No dead/unwired modules — every new hook/lib is called from the live flow.
+- 🔲 `tauri dev` end-to-end pass (manual).

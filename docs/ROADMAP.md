@@ -21,38 +21,41 @@ to *act* on the desktop. This roadmap stitches the phases into one arc.
 
 **Capability:** *"Hey Krishna, open Chrome / youtube.com / this folder."*
 
-## Phase 3 — Self-learning actions 🔜 NEXT
+## Phase 3 — Self-learning actions ✅ DONE
 Removes the static-map ceiling. Unknown target → **resolution pipeline** (learned-store →
 Windows registry → Start-Menu → PATH → LLM-proposes/Rust-verifies) → **ask once** → **remember**.
 Self-healing on broken paths; everything visible/forgettable in settings.
-- Storage: new **version-6** SQLite migration (`learned_actions`), LF-pinned `.sql`.
-- Registry via **`windows-registry` v0.5.3** (already in tree). `.lnk`: launch the shortcut
-  directly; parse only if needed (pure-Rust `lnk`/`parselnk`, not `IShellLink`).
-- Confirmation: event-driven (next utterance = yes/no) + 15s safety timeout.
-- LLM tier: setting, default-on, last-resort, **result cached** (one-time cost per app).
 
 **Capability:** *"Hey Krishna, open Mozilla Firefox"* (never configured) → finds it, asks,
 remembers, instant next time.
 → Full spec: `PHASE_3_self_learning.md`
 
-## Phase 4 — Multi-step task agent 🔭 LATER
+## Phase 4 — Multi-step task agent ✅ DONE
 The brain becomes a **planner + tool-user**. A goal decomposes into an ordered, typed
 **step-plan**, confirmed by voice, executed preferring **reliable deep-links over GUI
-puppeteering**. Confirmed plans are saved as reusable **skills (recipes)** — the self-learning
-loop applied to *how to do things*, not just *what things are*.
-- Toolbox: `open_target`, `web_search`/`youtube_search` (BYOK), `navigate_webview`+`inject_js`
-  (allowlisted), low-level fallback.
-- Execution tiers: deep-link → controlled Tauri webview → computer-use (last resort).
-- New `skills` table; intent-match skips re-planning.
+puppeteering**. Confirmed plans are saved as reusable **skills (recipes)**.
 
 **Capability:** *"Hey Krishna, play this song on YouTube"* → "I'll search YouTube and play the
 top result, ok?" → does it; offers to remember it as a skill.
 → Full spec: `PHASE_4_task_agent.md`
 
-## Tier 2 / beyond 🌱 FUTURE
-Genuinely new *verbs* needing new code stay **review-gated PRs**, never runtime
-self-modification. Cloud/natural TTS voice. Richer skills (reminders, email, music control),
-cross-turn memory.
+## Phase 5 — Memory, Perception, Trust, Proactivity ✅ DONE
+
+| Pillar | What |
+|--------|------|
+| 5a — Memory | Conversation history buffer (8 messages), personal memories table (v9), remember intents, memory injection into system prompt, undo |
+| 5.3a — Perception | "What's on my screen" → screen capture → AI vision description |
+| 5.3b — Trust | Audit log (v10), permission tiers (`classifyAction`), undo handler, central logging |
+| 5.3c — Proactivity | Reminders (v11), scheduler (30s), recurrence, routines |
+
+**Capability:** *"What's on my screen?", "Remember my city is Pune" → "Undo that", "Remind me in 1 minute to stretch"*
+→ Full spec: `PHASE_5_memory_context.md`, `PHASE_5_REMAINING_handoff.md`
+
+## Phase 6 — Future 🌱 NEXT
+- Multilingual voice support (beyond English)
+- Richer proactivity (email/calendar integration)
+- Improved natural TTS voices (cloud options)
+- Cross-app workflows
 
 ---
 

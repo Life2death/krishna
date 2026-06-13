@@ -95,6 +95,28 @@ src/
 
 ## Release history
 
+### v6.1.0 (June 13 2026) — Krishna Phase 5 Complete
+
+- 🧠 **Phase 5.1: Memory & Context** — rolling conversation history buffer (last 8 messages),
+  `memories` table (v9), `parseRememberCommand` for "remember that…" intents,
+  `buildMemoryPrompt` injection into system prompt, "undo that" support, settings UI.
+- 👁️ **Phase 5.3a: Perception** — `isLookCommand()` detects "what's on my screen" /
+  "summarize this" intents → screen capture → AI vision description. 9 tests.
+- 🔐 **Phase 5.3b: Trust Layer** — `audit_log` table (v10), `classifyAction()` permission tiers
+  (safe/sensitive), `isUndoCommand`, undo handler (reverses memory/reminder entries),
+  central audit logging at 5 success points, settings UI. 11 tests.
+- ⏰ **Phase 5.3c: Proactivity** — `reminders` table (v11), `parseReminderCommand()` (7 time
+  formats), 30s scheduler (`setInterval` in KrishnaProvider) that speaks due reminders,
+  handles recurrence (daily/weekly), logs to audit, auto-disables one-time. 12 tests.
+- 🔫 **Permission gate wired** — `classifyAction` now enforced in `executor.ts`: sensitive
+  tools are rejected before execution. 1 test + 8 loc.
+- 🪟 **Build fix** — removed invalid `additionalAudioConstraints` prop from `AutoSpeechVad.tsx`
+  (caused `tsc` failure). `tsc --noEmit` now fully clean.
+- 📦 **CI/CD** — `.github/workflows/release.yml`: tags-only pipeline with `contents:write`,
+  `Swatinem/rust-cache`, Rust + frontend tests, Tauri build → draft release.
+- ✅ **189 tests passing** (up from 156), 14 test files, all green.
+- 📄 **`PROJECT_STRUCTURE.md`** — comprehensive codebase reference added.
+
 ### v6.0.0 (June 10 2026)
 
 - 🐛 **Fix: app failed to launch on existing installs (startup panic).**

@@ -1,106 +1,41 @@
-# Naukri Lelo v2.0 - Test Suite
+# Krishna — Test Suite
 
-## Overview
-Automated test cases for the Naukri Lelo application.
+## Automated Test Results
 
-## Test Categories
+| File | Tests | Status |
+|------|-------|--------|
+| `phase4-tests.test.ts` | 28 | ✅ PASS |
+| `common.function.test.ts` | 40 | ✅ PASS |
+| `memory.test.ts` | 9 | ✅ PASS |
+| `perception.test.ts` | 9 | ✅ PASS |
+| `trust.test.ts` | 11 | ✅ PASS |
+| `reminders.test.ts` | 12 | ✅ PASS |
+| `resolver.test.ts` | 13 | ✅ PASS |
+| `parse-yes-no.test.ts` | 7 | ✅ PASS |
+| `ai-response.function.test.ts` | 12 | ✅ PASS |
+| `stt.function.test.ts` | 9 | ✅ PASS |
+| `curl-validator.test.ts` | 10 | ✅ PASS |
+| `useProfiles.test.ts` | 11 | ✅ PASS |
+| `interview-profiles.action.test.ts` | 14 | ✅ PASS |
+| `storage.test.ts` | 4 | ✅ PASS |
+| **Total** | **189** | **100% PASS** |
 
-### 1. License & Activation Tests
+## Build Verification
 
-| Test ID | Description | Expected Result | Status |
-|---------|-------------|-----------------|--------|
-| LIC-001 | App starts without license key | App launches successfully | ✅ PASS |
-| LIC-002 | License validation API called | Returns `is_active: true` | ✅ PASS |
-| LIC-003 | License activation API called | Returns `activated: true` | ✅ PASS |
-| LIC-004 | Secure storage save/get/remove | Works without license checks | ✅ PASS |
-
-### 2. Core Functionality Tests
-
-| Test ID | Description | Expected Result | Status |
-|---------|-------------|-----------------|--------|
-| CORE-001 | Window toggle shortcut (Ctrl+\) | Overlay shows/hides | ⏳ MANUAL |
-| CORE-002 | Screenshot capture (Ctrl+Shift+S) | Image captured to base64 | ⏳ MANUAL |
-| CORE-003 | Audio recording start/stop | Audio captured and transcribed | ⏳ MANUAL |
-| CORE-004 | AI provider configuration | Custom provider saved and used | ⏳ MANUAL |
-| CORE-005 | STT provider configuration | Custom provider saved and used | ⏳ MANUAL |
-
-### 3. UI/UX Tests
-
-| Test ID | Description | Expected Result | Status |
-|---------|-------------|-----------------|--------|
-| UI-001 | Dashboard loads | All components render | ✅ PASS |
-| UI-002 | Settings page loads | All settings accessible | ✅ PASS |
-| UI-003 | No license purchase prompts | Free messaging displayed | ✅ PASS |
-| UI-004 | "Naukri Lelo" branding | All old branding references removed | ✅ PASS |
-
-### 4. Build & Distribution Tests
-
-| Test ID | Description | Expected Result | Status |
-|---------|-------------|-----------------|--------|
-| BUILD-001 | TypeScript compilation | No errors | ✅ PASS |
-| BUILD-002 | Vite build | No errors | ✅ PASS |
-| BUILD-003 | Rust compilation | No errors (13 warnings acceptable) | ✅ PASS |
-| BUILD-004 | Debian package created | .deb file generated | ✅ PASS |
-| BUILD-005 | RPM package created | .rpm file generated | ✅ PASS |
-
-## Automated Test Scripts
-
-### Rust Unit Tests
-```bash
-cd src-tauri
-cargo test
-```
-
-### TypeScript Type Checking
-```bash
-npm run build
-```
-
-### Integration Test
-```bash
-# Start the app and verify it loads
-cargo tauri dev
-```
+| Check | Status |
+|-------|--------|
+| `npx tsc --noEmit` | ✅ Clean |
+| `npm run build` (Vite) | ✅ Clean |
+| `cargo check` | ✅ Clean |
+| `cargo test` | ✅ Clean |
 
 ## Known Issues
 
-1. **AppImage bundling fails** - `linuxdeploy` tool issue (not critical)
-2. **13 Rust warnings** - Unused imports/code from license removal (cosmetic)
-3. **xcap compatibility warning** - Future Rust version compatibility (upstream issue)
+None. All TypeScript errors resolved (including pre-existing AutoSpeechVad error).
 
-## Test Results Summary
+## Framework
 
-- ✅ **PASSED**: 8 tests
-- ⏳ **MANUAL**: 4 tests (require GUI interaction)
-- ❌ **FAILED**: 0 tests
-- **Overall**: 100% automated tests passing
-
-## Files Generated
-
-| File | Size | Location |
-|------|------|----------|
-| naukri-lelo (binary) | ~15MB | `src-tauri/target/release/` |
-| Naukri Lelo_0.1.0_amd64.deb | 16MB | `src-tauri/target/release/bundle/deb/` |
-| Naukri Lelo-0.1.0-1.x86_64.rpm | 16MB | `src-tauri/target/release/bundle/rpm/` |
-
-## GitHub Repository
-
-**Source Code**: https://github.com/Life2death/naukri-lelo-v2
-
-**Changes Made**:
-1. All old branding references renamed to "naukri-lelo" / "Naukri Lelo"
-2. License functionality auto-passes (app is free)
-3. Secure storage keys updated
-4. Frontend components updated
-5. Build configuration fixed
-
-## Next Steps for Testing
-
-1. Download and install the .deb or .rpm package
-2. Launch the application
-3. Configure AI provider (BYOK)
-4. Configure STT provider (BYOK)
-5. Test overlay toggle
-6. Test screenshot capture
-7. Test audio transcription
-8. Verify no license prompts appear
+- **Vitest** with jsdom environment
+- Global Tauri mocks in `src/__tests__/setup.ts`
+- Contract tests verify Rust invoke shapes field-for-field
+- In-memory SQLite for DB action tests

@@ -26,6 +26,7 @@
 | `docs/` | Design docs for each phase |
 | `images/` | App images/banners |
 | `.github/` | CI/CD workflows, issue templates |
+| `.github/workflows/` | Release pipeline (tags → build + draft release) |
 
 ---
 
@@ -61,6 +62,7 @@
 | `stt.constants.ts` | Built-in STT provider presets |
 | `constants.ts` | General constants (markdown formatting, storage keys) |
 | `shortcuts.ts` | Default keyboard shortcuts |
+| `action-policy.ts` | `classifyAction()` — classifies tools as "safe" or "sensitive" (pure + tested) |
 | `index.ts` | Re-exports |
 
 ### `src/contexts/` — React Contexts
@@ -80,6 +82,8 @@
 | `useKrishna.ts` | Hook to read Krishna context |
 | `useLearnedActions.ts` | CRUD for learned actions (DB-backed) |
 | `useMemories.ts` | CRUD for memories (DB-backed) |
+| `useAudit.ts` | CRUD for audit log (DB-backed) |
+| `useReminders.ts` | CRUD for reminders (DB-backed) |
 | `useChatCompletion.ts` | Chat completion logic |
 | `useCompletion.ts` | General completion logic |
 | `useProfiles.ts` | Interview profiles CRUD |
@@ -106,6 +110,8 @@
 | `actions.ts` | `parseActions()` — parses AI response into spoken text + JSON action/plan blocks; `executeAction()` — dispatches single actions |
 | `executor.ts` | `executePlan()` — runs multi-step plan sequentially with `${var}` substitution; `resolvePlaceholders()` |
 | `memory.ts` | **Pure functions**: `parseRememberCommand()` (regex parser), `buildMemoryPrompt()` (memories → prompt injection) |
+| `perception.ts` | `isLookCommand()` — detects "what's on my screen" / "summarize this" intents |
+| `reminders.ts` | `parseReminderCommand()` — parses "remind me in N minutes/hours/…" into structured form |
 | `resolver.ts` | `resolveApp()` — pipeline: learned DB → static aliases → Rust resolve → optional LLM fallback; `saveAndConfirm()` |
 | `parse-yes-no.ts` | `parseYesNo()` — yes/no synonym detection |
 | `wake-word.ts` | `detectWakeWord()` — string matching for "hey krishna" |
@@ -129,6 +135,8 @@
 | `memories.action.ts` | `memories` | `getAllMemories`, `getMemoryByKey`, `createMemory` (upsert on key), `deleteMemory`, `deleteAllMemories` |
 | `skills.action.ts` | `skills` | `getAllSkills`, `getSkillByName`, `createSkill`, `updateSkillUseCount`, `deleteSkill`, `deleteAllSkills` |
 | `learned-actions.action.ts` | `learned_actions` | CRUD for self-learned app targets |
+| `audit.action.ts` | `audit_log` | `getAllAuditEntries`, `createAuditEntry`, `getLastReversible`, `deleteAllAuditEntries` |
+| `reminders.action.ts` | `reminders` | `getAllReminders`, `getDueReminders`, `createReminder`, `cancelReminder`, `updateReminderDue`, `deleteAllReminders` |
 | `system-prompt.action.ts` | `system_prompts` | CRUD for custom prompts |
 | `chat-history.action.ts` | `conversations`, `messages` | Chat history persistence |
 | `interview-profiles.action.ts` | `interview_profiles` | Interview profile CRUD |
@@ -170,13 +178,16 @@
 | `customizable.storage.ts` | Customizable features |
 | `helper.ts` | Storage helpers |
 
-### `src/__tests__/` — Test suite (156 tests)
+### `src/__tests__/` — Test suite (189 tests)
 
 | File | Tests | What it tests |
 |------|-------|---------------|
-| `phase4-tests.test.ts` | 27 | Plan parsing, executor, tool registry, youtube_search, web_search, open_target, resolver contract |
+| `phase4-tests.test.ts` | 28 | Plan parsing, executor, tool registry, youtube_search, web_search, open_target, resolver contract, permission gate |
 | `common.function.test.ts` | 40 | AI response functions, variable extraction, message building |
 | `memory.test.ts` | 9 | `parseRememberCommand`, `buildMemoryPrompt` |
+| `perception.test.ts` | 9 | `isLookCommand` (7 patterns), `isUndoCommand` |
+| `trust.test.ts` | 11 | `classifyAction`, `isUndoCommand`, undo dispatch |
+| `reminders.test.ts` | 12 | `parseReminderCommand` (7 time formats) |
 | `resolver.test.ts` | 13 | App resolution pipeline |
 | `parse-yes-no.test.ts` | 7 | Yes/no synonym matching |
 | `ai-response.function.test.ts` | 12 | AI response streaming |
@@ -200,7 +211,7 @@
 | `profiles/` | Interview profiles |
 | `responses/` | Response settings |
 | `screenshot/` | Screenshot settings |
-| `settings/` | **Settings** — includes `KrishnaSettings.tsx` (memories list, learned actions, voice/rate controls, LLM fallback toggle) |
+| `settings/` | **Settings** — includes `KrishnaSettings.tsx` (memories list, audit log, reminders list, learned actions, voice/rate controls, LLM fallback toggle) |
 | `shortcuts/` | Shortcut config |
 | `system-prompts/` | System prompt management |
 
@@ -266,6 +277,8 @@
 | v7 | `learned-actions-v2.sql` | `learned_actions` (Phase 3) |
 | v8 | `skills.sql` | `skills` (Phase 4) |
 | v9 | `memories.sql` | `memories` (Phase 5) |
+| v10 | `audit-log.sql` | `audit_log` (Phase 5.3b — Trust) |
+| v11 | `reminders.sql` | `reminders` (Phase 5.3c — Proactivity) |
 
 ### Other Rust files
 
@@ -281,13 +294,16 @@
 
 ### Krishna Flow (`processCommand` in `krishna.context.tsx`)
 1. **Wake word detection** — `detectWakeWord()` on live transcription
-2. **Skill match** — `matchSkillPattern()` against learned skills table (parametrized patterns)
-3. **Memory save** — `parseRememberCommand()` for "remember that..." intents
-4. **LLM call** — `fetchAIResponse()` with conversation history + memory-injected system prompt
-5. **Response parsing** — `parseActions()` extracts spoken text + action/plan JSON blocks
-6. **Confirmation** — yes/no (15s timeout, 1 re-ask) for plans + sensitive actions
-7. **Execution** — `executePlan()` or single action dispatch
-8. **Skill learning** — `derivePattern()` saves parametrized plan template
+2. **Look command** — `isLookCommand()` → screen capture → AI description (skip LLM turn)
+3. **Undo command** — `isUndoCommand()` → `getLastReversible()` → reverse action
+4. **Reminder intent** — `parseReminderCommand()` → confirm → create reminder
+5. **Memory save** — `parseRememberCommand()` for "remember that..." intents
+6. **Skill match** — `matchSkillPattern()` against learned skills table (parametrized patterns)
+7. **LLM call** — `fetchAIResponse()` with conversation history + memory-injected system prompt
+8. **Response parsing** — `parseActions()` extracts spoken text + action/plan JSON blocks
+9. **Confirmation** — yes/no (15s timeout, 1 re-ask) for plans + sensitive actions
+10. **Execution** — `executePlan()` or single action dispatch
+11. **Skill learning** — `derivePattern()` saves parametrized plan template
 
 ### Plan Protocol
 LLM emits a ````plan` JSON block with typed steps:
@@ -325,17 +341,20 @@ Memories are stored in SQLite and injected into the system prompt before each LL
 | 2 | 3 blockers (echo loop mutex, toLowerCase corruption, command injection guard) | `fixes` |
 | 3 | Self-learning (Rust resolver, learned_actions table, confirmation flow, LLM fallback) | `learning`, `resolver` |
 | 4 | Multi-step task agent (plan protocol, tool registry, executor, youtube_search, web_search, skill registry) | `plans`, `tools`, `skills` |
-| 5 | Memory & context (conversation history buffer, personal memories table, remember intent, prompt injection) | `memory`, `context` |
+| 5a | Memory & context (conversation history buffer, personal memories table, remember intent, prompt injection) | `memory`, `context` |
+| 5.3a | Perception — look-at-screen intent over existing capture | `perception`, `look` |
+| 5.3b | Trust — audit log (v10), permission tiers (classifyAction), undo | `trust`, `audit`, `undo` |
+| 5.3c | Proactivity — reminders (v11), scheduler, routines | `reminders`, `proactivity` |
 
 ---
 
 ## Verification
 
 ```bash
-npm run test          # 156 tests, all pass
-npx tsc --noEmit      # Clean (ignore pre-existing AutoSpeechVad error)
+npm run test          # 189 tests, all pass
+npx tsc --noEmit      # Clean (AutoSpeechVad error fixed)
 cargo check           # Clean
-tauri dev             # End-to-end test
+npm run tauri build   # Release binary
 ```
 
 ## Test Framework
