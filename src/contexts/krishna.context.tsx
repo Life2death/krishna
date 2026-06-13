@@ -3,7 +3,7 @@ import { useApp } from "@/contexts";
 import { fetchAIResponse } from "@/lib/functions";
 import { detectWakeWord } from "@/lib/wake-word";
 import { parseActions, executeAction } from "@/lib/actions";
-import { executePlan } from "@/lib/executor";
+import { executePlan, resolvePlaceholders } from "@/lib/executor";
 import { getToolDescriptions } from "@/lib/tools";
 import { getTTS } from "@/lib/tts";
 import { safeLocalStorage } from "@/lib";
@@ -73,6 +73,97 @@ const KRISHNA_SYSTEM_PROMPT = [
   '4. Use ${variable} placeholders to pass outputs between steps.',
   '5. For "play X on YouTube", prefer composing the URL directly: open_target with "https://www.youtube.com/results?search_query=<query>"',
 ].join("\n");
+
+// ---- Skill pattern helpers ----
+
+function derivePattern(input: string, steps: StepAction[]): {
+  pattern: string;
+  params: string;
+  planTemplate: string;
+} {
+  const rawValues: string[] = [];
+  for (const step of steps) {
+    for (const value of Object.values(step.args)) {
+      if (typeof value === 'string' && value.length > 0 && !value.startsWith('${') && !rawValues.includes(value)) {
+        rawValues.push(value);
+      }
+    }
+  }
+
+  rawValues.sort((a, b) => b.length - a.length);
+  const values = rawValues.filter(v => input.toLowerCase().includes(v.toLowerCase()));
+
+  if (values.length === 0) {
+    return { pattern: input, params: '[]', planTemplate: JSON.stringify(steps) };
+  }
+
+  let pattern = input;
+  const templateSteps: StepAction[] = JSON.parse(JSON.stringify(steps));
+  const paramNames: string[] = [];
+
+  for (let i = 0; i < values.length; i++) {
+    const value = values[i];
+    const paramName = 'param' + i;
+    const escapedValue = value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const valueRegex = new RegExp(escapedValue, 'gi');
+    if (valueRegex.test(pattern)) {
+      pattern = pattern.replace(valueRegex, '{' + paramName + '}');
+      paramNames.push(paramName);
+      for (const step of templateSteps) {
+        for (const [key, val] of Object.entries(step.args)) {
+          if (typeof val === 'string' && val.toLowerCase() === value.toLowerCase()) {
+            step.args[key] = '${' + paramName + '}';
+          }
+        }
+      }
+    }
+  }
+
+  if (paramNames.length === 0) {
+    return { pattern: input, params: '[]', planTemplate: JSON.stringify(steps) };
+  }
+
+  return { pattern, params: JSON.stringify(paramNames), planTemplate: JSON.stringify(templateSteps) };
+}
+
+function matchSkillPattern(command: string, skill: Skill): Record<string, string> | null {
+  const paramNames: string[] = JSON.parse(skill.params);
+
+  if (paramNames.length === 0) {
+    return command.toLowerCase() === skill.triggerExamples.toLowerCase() ? {} : null;
+  }
+
+  const pattern = skill.triggerExamples;
+  let regexStr = '';
+  let lastIndex = 0;
+  const foundParams: string[] = [];
+  const paramRegex = /\{(\w+)\}/g;
+  let match;
+
+  while ((match = paramRegex.exec(pattern)) !== null) {
+    if (paramNames.includes(match[1])) {
+      regexStr += pattern.slice(lastIndex, match.index).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      regexStr += '(.+)';
+      foundParams.push(match[1]);
+      lastIndex = match.index + match[0].length;
+    }
+  }
+  regexStr += pattern.slice(lastIndex).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+  try {
+    const regex = new RegExp('^' + regexStr + '$', 'i');
+    const regexMatch = command.match(regex);
+    if (!regexMatch) return null;
+
+    const extracted: Record<string, string> = {};
+    for (let i = 0; i < foundParams.length; i++) {
+      extracted[foundParams[i]] = regexMatch[i + 1];
+    }
+    return extracted;
+  } catch {
+    return null;
+  }
+}
 
 export function KrishnaProvider({ children }: { children: ReactNode }) {
   const { selectedAIProvider, allAiProviders } = useApp();
@@ -246,19 +337,20 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
               const result = await executePlan(pending.steps);
               if (result.success) {
                 const successMsg = result.finalOutput || "Plan completed successfully.";
-                // Learn as a skill for future use
+                // Learn as a skill for future use (parametrized pattern)
                 try {
                   if (pending.input) {
                     const skillName = pending.input.toLowerCase().replace(/[^a-z0-9 ]/g, "").trim().split(/\s+/).slice(0, 5).join("-");
                     const existing = await getSkillByName(skillName);
                     if (!existing) {
                       const now = Date.now();
+                      const { pattern, params, planTemplate } = derivePattern(pending.input, pending.steps);
                       const skill: Skill = {
                         id: now,
                         name: skillName,
-                        triggerExamples: pending.input,
-                        params: JSON.stringify(pending.steps.map((s: StepAction) => Object.keys(s.args)).flat()),
-                        planTemplate: JSON.stringify(pending.steps),
+                        triggerExamples: pattern,
+                        params,
+                        planTemplate,
                         confirmedByUser: 1,
                         useCount: 1,
                         createdAt: now,
@@ -374,15 +466,21 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
         return;
       }
 
-      // Skill match: check if the command matches a learned skill
+      // Skill match: check if the command matches a learned skill (pattern-based)
       try {
         const skills = await getAllSkills();
         for (const skill of skills) {
-          const triggers = skill.triggerExamples.split(",").map((t: string) => t.trim().toLowerCase());
-          if (triggers.some((t: string) => command.toLowerCase().includes(t) || t.includes(command.toLowerCase()))) {
+          const vars = matchSkillPattern(command, skill);
+          if (vars !== null) {
             setStatus("thinking");
             try {
-              const steps: StepAction[] = JSON.parse(skill.planTemplate);
+              const rawSteps: StepAction[] = JSON.parse(skill.planTemplate);
+              const steps: StepAction[] = rawSteps.map(step => ({
+                ...step,
+                args: Object.fromEntries(
+                  Object.entries(step.args).map(([k, v]) => [k, resolvePlaceholders(v, vars)])
+                ),
+              }));
               const result = await executePlan(steps);
               await updateSkillUseCount(skill.id);
               if (result.success) {
