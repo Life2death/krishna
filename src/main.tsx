@@ -1,7 +1,7 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
 import Overlay from "./components/Overlay";
-import { AppProvider, ThemeProvider, ExpandedLayoutProvider } from "./contexts";
+import { AppProvider, ThemeProvider, ExpandedLayoutProvider, KrishnaProvider } from "./contexts";
 import "./global.css";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import AppRoutes from "./routes";
@@ -23,7 +23,9 @@ if (windowLabel.startsWith("capture-overlay-")) {
       <ThemeProvider defaultTheme="light">
         <AppProvider>
           <ExpandedLayoutProvider>
-            <AppRoutes />
+            <KrishnaProvider>
+              <AppRoutes />
+            </KrishnaProvider>
           </ExpandedLayoutProvider>
         </AppProvider>
       </ThemeProvider>
