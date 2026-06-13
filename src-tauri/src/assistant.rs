@@ -1,66 +1,50 @@
 use std::process::Command;
-use tauri::Manager;
+use tauri_plugin_opener::OpenerExt;
+
+fn is_safe_app_name(s: &str) -> bool {
+    s.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-' || c == '.')
+}
 
 #[tauri::command]
-pub fn open_target(target: String) -> Result<String, String> {
+pub fn open_target(app_handle: tauri::AppHandle, target: String) -> Result<String, String> {
     let lower = target.to_lowercase();
 
-    // If it looks like a URL, open via the default browser
     if lower.starts_with("http://") || lower.starts_with("https://") {
-        open_url(&target)
+        open_url_safe(&app_handle, &target)
     } else if lower.starts_with("www.") {
-        open_url(&format!("https://{}", target))
+        open_url_safe(&app_handle, &format!("https://{}", target))
+    } else if lower.contains('\\') || lower.contains('/') || lower.ends_with(".exe") {
+        open_path_safe(&app_handle, &target)
+    } else if is_safe_app_name(&target) {
+        open_app_safe(&target)
     } else {
-        open_app(&target)
+        Err(format!("Invalid target: {}", target))
     }
 }
 
-fn open_url(url: &str) -> Result<String, String> {
+fn open_url_safe(app_handle: &tauri::AppHandle, url: &str) -> Result<String, String> {
+    app_handle
+        .opener()
+        .open_url(url, None::<&str>)
+        .map_err(|e| format!("Failed to open URL: {}", e))?;
+    Ok(format!("Opened URL: {}", url))
+}
+
+fn open_path_safe(app_handle: &tauri::AppHandle, path: &str) -> Result<String, String> {
+    app_handle
+        .opener()
+        .open_path(path, None::<&str>)
+        .map_err(|e| format!("Failed to open path: {}", e))?;
+    Ok(format!("Opened path: {}", path))
+}
+
+fn open_app_safe(app: &str) -> Result<String, String> {
     #[cfg(target_os = "windows")]
     {
         Command::new("cmd")
-            .args(["/C", "start", "", url])
+            .args(["/C", "start", "", app])
             .spawn()
-            .map_err(|e| format!("Failed to open URL: {}", e))?;
-        Ok(format!("Opened URL: {}", url))
-    }
-    #[cfg(target_os = "macos")]
-    {
-        Command::new("open")
-            .arg(url)
-            .spawn()
-            .map_err(|e| format!("Failed to open URL: {}", e))?;
-        Ok(format!("Opened URL: {}", url))
-    }
-    #[cfg(target_os = "linux")]
-    {
-        Command::new("xdg-open")
-            .arg(url)
-            .spawn()
-            .map_err(|e| format!("Failed to open URL: {}", e))?;
-        Ok(format!("Opened URL: {}", url))
-    }
-    #[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
-    {
-        Err("Unsupported platform".to_string())
-    }
-}
-
-fn open_app(app: &str) -> Result<String, String> {
-    #[cfg(target_os = "windows")]
-    {
-        // Check if it's a direct executable name or a file path
-        if app.contains('\\') || app.contains('/') || app.ends_with(".exe") {
-            Command::new("cmd")
-                .args(["/C", "start", "", app])
-                .spawn()
-                .map_err(|e| format!("Failed to open: {}", e))?;
-        } else {
-            Command::new("cmd")
-                .args(["/C", "start", "", &app])
-                .spawn()
-                .map_err(|e| format!("Failed to open app '{}': {}", app, e))?;
-        }
+            .map_err(|e| format!("Failed to open app '{}': {}", app, e))?;
         Ok(format!("Opened: {}", app))
     }
     #[cfg(target_os = "macos")]

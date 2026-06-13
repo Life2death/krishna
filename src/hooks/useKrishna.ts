@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import { useApp } from "@/contexts";
 import { fetchAIResponse } from "@/lib/functions";
 import { detectWakeWord } from "@/lib/wake-word";
@@ -6,6 +6,8 @@ import { parseActions, executeAction } from "@/lib/actions";
 import { getTTS } from "@/lib/tts";
 import { safeLocalStorage } from "@/lib";
 import { STORAGE_KEYS } from "@/config";
+import { setKrishnaSpeaking } from "@/lib/krishna-mutex";
+import { listen } from "@tauri-apps/api/event";
 import type { AssistantStatus } from "@/types/assistant";
 
 const KRISHNA_SYSTEM_PROMPT = `You are Krishna, an AI desktop assistant. You help users by answering questions and performing actions on their computer.
@@ -34,6 +36,43 @@ export function useKrishna() {
   const [lastSpoken, setLastSpoken] = useState<string>("");
   const abortRef = useRef<AbortController | null>(null);
   const ttsRef = useRef(getTTS());
+  const voiceInitRef = useRef(false);
+
+  useEffect(() => {
+    if (voiceInitRef.current) return;
+    const loadVoices = () => {
+      const voices = window.speechSynthesis.getVoices();
+      const natural = voices.find(
+        (v) => v.name.includes("Natural") && v.lang.startsWith("en") && v.name.includes("David")
+      ) || voices.find(
+        (v) => v.name.includes("Natural") && v.lang.startsWith("en")
+      ) || voices.find(
+        (v) => v.lang.startsWith("en") && v.name.includes("Microsoft")
+      );
+      if (natural) {
+        ttsRef.current.setVoice(natural);
+        voiceInitRef.current = true;
+      }
+    };
+    loadVoices();
+    window.speechSynthesis.onvoiceschanged = loadVoices;
+  }, []);
+
+  // Barge-in: stop TTS when user starts speaking
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    const setup = async () => {
+      unlisten = await listen("speech-start", () => {
+        if (ttsRef.current.isSpeaking()) {
+          ttsRef.current.stop();
+          setStatus("idle");
+          setKrishnaSpeaking(false);
+        }
+      });
+    };
+    setup();
+    return () => { unlisten?.(); };
+  }, []);
 
   const setKrishnaEnabled = useCallback((value: boolean) => {
     setEnabled(value);
@@ -47,6 +86,7 @@ export function useKrishna() {
       abortRef.current = null;
     }
     setStatus("idle");
+    setKrishnaSpeaking(false);
   }, []);
 
   const processCommand = useCallback(
@@ -72,6 +112,7 @@ export function useKrishna() {
       }
 
       abortRef.current = new AbortController();
+      const signal = abortRef.current.signal;
 
       try {
         let fullResponse = "";
@@ -82,12 +123,13 @@ export function useKrishna() {
           history: [],
           userMessage: command,
           imagesBase64: [],
+          signal,
         })) {
-          if (abortRef.current?.signal.aborted) break;
+          if (signal.aborted) break;
           fullResponse += chunk;
         }
 
-        if (!fullResponse || abortRef.current?.signal.aborted) {
+        if (!fullResponse || signal.aborted) {
           setStatus("idle");
           return;
         }
@@ -97,14 +139,30 @@ export function useKrishna() {
         if (spokenText) {
           setStatus("speaking");
           setLastSpoken(spokenText);
-          await ttsRef.current.speak(spokenText);
+          setKrishnaSpeaking(true);
+          try {
+            await ttsRef.current.speak(spokenText);
+          } finally {
+            setKrishnaSpeaking(false);
+          }
         }
 
         for (const action of actions) {
           await executeAction(action);
         }
-      } catch {
-        // Silently handle errors
+      } catch (err) {
+        if (signal.aborted) {
+          setStatus("idle");
+          return;
+        }
+        const msg = err instanceof Error ? err.message : "Something went wrong";
+        setStatus("speaking");
+        setKrishnaSpeaking(true);
+        try {
+          await ttsRef.current.speak(`I had trouble: ${msg}`);
+        } finally {
+          setKrishnaSpeaking(false);
+        }
       } finally {
         setStatus("idle");
       }

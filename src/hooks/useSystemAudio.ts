@@ -4,6 +4,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { useApp } from "@/contexts";
 import { fetchSTT, fetchAIResponse } from "@/lib/functions";
+import { isKrishnaSpeaking } from "@/lib/krishna-mutex";
 import {
   DEFAULT_QUICK_ACTIONS,
   DEFAULT_SYSTEM_PROMPT,
@@ -281,7 +282,9 @@ export function useSystemAudio(options: UseSystemAudioOptions = {}) {
                 setError("");
 
                 if (krishnaEnabled && onKrishnaCommand) {
-                  await onKrishnaCommand(transcription);
+                  if (!isKrishnaSpeaking()) {
+                    await onKrishnaCommand(transcription);
+                  }
                 } else {
                   const effectiveSystemPrompt = useSystemPrompt
                     ? systemPrompt || DEFAULT_SYSTEM_PROMPT

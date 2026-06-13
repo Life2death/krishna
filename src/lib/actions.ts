@@ -40,28 +40,29 @@ export function parseActions(reply: string): ParsedReply {
 
 export async function executeAction(action: Action): Promise<string> {
   if (action.action === "open") {
-    const target = action.target.toLowerCase().trim();
+    const rawTarget = action.target.trim();
+    const lowerTarget = rawTarget.toLowerCase();
 
-    if (isUrl(target)) {
-      const url = target.startsWith("http") ? target : `https://${target}`;
+    if (isUrl(rawTarget)) {
+      const url = rawTarget.startsWith("http") ? rawTarget : `https://${rawTarget}`;
       try {
         await invoke("open_target", { target: url });
-        return `Opening ${target}`;
+        return `Opening ${rawTarget}`;
       } catch (e) {
-        return `Failed to open ${target}`;
+        return `Failed to open ${rawTarget}`;
       }
     }
 
-    if (isFilePath(target)) {
+    if (isFilePath(rawTarget)) {
       try {
-        await invoke("open_target", { target });
+        await invoke("open_target", { target: rawTarget });
         return `Opening file path`;
       } catch (e) {
         return `Failed to open path`;
       }
     }
 
-    const alias = resolveAppAlias(target);
+    const alias = resolveAppAlias(lowerTarget);
     if (alias) {
       try {
         await invoke("open_target", { target: alias.launchCommand });
@@ -71,7 +72,7 @@ export async function executeAction(action: Action): Promise<string> {
       }
     }
 
-    return `I couldn't find an app named "${target}"`;
+    return `I couldn't find an app named "${rawTarget}"`;
   }
 
   return "Unknown action";
