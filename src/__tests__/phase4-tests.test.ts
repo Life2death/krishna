@@ -209,7 +209,7 @@ describe("youtube_search tool", () => {
   it("falls back to deep-link when no API key configured", async () => {
     const result = await youtubeSearchTool.run({ query: "Tum Hi Ho" }, { vars: {} });
     expect(result.success).toBe(true);
-    expect(result.data!.videoId).toContain("youtube.com/results");
+    expect(result.data!.url).toContain("youtube.com/results");
     expect(result.data!.fallback).toBe("true");
   });
 

@@ -24,7 +24,7 @@ export const youtubeSearchTool: Tool = {
           return {
             success: true,
             output: "Found video ID: " + searchResult.videoId,
-            data: { videoId: searchResult.videoId, title: searchResult.title, fallback: "false" } as Record<string, string>,
+            data: { videoId: searchResult.videoId, url: "https://youtube.com/watch?v=" + searchResult.videoId, title: searchResult.title, fallback: "false" } as Record<string, string>,
           };
         }
       } catch {
@@ -36,7 +36,7 @@ export const youtubeSearchTool: Tool = {
     return {
       success: true,
       output: "No API key configured. Use deep-link: " + searchUrl,
-      data: { videoId: searchUrl, title: "", fallback: "true" } as Record<string, string>,
+      data: { url: searchUrl, videoId: "", title: "", fallback: "true" } as Record<string, string>,
     };
   },
 };

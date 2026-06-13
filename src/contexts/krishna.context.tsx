@@ -13,7 +13,9 @@ import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import { parseYesNo } from "@/lib/parse-yes-no";
 import { saveAndConfirm } from "@/lib/resolver";
+import { getAllSkills, getSkillByName, createSkill, updateSkillUseCount } from "@/lib/database/skills.action";
 import type { AssistantStatus, StepAction } from "@/types/assistant";
+import type { Skill } from "@/types/skill";
 
 interface KrishnaContextType {
   enabled: boolean;
@@ -56,8 +58,8 @@ const KRISHNA_SYSTEM_PROMPT = [
   '  "say": "I\'ll search YouTube for the song and play it.",',
   '  "needsConfirmation": true,',
   '  "plan": [',
-  '    { "tool": "youtube_search", "args": { "query": "song name" }, "out": "videoId" },',
-  '    { "tool": "open_target", "args": { "target": "https://youtube.com/watch?v=" + "${videoId}&autoplay=1" } }',
+  '    { "tool": "youtube_search", "args": { "query": "song name" }, "out": "url" },',
+  '    { "tool": "open_target", "args": { "target": "${url}" } }',
   '  ]',
   '}',
   '```',
@@ -244,6 +246,31 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
               const result = await executePlan(pending.steps);
               if (result.success) {
                 const successMsg = result.finalOutput || "Plan completed successfully.";
+                // Learn as a skill for future use
+                try {
+                  if (pending.input) {
+                    const skillName = pending.input.toLowerCase().replace(/[^a-z0-9 ]/g, "").trim().split(/\s+/).slice(0, 5).join("-");
+                    const existing = await getSkillByName(skillName);
+                    if (!existing) {
+                      const now = Date.now();
+                      const skill: Skill = {
+                        id: now,
+                        name: skillName,
+                        triggerExamples: pending.input,
+                        params: JSON.stringify(pending.steps.map((s: StepAction) => Object.keys(s.args)).flat()),
+                        planTemplate: JSON.stringify(pending.steps),
+                        confirmedByUser: 1,
+                        useCount: 1,
+                        createdAt: now,
+                      };
+                      await createSkill(skill);
+                    } else {
+                      await updateSkillUseCount(existing.id);
+                    }
+                  }
+                } catch {
+                  // Non-critical: skill persistence failure shouldn't break UX
+                }
                 setLastSpoken(successMsg);
                 setKrishnaSpeaking(true);
                 setStatus("speaking");
@@ -347,6 +374,50 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
         return;
       }
 
+      // Skill match: check if the command matches a learned skill
+      try {
+        const skills = await getAllSkills();
+        for (const skill of skills) {
+          const triggers = skill.triggerExamples.split(",").map((t: string) => t.trim().toLowerCase());
+          if (triggers.some((t: string) => command.toLowerCase().includes(t) || t.includes(command.toLowerCase()))) {
+            setStatus("thinking");
+            try {
+              const steps: StepAction[] = JSON.parse(skill.planTemplate);
+              const result = await executePlan(steps);
+              await updateSkillUseCount(skill.id);
+              if (result.success) {
+                const msg = result.finalOutput || "Done!";
+                setLastSpoken(msg);
+                setKrishnaSpeaking(true);
+                setStatus("speaking");
+                try {
+                  await ttsRef.current.speak(msg);
+                } finally {
+                  setKrishnaSpeaking(false);
+                }
+              } else {
+                const msg = result.error || "Failed to execute skill.";
+                setLastSpoken(msg);
+                setKrishnaSpeaking(true);
+                setStatus("speaking");
+                try {
+                  await ttsRef.current.speak(msg);
+                } finally {
+                  setKrishnaSpeaking(false);
+                }
+              }
+            } catch (parseErr) {
+              // invalid plan template, fall through to LLM
+            } finally {
+              setStatus("idle");
+            }
+            return;
+          }
+        }
+      } catch {
+        // DB unavailable, fall through to LLM
+      }
+
       abortRef.current = new AbortController();
       const signal = abortRef.current.signal;
 
@@ -389,6 +460,7 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
             type: "plan",
             spokenResponse: plan.say,
             steps: plan.steps,
+            input: command,
           };
           reAskRef.current = false;
           clearConfirmTimeout();
