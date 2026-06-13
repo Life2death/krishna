@@ -45,5 +45,12 @@ pub fn migrations() -> Vec<Migration> {
             sql: include_str!("migrations/learned-actions-v2.sql"),
             kind: MigrationKind::Up,
         },
+        // Migration 8: Create skills table for Phase 4 task recipes
+        Migration {
+            version: 8,
+            description: "create_skills_table",
+            sql: include_str!("migrations/skills.sql"),
+            kind: MigrationKind::Up,
+        },
     ]
 }

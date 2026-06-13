@@ -11,9 +11,20 @@ export interface Action {
   target: string;
 }
 
+export interface StepAction {
+  tool: string;
+  args: Record<string, string>;
+  out?: string;
+}
+
 export interface ParsedReply {
   spokenText: string;
   actions: Action[];
+  plan?: {
+    say: string;
+    needsConfirmation: boolean;
+    steps: StepAction[];
+  };
 }
 
 export interface AssistantTurnResult {

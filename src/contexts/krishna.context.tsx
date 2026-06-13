@@ -3,6 +3,8 @@ import { useApp } from "@/contexts";
 import { fetchAIResponse } from "@/lib/functions";
 import { detectWakeWord } from "@/lib/wake-word";
 import { parseActions, executeAction } from "@/lib/actions";
+import { executePlan } from "@/lib/executor";
+import { getToolDescriptions } from "@/lib/tools";
 import { getTTS } from "@/lib/tts";
 import { safeLocalStorage } from "@/lib";
 import { STORAGE_KEYS } from "@/config";
@@ -11,8 +13,7 @@ import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import { parseYesNo } from "@/lib/parse-yes-no";
 import { saveAndConfirm } from "@/lib/resolver";
-import type { AssistantStatus } from "@/types/assistant";
-import type { ExecuteActionResult } from "@/lib/actions";
+import type { AssistantStatus, StepAction } from "@/types/assistant";
 
 interface KrishnaContextType {
   enabled: boolean;
@@ -31,17 +32,45 @@ interface KrishnaContextType {
 
 const KrishnaContext = createContext<KrishnaContextType | undefined>(undefined);
 
-const KRISHNA_SYSTEM_PROMPT = `You are Krishna, an AI desktop assistant. You help users by answering questions and performing actions on their computer.
+const TOOL_DESCRIPTIONS = getToolDescriptions();
 
-CRITICAL - Action Protocol:
-- If the user asks you to open an app, website, or file, respond naturally AND append a JSON action block:
-\`\`\`action
-{"action":"open","target":"<app_name_or_url>"}
-\`\`\`
-- The JSON block will NOT be read aloud — it is only used to trigger the action.
-- Speak naturally in the spoken part. Keep responses concise.
-- For URLs, just use the URL as target (e.g., "https://youtube.com").
-- Always output the action block for any app the user asks to open — even if you don't recognize it. The system will auto-resolve unknown apps.`;
+const KRISHNA_SYSTEM_PROMPT = [
+  'You are Krishna, an AI desktop assistant. You help users by answering questions and performing actions on their computer.',
+  '',
+  'CRITICAL - Action Protocol:',
+  '- If the user asks you to open an app, website, or file, respond naturally AND append a JSON action block:',
+  '```action',
+  '{"action":"open","target":"<app_name_or_url>"}',
+  '```',
+  '- The JSON block will NOT be read aloud -- it is only used to trigger the action.',
+  '- Speak naturally in the spoken part. Keep responses concise.',
+  '- For URLs, just use the URL as target (e.g., "https://youtube.com").',
+  '- Always output the action block for any app the user asks to open -- even if you don\'t recognize it. The system will auto-resolve unknown apps.',
+  '',
+  'MULTI-STEP TASK PLANNING (Phase 4):',
+  'For complex requests like "play this song on YouTube", you can output a multi-step plan instead of a single action.',
+  'Use the ```plan JSON block:',
+  '',
+  '```plan',
+  '{',
+  '  "say": "I\'ll search YouTube for the song and play it.",',
+  '  "needsConfirmation": true,',
+  '  "plan": [',
+  '    { "tool": "youtube_search", "args": { "query": "song name" }, "out": "videoId" },',
+  '    { "tool": "open_target", "args": { "target": "https://youtube.com/watch?v=" + "${videoId}&autoplay=1" } }',
+  '  ]',
+  '}',
+  '```',
+  '',
+  'Available tools:',
+].join("\n") + "\n" + TOOL_DESCRIPTIONS + "\n\n" + [
+  'Rules:',
+  '1. PREFER deep-links (Tier 1) over multi-step plans when possible. A simple open_target with a composed URL is most reliable.',
+  '2. Use multi-step plans only when you need intermediate data (e.g., a search result ID).',
+  '3. Always set "needsConfirmation": true for multi-step plans.',
+  '4. Use ${variable} placeholders to pass outputs between steps.',
+  '5. For "play X on YouTube", prefer composing the URL directly: open_target with "https://www.youtube.com/results?search_query=<query>"',
+].join("\n");
 
 export function KrishnaProvider({ children }: { children: ReactNode }) {
   const { selectedAIProvider, allAiProviders } = useApp();
@@ -67,7 +96,6 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
     if (voiceInitRef.current) return;
     const loadVoices = () => {
       const allVoices = window.speechSynthesis.getVoices();
-      // If user has a saved voice preference, use it
       if (voice) {
         const saved = allVoices.find((v) => v.name === voice);
         if (saved) {
@@ -97,7 +125,13 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
     ttsRef.current.setRate(rate);
   }, [rate]);
 
-  const pendingConfirmationRef = useRef<ExecuteActionResult | null>(null);
+  const pendingConfirmationRef = useRef<{
+    type: "action" | "plan";
+    spokenResponse: string;
+    pendingResult?: { found: boolean; target?: string; displayName?: string; [key: string]: any };
+    input?: string;
+    steps?: StepAction[];
+  } | null>(null);
   const reAskRef = useRef(false);
   const confirmTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -172,7 +206,7 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
       const provider = allAiProviders.find((p) => p.id === selectedAIProvider.provider);
       if (!provider) return null;
 
-      const fallbackPrompt = `The user wants to launch '${input}' on Windows. What is the most likely executable name, .lnk path, or file path? Respond with just the path/name, nothing else.`;
+      const fallbackPrompt = "The user wants to launch '" + input + "' on Windows. What is the most likely executable name, .lnk path, or file path? Respond with just the path/name, nothing else.";
       try {
         let response = "";
         for await (const chunk of fetchAIResponse({
@@ -197,22 +231,58 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
 
   const processCommand = useCallback(
     async (transcription: string) => {
-      // Confirmation turn — user responded to a yes/no question
       if (pendingConfirmationRef.current) {
         clearConfirmTimeout();
-        const answer = parseYesNo(transcription);
         const pending = pendingConfirmationRef.current;
+        const answer = parseYesNo(transcription);
         if (answer === "yes") {
           pendingConfirmationRef.current = null;
           reAskRef.current = false;
-          if (pending.pendingResult?.target) {
+          if (pending.type === "plan" && pending.steps) {
+            setStatus("thinking");
+            try {
+              const result = await executePlan(pending.steps);
+              if (result.success) {
+                const successMsg = result.finalOutput || "Plan completed successfully.";
+                setLastSpoken(successMsg);
+                setKrishnaSpeaking(true);
+                setStatus("speaking");
+                try {
+                  await ttsRef.current.speak(successMsg);
+                } finally {
+                  setKrishnaSpeaking(false);
+                }
+              } else {
+                const errorMsg = result.error || "Plan execution failed.";
+                setLastSpoken(errorMsg);
+                setKrishnaSpeaking(true);
+                setStatus("speaking");
+                try {
+                  await ttsRef.current.speak(errorMsg);
+                } finally {
+                  setKrishnaSpeaking(false);
+                }
+              }
+            } catch (err) {
+              const msg = err instanceof Error ? err.message : "Plan execution failed";
+              setStatus("speaking");
+              setKrishnaSpeaking(true);
+              try {
+                await ttsRef.current.speak("I had trouble: " + msg);
+              } finally {
+                setKrishnaSpeaking(false);
+              }
+            } finally {
+              setStatus("idle");
+            }
+          } else if (pending.pendingResult?.target) {
             if (pending.input) {
-              await saveAndConfirm(pending.pendingResult, pending.input);
+              await saveAndConfirm(pending.pendingResult as any, pending.input);
             }
             setStatus("speaking");
             try {
               await invoke("open_target", { target: pending.pendingResult.target });
-              const speak = `Opening ${pending.pendingResult.displayName}`;
+              const speak = "Opening " + pending.pendingResult.displayName;
               setLastSpoken(speak);
               setKrishnaSpeaking(true);
               await ttsRef.current.speak(speak);
@@ -228,7 +298,7 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
           reAskRef.current = false;
           setStatus("speaking");
           try {
-            const speak = "Okay, I won't open it.";
+            const speak = "Okay, I won't do that.";
             setLastSpoken(speak);
             setKrishnaSpeaking(true);
             await ttsRef.current.speak(speak);
@@ -238,12 +308,11 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
           }
           return;
         }
-        // Ambiguous — re-ask once
         if (!reAskRef.current) {
           reAskRef.current = true;
           setStatus("speaking");
           try {
-            const speak = "Sorry, I didn't catch that. Should I open it? Say yes or no.";
+            const speak = "Sorry, I didn't catch that. Should I go ahead? Say yes or no.";
             setLastSpoken(speak);
             setKrishnaSpeaking(true);
             await ttsRef.current.speak(speak);
@@ -301,7 +370,7 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
           return;
         }
 
-        const { spokenText, actions } = parseActions(fullResponse);
+        const { spokenText, actions, plan } = parseActions(fullResponse);
 
         if (spokenText) {
           setStatus("speaking");
@@ -314,10 +383,42 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
           }
         }
 
+        // Handle plan (multi-step)
+        if (plan && plan.steps.length > 0) {
+          pendingConfirmationRef.current = {
+            type: "plan",
+            spokenResponse: plan.say,
+            steps: plan.steps,
+          };
+          reAskRef.current = false;
+          clearConfirmTimeout();
+          confirmTimeoutRef.current = setTimeout(() => {
+            pendingConfirmationRef.current = null;
+            reAskRef.current = false;
+            setStatus("idle");
+            ttsRef.current.speak("I'll take that as a no.");
+          }, 15000);
+          setStatus("confirming");
+          setLastSpoken(plan.say);
+          setKrishnaSpeaking(true);
+          try {
+            await ttsRef.current.speak(plan.say);
+          } finally {
+            setKrishnaSpeaking(false);
+          }
+          return;
+        }
+
+        // Handle legacy single actions
         for (const action of actions) {
           const result = await executeAction(action, llmFallback);
           if (result.needsConfirmation && result.pendingResult) {
-            pendingConfirmationRef.current = result;
+            pendingConfirmationRef.current = {
+              type: "action",
+              spokenResponse: result.spokenResponse,
+              pendingResult: result.pendingResult as any,
+              input: result.input,
+            };
             reAskRef.current = false;
             clearConfirmTimeout();
             confirmTimeoutRef.current = setTimeout(() => {
@@ -359,7 +460,7 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
         setStatus("speaking");
         setKrishnaSpeaking(true);
         try {
-          await ttsRef.current.speak(`I had trouble: ${msg}`);
+          await ttsRef.current.speak("I had trouble: " + msg);
         } finally {
           setKrishnaSpeaking(false);
         }
