@@ -46,6 +46,17 @@ export async function executePlan(
       return { success: false, stepResults, error: errMsg };
     }
 
+    // Permission gate: reject sensitive tools unless confirmed
+    const { classifyAction } = await import("@/config/action-policy");
+    if (classifyAction(step.tool) === "sensitive") {
+      const errMsg = `Action "${step.tool}" is sensitive and requires explicit confirmation before execution.`;
+      stepResults.push({
+        step,
+        result: { success: false, error: errMsg },
+      });
+      return { success: false, stepResults, error: errMsg };
+    }
+
     const resolvedArgs: Record<string, string> = {};
     for (const [key, value] of Object.entries(step.args)) {
       resolvedArgs[key] = resolvePlaceholders(value, vars);

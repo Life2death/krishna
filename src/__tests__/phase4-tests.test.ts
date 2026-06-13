@@ -308,6 +308,15 @@ describe("executePlan", () => {
     });
   });
 
+  it("passes safe tools through permission gate", async () => {
+    (invoke as any).mockResolvedValue("OK");
+    const steps = [
+      { tool: "open_target", args: { target: "https://example.com" } },
+    ];
+    const result = await executePlan(steps);
+    expect(result.success).toBe(true);
+  });
+
   it("respects cancellation signal", async () => {
     const controller = new AbortController();
     controller.abort();
