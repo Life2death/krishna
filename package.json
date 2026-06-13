@@ -1,33 +1,30 @@
 {
-  "name": "naukri-lelo",
+  "name": "krishna",
   "private": false,
-  "version": "6.0.0",
-  "description": "Naukri Lelo - Free, open-source AI interview assistant that stays invisible during screen sharing. BYOK, real-time transcription, stealth mode. No subscriptions ever.",
+  "version": "1.0.0",
+  "description": "Krishna — a talking desktop AI assistant. Voice-in, voice-out, open apps/websites/files via voice command.",
   "author": {
     "name": "life2death",
     "url": "https://github.com/life2death"
   },
   "license": "GPL-3.0",
-  "homepage": "https://github.com/life2death/naukri-lelo#readme",
+  "homepage": "https://github.com/life2death/krishna#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/life2death/naukri-lelo.git"
+    "url": "git+https://github.com/life2death/krishna.git"
   },
   "bugs": {
-    "url": "https://github.com/life2death/naukri-lelo/issues"
+    "url": "https://github.com/life2death/krishna/issues"
   },
   "keywords": [
     "ai-assistant",
-    "tauri",
+    "voice-assistant",
     "desktop-app",
-    "privacy-first",
-    "open-source",
-    "meeting-assistant",
+    "wake-word",
+    "tauri",
     "speech-to-text",
+    "text-to-speech",
     "llm",
-    "chatgpt",
-    "claude",
-    "cluely-alternative",
     "typescript",
     "react",
     "rust"

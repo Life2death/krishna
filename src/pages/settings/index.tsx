@@ -6,6 +6,7 @@ import {
   AppIconToggle,
   AutostartToggle,
   ProfileContextLimits,
+  KrishnaSettings,
 } from "./components";
 import { PageLayout } from "@/layouts";
 import { Button } from "@/components";
@@ -103,6 +104,9 @@ const Settings = () => {
         pending={pendingProfileContext}
         onChange={setPendingProfileContext}
       />
+
+      {/* Krishna Assistant */}
+      <KrishnaSettings />
 
     </PageLayout>
   );

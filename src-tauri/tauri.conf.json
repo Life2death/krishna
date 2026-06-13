@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Naukri Lelo",
-  "version": "6.0.0",
-  "identifier": "com.naukrilelo.app",
+  "productName": "Krishna",
+  "version": "1.0.0",
+  "identifier": "com.krishna.assistant",
   "build": {
     "beforeDevCommand": "npm run dev",
     "devUrl": "http://localhost:1420",
@@ -13,7 +13,7 @@
     "macOSPrivateApi": true,
     "windows": [
       {
-        "title": "Focus Assistant",
+        "title": "Krishna",
         "width": 600,
         "height": 54,
         "decorations": false,
@@ -47,7 +47,7 @@
   },
   "plugins": {
     "sql": {
-      "preload": ["sqlite:naukri-lelo.db"]
+      "preload": ["sqlite:krishna.db"]
     }
   }
 }

@@ -16,3 +16,4 @@ export * from "./useApp";
 export * from "./useMenuItems";
 export * from "./useProfiles";
 export * from "./useOpenRouterModels";
+export * from "./useKrishna";

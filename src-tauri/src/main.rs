@@ -2,5 +2,5 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 fn main() {
-    naukri_lelo_lib::run()
+    krishna_lib::run()
 }

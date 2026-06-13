@@ -1,4 +1,4 @@
-import { Card, Updater, DragButton, CustomCursor, Button } from "@/components";
+import { Card, Updater, DragButton, CustomCursor, Button, Switch } from "@/components";
 import {
   SystemAudio,
   Completion,
@@ -8,16 +8,20 @@ import {
   BrainSelector,
   SystemPromptSelector,
 } from "./components";
-import { useApp } from "@/hooks";
+import { useApp, useKrishna } from "@/hooks";
 import { useApp as useAppContext } from "@/contexts";
-import { LayoutDashboardIcon } from "lucide-react";
+import { LayoutDashboardIcon, BotIcon } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
 import { ErrorBoundary } from "react-error-boundary";
 import { ErrorLayout } from "@/layouts";
 import { getPlatform } from "@/lib";
 
 const App = () => {
-  const { isHidden, systemAudio } = useApp();
+  const krishna = useKrishna();
+  const { isHidden, systemAudio } = useApp({
+    krishnaEnabled: krishna.enabled,
+    onKrishnaCommand: krishna.processCommand,
+  });
   const { customizable } = useAppContext();
   const platform = getPlatform();
 
@@ -44,14 +48,19 @@ const App = () => {
           isHidden ? "hidden pointer-events-none" : ""
         }`}
       >
-        <Card className="w-full flex flex-row items-center gap-2 p-2">
+        <Card className="w-full flex flex-row items-center gap-1 p-2">
           <SystemAudio {...systemAudio} />
           {systemAudio?.capturing ? (
             <div className="flex flex-row items-center gap-2 justify-between w-full">
               <div className="flex flex-1 items-center gap-2">
                 <AudioVisualizer isRecording={systemAudio?.capturing} />
               </div>
-              <div className="flex !w-fit items-center gap-2">
+              <div className="flex gap-1 items-center">
+                {krishna.enabled && krishna.status !== "idle" && (
+                  <span className="text-xs text-primary mr-1">
+                    {krishna.status === "thinking" ? "..." : krishna.status === "speaking" ? "\u{1F50A}" : ""}
+                  </span>
+                )}
                 <StatusIndicator
                   setupRequired={systemAudio.setupRequired}
                   error={systemAudio.error}
@@ -67,10 +76,21 @@ const App = () => {
             className={`${
               systemAudio?.capturing
                 ? "hidden w-full fade-out transition-all duration-300"
-                : "w-full flex flex-row gap-2 items-center"
+                : "w-full flex flex-row gap-1 items-center"
             }`}
           >
             <Completion isHidden={isHidden} />
+
+            {/* Krishna mode toggle */}
+            <div className="flex items-center gap-1" title="Krishna voice assistant">
+              <BotIcon className="h-3.5 w-3.5 text-muted-foreground" />
+              <Switch
+                checked={krishna.enabled}
+                onCheckedChange={krishna.setKrishnaEnabled}
+                className="scale-75"
+                aria-label="Toggle Krishna assistant"
+              />
+            </div>
 
             {/* Brain selector — pick AI provider + model */}
             <BrainSelector />

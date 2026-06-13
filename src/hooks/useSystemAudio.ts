@@ -64,7 +64,13 @@ export interface ChatConversation {
 
 export type useSystemAudioType = ReturnType<typeof useSystemAudio>;
 
-export function useSystemAudio() {
+interface UseSystemAudioOptions {
+  krishnaEnabled?: boolean;
+  onKrishnaCommand?: (transcription: string) => Promise<void>;
+}
+
+export function useSystemAudio(options: UseSystemAudioOptions = {}) {
+  const { krishnaEnabled = false, onKrishnaCommand } = options;
   const { resizeWindow } = useWindowResize();
   const globalShortcuts = useGlobalShortcuts();
   const [isPopoverOpen, setIsPopoverOpen] = useState(false);
@@ -274,19 +280,23 @@ export function useSystemAudio() {
                 setLastTranscription(transcription);
                 setError("");
 
-                const effectiveSystemPrompt = useSystemPrompt
-                  ? systemPrompt || DEFAULT_SYSTEM_PROMPT
-                  : contextContent || DEFAULT_SYSTEM_PROMPT;
+                if (krishnaEnabled && onKrishnaCommand) {
+                  await onKrishnaCommand(transcription);
+                } else {
+                  const effectiveSystemPrompt = useSystemPrompt
+                    ? systemPrompt || DEFAULT_SYSTEM_PROMPT
+                    : contextContent || DEFAULT_SYSTEM_PROMPT;
 
-                const previousMessages = conversation.messages.map((msg) => {
-                  return { role: msg.role, content: msg.content };
-                });
+                  const previousMessages = conversation.messages.map((msg) => {
+                    return { role: msg.role, content: msg.content };
+                  });
 
-                await processWithAI(
-                  transcription,
-                  effectiveSystemPrompt,
-                  previousMessages
-                );
+                  await processWithAI(
+                    transcription,
+                    effectiveSystemPrompt,
+                    previousMessages
+                  );
+                }
               } else {
                 setError("Received empty transcription");
               }
@@ -316,6 +326,8 @@ export function useSystemAudio() {
     selectedSttProvider,
     allSttProviders,
     conversation.messages.length,
+    krishnaEnabled,
+    onKrishnaCommand,
   ]);
 
   // Context management functions

@@ -5,8 +5,11 @@ import { safeLocalStorage, migrateLocalStorageToSQLite } from "@/lib";
 import { getShortcutsConfig } from "@/lib/storage";
 import { invoke } from "@tauri-apps/api/core";
 
-export const useApp = () => {
-  const systemAudio = useSystemAudio();
+export const useApp = (systemAudioOptions?: {
+  krishnaEnabled?: boolean;
+  onKrishnaCommand?: (transcription: string) => Promise<void>;
+}) => {
+  const systemAudio = useSystemAudio(systemAudioOptions);
   const [isHidden, setIsHidden] = useState(false);
   // Initialize title management
   useTitles();

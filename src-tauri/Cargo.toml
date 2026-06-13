@@ -1,24 +1,19 @@
 [package]
-name = "naukri-lelo"
-version = "6.0.0"
-description = "Naukri Lelo - Free, open-source AI interview assistant that stays invisible during screen sharing. BYOK, real-time transcription, stealth mode."
+name = "krishna"
+version = "1.0.0"
+description = "Krishna - A talking desktop AI assistant. Voice-in, voice-out, open apps via voice."
 authors = ["life2death"]
 license = "GPL-3.0"
-repository = "https://github.com/life2death/naukri-lelo"
-homepage = "https://github.com/life2death/naukri-lelo"
-documentation = "https://github.com/life2death/naukri-lelo"
+repository = "https://github.com/life2death/krishna"
+homepage = "https://github.com/life2death/krishna"
+documentation = "https://github.com/life2death/krishna"
 readme = "../README.md"
-keywords = ["ai-assistant", "tauri", "desktop-app", "interview-assistant", "naukri-lelo"]
-categories = ["gui", "multimedia", "accessibility", "science", "development-tools"]
+keywords = ["ai-assistant", "voice-assistant", "tauri", "desktop-app", "wake-word"]
+categories = ["gui", "multimedia", "accessibility"]
 edition = "2021"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
 [lib]
-# The `_lib` suffix may seem redundant but it is necessary
-# to make the lib name unique and wouldn't conflict with the bin name.
-# This seems to be only an issue on Windows, see https://github.com/rust-lang/cargo/issues/8519
-name = "naukri_lelo_lib"
+name = "krishna_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]

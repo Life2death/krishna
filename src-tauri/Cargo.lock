@@ -3029,6 +3029,49 @@ dependencies = [
 ]
 
 [[package]]
+name = "krishna"
+version = "1.0.0"
+dependencies = [
+ "aes-gcm",
+ "anyhow",
+ "base64 0.22.1",
+ "chrono",
+ "cidre",
+ "cpal",
+ "dotenv",
+ "futures-util",
+ "hound",
+ "image",
+ "libpulse-binding",
+ "libpulse-simple-binding",
+ "log",
+ "rand 0.8.5",
+ "reqwest 0.12.23",
+ "ringbuf",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tauri",
+ "tauri-build",
+ "tauri-nspanel",
+ "tauri-plugin-autostart",
+ "tauri-plugin-global-shortcut",
+ "tauri-plugin-http",
+ "tauri-plugin-keychain",
+ "tauri-plugin-log",
+ "tauri-plugin-machine-uid",
+ "tauri-plugin-macos-permissions",
+ "tauri-plugin-opener",
+ "tauri-plugin-posthog",
+ "tauri-plugin-shell",
+ "tauri-plugin-sql",
+ "tokio",
+ "tracing",
+ "wasapi",
+ "xcap",
+]
+
+[[package]]
 name = "kuchikiki"
 version = "0.8.8-speedreader"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3442,49 +3485,6 @@ dependencies = [
  "serde",
  "thiserror 2.0.14",
  "windows-sys 0.60.2",
-]
-
-[[package]]
-name = "naukri-lelo"
-version = "6.0.0"
-dependencies = [
- "aes-gcm",
- "anyhow",
- "base64 0.22.1",
- "chrono",
- "cidre",
- "cpal",
- "dotenv",
- "futures-util",
- "hound",
- "image",
- "libpulse-binding",
- "libpulse-simple-binding",
- "log",
- "rand 0.8.5",
- "reqwest 0.12.23",
- "ringbuf",
- "serde",
- "serde_json",
- "sha2",
- "tauri",
- "tauri-build",
- "tauri-nspanel",
- "tauri-plugin-autostart",
- "tauri-plugin-global-shortcut",
- "tauri-plugin-http",
- "tauri-plugin-keychain",
- "tauri-plugin-log",
- "tauri-plugin-machine-uid",
- "tauri-plugin-macos-permissions",
- "tauri-plugin-opener",
- "tauri-plugin-posthog",
- "tauri-plugin-shell",
- "tauri-plugin-sql",
- "tokio",
- "tracing",
- "wasapi",
- "xcap",
 ]
 
 [[package]]

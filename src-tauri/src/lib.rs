@@ -1,5 +1,6 @@
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
 mod api;
+mod assistant;
 mod capture;
 mod db;
 mod secure;
@@ -36,7 +37,7 @@ pub fn run() {
     // Panic hook: if the app crashes, write the reason to a file before exiting
     std::panic::set_hook(Box::new(|panic_info| {
         let msg = format!(
-            "Naukri Lelo crashed at {:?}\n\n{}\n\nPlease report at:\nhttps://github.com/Life2death/naukri-lelo-v2/issues",
+            "Krishna crashed at {:?}\n\n{}\n\nPlease report at:\nhttps://github.com/Life2death/krishna/issues",
             std::time::SystemTime::now(),
             panic_info
         );
@@ -48,8 +49,8 @@ pub fn run() {
 
     // Startup diagnostic: step 1 — binary is executing
     let _ = std::fs::write(
-        std::env::temp_dir().join("naukri-lelo-startup.txt"),
-        format!("step1: Naukri Lelo v{} binary started", env!("CARGO_PKG_VERSION")),
+        std::env::temp_dir().join("krishna-startup.txt"),
+        format!("step1: Krishna v{} binary started", env!("CARGO_PKG_VERSION")),
     );
 
     // Get PostHog API key
@@ -60,7 +61,7 @@ pub fn run() {
             tauri_plugin_log::Builder::default()
                 .targets([
                     tauri_plugin_log::Target::new(tauri_plugin_log::TargetKind::LogDir {
-                        file_name: Some("naukri-lelo".into()),
+                        file_name: Some("krishna".into()),
                     }),
                     tauri_plugin_log::Target::new(tauri_plugin_log::TargetKind::Stderr),
                 ])
@@ -69,7 +70,7 @@ pub fn run() {
         )
         .plugin(
             tauri_plugin_sql::Builder::default()
-                .add_migrations("sqlite:naukri-lelo.db", db::migrations())
+                .add_migrations("sqlite:krishna.db", db::migrations())
                 .build(),
         )
         .manage(AudioState::default())
@@ -125,6 +126,7 @@ pub fn run() {
             speaker::update_vad_config,
             speaker::get_input_devices,
             speaker::get_output_devices,
+            assistant::open_target,
         ])
         .setup(|app| {
             // Non-fatal: if window positioning fails, continue anyway
@@ -156,7 +158,7 @@ pub fn run() {
                     None::<&str>,
                 )?;
                 let quit_item =
-                    MenuItem::with_id(app, "quit", "Quit Naukri Lelo", true, None::<&str>)?;
+                    MenuItem::with_id(app, "quit", "Quit Krishna", true, None::<&str>)?;
                 let sep = PredefinedMenuItem::separator(app)?;
                 let menu = Menu::with_items(app, &[&open_item, &sep, &quit_item])?;
 
@@ -164,7 +166,7 @@ pub fn run() {
                     .icon(app.default_window_icon().unwrap().clone())
                     .menu(&menu)
                     .show_menu_on_left_click(false)
-                    .tooltip("Naukri Lelo — click to open dashboard")
+                    .tooltip("Krishna — click to open dashboard")
                     .on_menu_event(|app, event| match event.id.as_ref() {
                         "open_dashboard" => {
                             if let Some(w) = app.get_webview_window("dashboard") {
@@ -276,7 +278,7 @@ pub fn run() {
 
     // Startup diagnostic: step 2 — about to build + start event loop
     let _ = std::fs::write(
-        std::env::temp_dir().join("naukri-lelo-startup.txt"),
+        std::env::temp_dir().join("krishna-startup.txt"),
         "step2: building app — if crash.txt appears, Tauri init failed",
     );
 
@@ -285,7 +287,7 @@ pub fn run() {
         .expect("error building tauri application");
 
     let _ = std::fs::write(
-        std::env::temp_dir().join("naukri-lelo-startup.txt"),
+        std::env::temp_dir().join("krishna-startup.txt"),
         "step3: running event loop — app started successfully",
     );
 
