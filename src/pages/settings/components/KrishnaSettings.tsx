@@ -2,10 +2,12 @@ import { useState, useEffect } from "react";
 import { Switch, Label, Header, Select, SelectTrigger, SelectValue, SelectContent, SelectItem, Slider, Button } from "@/components";
 import { useKrishna } from "@/hooks";
 import { useLearnedActions } from "@/hooks/useLearnedActions";
+import { useMemories } from "@/hooks/useMemories";
 
 export const KrishnaSettings = () => {
   const { enabled, setKrishnaEnabled, voice, setVoice, rate, setRate, llmFallbackEnabled, setLlmFallbackEnabled } = useKrishna();
   const { actions, isLoading, removeAction, clearAll } = useLearnedActions();
+  const { memories, isLoading: memoriesLoading, removeMemory, clearAll: clearAllMemories } = useMemories();
   const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
 
   useEffect(() => {
@@ -89,6 +91,40 @@ export const KrishnaSettings = () => {
           onCheckedChange={setLlmFallbackEnabled}
           aria-label="Toggle LLM fallback"
         />
+      </div>
+
+      {/* Memories list */}
+      <div className="space-y-3">
+        <div className="flex items-center justify-between">
+          <Label className="text-sm font-medium">Memories ({memories.length})</Label>
+          {memories.length > 0 && (
+            <Button variant="ghost" size="sm" onClick={clearAllMemories}>
+              Forget all
+            </Button>
+          )}
+        </div>
+        {memoriesLoading && <p className="text-xs text-muted-foreground">Loading...</p>}
+        {!memoriesLoading && memories.length === 0 && (
+          <p className="text-xs text-muted-foreground">
+            No memories yet. Say "Hey Krishna, remember that my work folder is D:\Projects" to teach it.
+          </p>
+        )}
+        {memories.map((m) => (
+          <div key={m.id} className="flex items-center justify-between rounded border p-2">
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-medium truncate">{m.key || "memory"}</p>
+              <p className="text-xs text-muted-foreground truncate">{m.value}</p>
+            </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="ml-2 shrink-0"
+              onClick={() => removeMemory(m.id)}
+            >
+              Forget
+            </Button>
+          </div>
+        ))}
       </div>
 
       {/* Learned actions list */}

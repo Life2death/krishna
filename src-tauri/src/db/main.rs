@@ -52,5 +52,12 @@ pub fn migrations() -> Vec<Migration> {
             sql: include_str!("migrations/skills.sql"),
             kind: MigrationKind::Up,
         },
+        // Migration 9: Create memories table for Phase 5 personal memory
+        Migration {
+            version: 9,
+            description: "create_memories_table",
+            sql: include_str!("migrations/memories.sql"),
+            kind: MigrationKind::Up,
+        },
     ]
 }

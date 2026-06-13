@@ -14,8 +14,10 @@ import { invoke } from "@tauri-apps/api/core";
 import { parseYesNo } from "@/lib/parse-yes-no";
 import { saveAndConfirm } from "@/lib/resolver";
 import { getAllSkills, getSkillByName, createSkill, updateSkillUseCount } from "@/lib/database/skills.action";
+import { getAllMemories, createMemory } from "@/lib/database/memories.action";
 import type { AssistantStatus, StepAction } from "@/types/assistant";
 import type { Skill } from "@/types/skill";
+import type { Message } from "@/types";
 
 interface KrishnaContextType {
   enabled: boolean;
@@ -73,6 +75,23 @@ const KRISHNA_SYSTEM_PROMPT = [
   '4. Use ${variable} placeholders to pass outputs between steps.',
   '5. For "play X on YouTube", prefer composing the URL directly: open_target with "https://www.youtube.com/results?search_query=<query>"',
 ].join("\n");
+
+// ---- Memory prompt builder ----
+
+async function buildSystemPromptWithMemories(basePrompt: string): Promise<string> {
+  try {
+    const memories = await getAllMemories();
+    if (memories.length === 0) return basePrompt;
+    const memoryBlock = memories
+      .filter(m => m.confirmed && m.value)
+      .map(m => "- " + (m.key ? m.key + ": " : "") + m.value)
+      .join("\n");
+    if (!memoryBlock) return basePrompt;
+    return basePrompt + "\n\nThings I know about the user:\n" + memoryBlock + "\n\nUse these facts when relevant.";
+  } catch {
+    return basePrompt;
+  }
+}
 
 // ---- Skill pattern helpers ----
 
@@ -182,6 +201,7 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
     return stored ? parseFloat(stored) : 1.0;
   });
   const abortRef = useRef<AbortController | null>(null);
+  const historyRef = useRef<Message[]>([]);
 
   // Initialize natural voice on first mount
   const voiceInitRef = useRef(false);
@@ -219,11 +239,12 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
   }, [rate]);
 
   const pendingConfirmationRef = useRef<{
-    type: "action" | "plan";
+    type: "action" | "plan" | "memory";
     spokenResponse: string;
     pendingResult?: { found: boolean; target?: string; displayName?: string; [key: string]: any };
     input?: string;
     steps?: StepAction[];
+    memoryData?: { key: string | null; value: string };
   } | null>(null);
   const reAskRef = useRef(false);
   const confirmTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -394,6 +415,40 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
             } finally {
               setStatus("idle");
             }
+          } else if (pending.type === "memory" && pending.memoryData) {
+            setStatus("thinking");
+            try {
+              const now = Date.now();
+              await createMemory({
+                id: String(now),
+                key: pending.memoryData.key || null,
+                value: pending.memoryData.value,
+                source: "explicit",
+                confirmed: 1,
+                createdAt: now,
+                lastUsedAt: null,
+              });
+              const speak = "Got it, I'll remember that " + pending.memoryData.value;
+              setLastSpoken(speak);
+              setKrishnaSpeaking(true);
+              setStatus("speaking");
+              try {
+                await ttsRef.current.speak(speak);
+              } finally {
+                setKrishnaSpeaking(false);
+              }
+            } catch (err) {
+              const msg = err instanceof Error ? err.message : "Failed to save memory";
+              setStatus("speaking");
+              setKrishnaSpeaking(true);
+              try {
+                await ttsRef.current.speak("I had trouble: " + msg);
+              } finally {
+                setKrishnaSpeaking(false);
+              }
+            } finally {
+              setStatus("idle");
+            }
           } else if (pending.pendingResult?.target) {
             if (pending.input) {
               await saveAndConfirm(pending.pendingResult as any, pending.input);
@@ -516,16 +571,50 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
         // DB unavailable, fall through to LLM
       }
 
+      // Memory save: "remember that..."
+      const rememberRegex = /^remember that(?:\s+my)?\s+(.+?)\s+is\s+(.+)$/i;
+      const rememberMatch = command.match(rememberRegex);
+      if (rememberMatch) {
+        const key = rememberMatch[1].trim();
+        const value = rememberMatch[2].trim();
+        if (value) {
+          pendingConfirmationRef.current = {
+            type: "memory",
+            spokenResponse: "Should I remember that " + (key ? key + " is " : "") + value + "?",
+            memoryData: { key, value },
+          };
+          reAskRef.current = false;
+          clearConfirmTimeout();
+          confirmTimeoutRef.current = setTimeout(() => {
+            pendingConfirmationRef.current = null;
+            reAskRef.current = false;
+            setStatus("idle");
+            ttsRef.current.speak("I'll forget about it.");
+          }, 15000);
+          setStatus("confirming");
+          setLastSpoken(pendingConfirmationRef.current.spokenResponse);
+          setKrishnaSpeaking(true);
+          try {
+            await ttsRef.current.speak(pendingConfirmationRef.current.spokenResponse);
+          } finally {
+            setKrishnaSpeaking(false);
+          }
+          return;
+        }
+      }
+
       abortRef.current = new AbortController();
       const signal = abortRef.current.signal;
 
       try {
+        historyRef.current = [...historyRef.current, { role: "user" as const, content: command }].slice(-8);
+        const systemPrompt = await buildSystemPromptWithMemories(KRISHNA_SYSTEM_PROMPT);
         let fullResponse = "";
         for await (const chunk of fetchAIResponse({
           provider,
           selectedProvider: selectedAIProvider,
-          systemPrompt: KRISHNA_SYSTEM_PROMPT,
-          history: [],
+          systemPrompt,
+          history: historyRef.current,
           userMessage: command,
           imagesBase64: [],
           signal,
@@ -540,6 +629,7 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
         }
 
         const { spokenText, actions, plan } = parseActions(fullResponse);
+        historyRef.current = [...historyRef.current, { role: "assistant" as const, content: fullResponse }].slice(-8);
 
         if (spokenText) {
           setStatus("speaking");

@@ -12,3 +12,4 @@ export * from "./job-history";
 export * from "./learned-action";
 export * from "./plan";
 export * from "./skill";
+export * from "./memory";
