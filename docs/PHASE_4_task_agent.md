@@ -16,6 +16,48 @@ video ID → `youtube.com/watch?v=<id>`. Reliable beats flashy.
 **Builds on:** Phase 3's confirmation flow (reused for plan approval) and skill registry
 (Tier 2 — now realized as saved task recipes).
 
+> ⚠️ **Phase 3 is not runtime-functional yet** (see review, 2026-06-13). It compiles and 120
+> unit tests pass, but three contract mismatches — masked by mocks — break the live pipeline.
+> **Phase 4 must NOT start until Phase 3's pipeline is verified working in a real `tauri dev`
+> run**, because Phase 4 reuses `resolveTarget` and adds many more `invoke` tools + a new
+> table, multiplying the same risk class.
+
+---
+
+## Lessons carried from the Phase 3 review (must-fix patterns)
+
+Phase 3's failures were all **contract divergence that unit tests with mocks did not catch.**
+Phase 4 adds 5–6 new tools and a `skills` table, so these become *more* dangerous. Apply
+these as hard rules:
+
+1. **One source of truth for the Rust↔TS command contract.** Every `invoke("tool", args)` must
+   match the Rust `#[tauri::command]` **parameter name** and **return shape** exactly. Phase 3
+   broke on `invoke("resolve_app", { input })` vs Rust `resolve_app(name)`, and on TS reading
+   `result.found` when Rust returned a bare `Option<ResolvedApp>`/`bool`. For Phase 4, define a
+   shared TS interface per tool that mirrors the Rust `Serialize` struct field-for-field, and
+   keep arg names identical (snake_case ↔ the JS key).
+2. **DB schema and the data-layer DTO must be the same shape.** Phase 3's migration created
+   `phrase/canonical_name/action_type` while the TS layer inserted `display_name/input` — so
+   every real INSERT/SELECT throws "no such column." For the `skills` table, derive the TS
+   `Skill` type and the `INSERT`/`SELECT` column lists from the migration columns; review them
+   side-by-side.
+3. **Tests must assert against the REAL contract, not an invented one.** Phase 3's
+   `resolver.test.ts` mocked `invoke` to return `{ found, target }` — a shape the Rust code
+   never produces. At least one test per tool must encode the actual Rust return shape (copy it
+   from the `#[derive(Serialize)]` struct), and the migration columns must be exercised by a DB
+   test (in-memory sqlite) rather than a fully-mocked DB.
+4. **Persist only AFTER user confirmation.** Phase 3 called `saveAndConfirm` *before* the yes/no
+   turn, so a "no" still left a row behind. In Phase 4, write a learned skill only on an
+   explicit "yes," and on "no" ensure nothing was persisted.
+5. **Ship the confirmation safety timeout.** The agreed ~15s timeout (Q1) was never implemented
+   — `pendingConfirmationRef` stays set forever, so the next unrelated utterance is mis-read as
+   yes/no. Phase 4's plan-confirmation reuses this flow; implement the timeout once, here or as
+   a Phase-3 fix, and share it.
+
+**Verification gate (applies to both phases):** a feature is "done" only after a real
+`npm run tauri dev` run demonstrates the end-to-end flow on Windows — typecheck + mocked unit
+tests passing is necessary but not sufficient.
+
 ---
 
 ## The mechanism: single-action → tool-using agent loop
@@ -151,6 +193,12 @@ CREATE TABLE skills (
 ### 7. Tests
 - `parsePlan`, variable substitution, executor step ordering + error stop, skill matching,
   allowlist enforcement for `inject_js`. Mock `invoke` and the search API.
+- **Contract tests (mandatory, per the Phase 3 lessons):** for every new Rust tool, one test
+  must use the tool's *actual* Rust return shape (copied from the `#[derive(Serialize)]`
+  struct), and the arg key in `invoke` must match the Rust param name. Add an in-memory sqlite
+  test that runs the `skills` migration and a real INSERT/SELECT so schema↔DTO drift is caught.
+- A Rust-side `#[cfg(test)]` test per command verifying it deserializes the exact JS arg keys
+  the frontend sends.
 
 ---
 

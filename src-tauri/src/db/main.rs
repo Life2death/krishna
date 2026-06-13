@@ -38,11 +38,11 @@ pub fn migrations() -> Vec<Migration> {
             sql: include_str!("migrations/interview-profiles-v3.sql"),
             kind: MigrationKind::Up,
         },
-        // Migration 6: Create learned_actions table for Phase 3 self-learning
+        // Migration 7: Create learned_actions table for Phase 3 self-learning
         Migration {
-            version: 6,
+            version: 7,
             description: "create_learned_actions_table",
-            sql: include_str!("migrations/learned-actions.sql"),
+            sql: include_str!("migrations/learned-actions-v2.sql"),
             kind: MigrationKind::Up,
         },
     ]

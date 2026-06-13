@@ -58,7 +58,6 @@ describe("resolveTarget", () => {
   it("calls Rust resolver when alias doesn't match", async () => {
     const mockLookup = vi.fn().mockResolvedValue(null);
     (invoke as any).mockResolvedValue({
-      found: true,
       display_name: "Firefox",
       target: "C:\\Program Files\\Mozilla Firefox\\firefox.exe",
       resolved_via: "start_menu",
@@ -76,21 +75,15 @@ describe("resolveTarget", () => {
     const mockLookup = vi.fn().mockResolvedValue(null);
     (invoke as any)
       .mockRejectedValueOnce(new Error("not found"))
-      .mockResolvedValueOnce({
-        found: true,
-        display_name: "Steam",
-        target: "C:\\Program Files (x86)\\Steam\\steam.exe",
-        resolved_via: "path",
-        confidence: 0.5,
-      });
+      .mockResolvedValueOnce(true);
 
     const llmFn = vi.fn().mockResolvedValue("steam.exe");
     const result = await resolveTarget("steam", llmFn, mockLookup);
 
     expect(result.found).toBe(true);
-    expect(result.displayName).toBe("Steam");
+    expect(result.displayName).toBe("steam");
     expect(result.resolvedVia).toBe("llm");
-    expect(result.target).toContain("steam.exe");
+    expect(result.target).toBe("steam.exe");
     expect(llmFn).toHaveBeenCalledWith("steam");
   });
 

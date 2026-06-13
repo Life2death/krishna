@@ -89,16 +89,15 @@ export async function executeAction(
 
     const result = await resolveTarget(rawTarget, llmFallback);
     if (result.found && result.target) {
-      const id = await saveAndConfirm(result, rawTarget);
       if (needsConfirmation(result)) {
         return {
           spokenResponse: `I found ${result.displayName}. Should I open it?`,
           needsConfirmation: true,
           pendingResult: result,
-          learnedActionId: id ?? undefined,
           input: rawTarget,
         };
       }
+      await saveAndConfirm(result, rawTarget);
       await invoke("open_target", { target: result.target });
       return { spokenResponse: `Opening ${result.displayName}` };
     }

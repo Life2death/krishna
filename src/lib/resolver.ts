@@ -53,8 +53,8 @@ export async function resolveTarget(
 
   // Step 3: Invoke Rust resolver (registry → StartMenu → PATH)
   try {
-    const rustResult = await invoke<RustResolveResult>("resolve_app", { input: cleaned });
-      if (rustResult.found && rustResult.target) {
+    const rustResult = await invoke<ResolvedApp | null>("resolve_app", { name: cleaned });
+      if (rustResult && rustResult.target) {
           return {
         found: true,
         displayName: rustResult.display_name || extractName(rustResult.target),
@@ -72,14 +72,14 @@ export async function resolveTarget(
     try {
       const llmTarget = await llmFallback(cleaned);
       if (llmTarget) {
-        const verified = await invoke<RustResolveResult>("verify_target", { target: llmTarget });
-        if (verified.found && verified.target) {
+        const verified = await invoke<boolean>("verify_target", { path: llmTarget });
+        if (verified) {
           return {
             found: true,
-            displayName: verified.display_name || extractName(verified.target),
-            target: verified.target,
+            displayName: extractName(llmTarget),
+            target: llmTarget,
             resolvedVia: "llm",
-            confidence: verified.confidence,
+            confidence: 0.5,
           };
         }
       }
@@ -117,12 +117,11 @@ export function needsConfirmation(result: ResolveResult): boolean {
     && (result.confidence ?? 0) < 0.7;
 }
 
-interface RustResolveResult {
-  found: boolean;
-  display_name?: string;
-  target?: string;
-  resolved_via?: string;
-  confidence?: number;
+interface ResolvedApp {
+  display_name: string;
+  target: string;
+  resolved_via: string;
+  confidence: number;
 }
 
 function extractName(target: string): string {

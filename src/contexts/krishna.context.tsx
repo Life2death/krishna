@@ -10,6 +10,7 @@ import { setKrishnaSpeaking } from "@/lib/krishna-mutex";
 import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import { parseYesNo } from "@/lib/parse-yes-no";
+import { saveAndConfirm } from "@/lib/resolver";
 import type { AssistantStatus } from "@/types/assistant";
 import type { ExecuteActionResult } from "@/lib/actions";
 
@@ -96,6 +97,17 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
     ttsRef.current.setRate(rate);
   }, [rate]);
 
+  const pendingConfirmationRef = useRef<ExecuteActionResult | null>(null);
+  const reAskRef = useRef(false);
+  const confirmTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const clearConfirmTimeout = useCallback(() => {
+    if (confirmTimeoutRef.current) {
+      clearTimeout(confirmTimeoutRef.current);
+      confirmTimeoutRef.current = null;
+    }
+  }, []);
+
   // Barge-in: stop TTS when user starts speaking
   useEffect(() => {
     let unlisten: (() => void) | undefined;
@@ -109,8 +121,11 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
       });
     };
     setup();
-    return () => { unlisten?.(); };
-  }, []);
+    return () => {
+      unlisten?.();
+      clearConfirmTimeout();
+    };
+  }, [clearConfirmTimeout]);
 
   const setKrishnaEnabled = useCallback((value: boolean) => {
     setEnabled(value);
@@ -145,9 +160,6 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
     setStatus("idle");
     setKrishnaSpeaking(false);
   }, []);
-
-  const pendingConfirmationRef = useRef<ExecuteActionResult | null>(null);
-  const reAskRef = useRef(false);
 
   const [llmFallbackEnabled, setLlmFallbackEnabled] = useState<boolean>(() => {
     return safeLocalStorage.getItem(STORAGE_KEYS.KRISHNA_LLM_FALLBACK) !== "false";
@@ -187,12 +199,16 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
     async (transcription: string) => {
       // Confirmation turn — user responded to a yes/no question
       if (pendingConfirmationRef.current) {
+        clearConfirmTimeout();
         const answer = parseYesNo(transcription);
         const pending = pendingConfirmationRef.current;
         if (answer === "yes") {
           pendingConfirmationRef.current = null;
           reAskRef.current = false;
           if (pending.pendingResult?.target) {
+            if (pending.input) {
+              await saveAndConfirm(pending.pendingResult, pending.input);
+            }
             setStatus("speaking");
             try {
               await invoke("open_target", { target: pending.pendingResult.target });
@@ -303,6 +319,13 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
           if (result.needsConfirmation && result.pendingResult) {
             pendingConfirmationRef.current = result;
             reAskRef.current = false;
+            clearConfirmTimeout();
+            confirmTimeoutRef.current = setTimeout(() => {
+              pendingConfirmationRef.current = null;
+              reAskRef.current = false;
+              setStatus("idle");
+              ttsRef.current.speak("I'll take that as a no.");
+            }, 15000);
             setStatus("confirming");
             setLastSpoken(result.spokenResponse);
             setKrishnaSpeaking(true);
