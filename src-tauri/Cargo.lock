@@ -3068,6 +3068,7 @@ dependencies = [
  "tokio",
  "tracing",
  "wasapi",
+ "windows-registry",
  "xcap",
 ]
 
