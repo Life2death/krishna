@@ -40,8 +40,23 @@ export async function getMemoryById(id: string): Promise<Memory | null> {
   return rows.length > 0 ? toMemory(rows[0]) : null;
 }
 
+export async function getMemoryByKey(key: string): Promise<Memory | null> {
+  const db = await getDatabase();
+  const rows = await db.select<DbMemory[]>(
+    "SELECT * FROM memories WHERE LOWER(key) = LOWER(?)",
+    [key]
+  );
+  return rows.length > 0 ? toMemory(rows[0]) : null;
+}
+
 export async function createMemory(memory: Memory): Promise<Memory> {
   const db = await getDatabase();
+  if (memory.key) {
+    await db.execute(
+      "DELETE FROM memories WHERE LOWER(key) = LOWER(?)",
+      [memory.key]
+    );
+  }
   await db.execute(
     "INSERT INTO memories (id, key, value, source, confirmed, created_at, last_used_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
     [memory.id, memory.key, memory.value, memory.source, memory.confirmed, memory.createdAt, memory.lastUsedAt]
