@@ -22,4 +22,4 @@ export interface AssistantTurnResult {
   actions: Action[];
 }
 
-export type AssistantStatus = "idle" | "listening" | "thinking" | "speaking";
+export type AssistantStatus = "idle" | "listening" | "thinking" | "speaking" | "confirming";

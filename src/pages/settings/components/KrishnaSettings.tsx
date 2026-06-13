@@ -1,9 +1,11 @@
 import { useState, useEffect } from "react";
-import { Switch, Label, Header, Select, SelectTrigger, SelectValue, SelectContent, SelectItem, Slider } from "@/components";
+import { Switch, Label, Header, Select, SelectTrigger, SelectValue, SelectContent, SelectItem, Slider, Button } from "@/components";
 import { useKrishna } from "@/hooks";
+import { useLearnedActions } from "@/hooks/useLearnedActions";
 
 export const KrishnaSettings = () => {
-  const { enabled, setKrishnaEnabled, voice, setVoice, rate, setRate } = useKrishna();
+  const { enabled, setKrishnaEnabled, voice, setVoice, rate, setRate, llmFallbackEnabled, setLlmFallbackEnabled } = useKrishna();
+  const { actions, isLoading, removeAction, clearAll } = useLearnedActions();
   const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
 
   useEffect(() => {
@@ -72,6 +74,58 @@ export const KrishnaSettings = () => {
           max={2.0}
           step={0.1}
         />
+      </div>
+
+      {/* LLM fallback toggle */}
+      <div className="flex items-center justify-between">
+        <div>
+          <Label className="text-sm font-medium">LLM fallback for unknown apps</Label>
+          <p className="text-xs text-muted-foreground mt-1">
+            Ask AI to guess the target when registry/Start Menu/PATH don't find it
+          </p>
+        </div>
+        <Switch
+          checked={llmFallbackEnabled}
+          onCheckedChange={setLlmFallbackEnabled}
+          aria-label="Toggle LLM fallback"
+        />
+      </div>
+
+      {/* Learned actions list */}
+      <div className="space-y-3">
+        <div className="flex items-center justify-between">
+          <Label className="text-sm font-medium">Learned actions ({actions.length})</Label>
+          {actions.length > 0 && (
+            <Button variant="ghost" size="sm" onClick={clearAll}>
+              Forget all
+            </Button>
+          )}
+        </div>
+        {isLoading && <p className="text-xs text-muted-foreground">Loading...</p>}
+        {!isLoading && actions.length === 0 && (
+          <p className="text-xs text-muted-foreground">
+            No learned actions yet. Ask Krishna to open an app it hasn't seen before.
+          </p>
+        )}
+        {actions.map((a) => (
+          <div key={a.id} className="flex items-center justify-between rounded border p-2">
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-medium truncate">{a.displayName}</p>
+              <p className="text-xs text-muted-foreground truncate">{a.target}</p>
+              <p className="text-xs text-muted-foreground">
+                via {a.resolvedVia} &middot; {Math.round(a.confidence * 100)}% confidence
+              </p>
+            </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="ml-2 shrink-0"
+              onClick={() => removeAction(a.id)}
+            >
+              Forget
+            </Button>
+          </div>
+        ))}
       </div>
     </div>
   );

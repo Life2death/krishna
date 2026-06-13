@@ -1,6 +1,8 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { Action, ParsedReply } from "@/types/assistant";
 import { resolveAppAlias, isUrl, isFilePath } from "@/config/app-aliases";
+import { resolveTarget, saveAndConfirm, needsConfirmation } from "@/lib/resolver";
+import type { ResolveResult } from "@/lib/resolver";
 
 const ACTION_REGEX = /```action\n([\s\S]*?)```/;
 const JSON_BLOCK_REGEX = /```json\n([\s\S]*?)```/;
@@ -38,7 +40,20 @@ export function parseActions(reply: string): ParsedReply {
   return { spokenText, actions };
 }
 
-export async function executeAction(action: Action): Promise<string> {
+export interface ExecuteActionResult {
+  spokenResponse: string;
+  needsConfirmation?: boolean;
+  pendingResult?: ResolveResult;
+  learnedActionId?: string;
+  input?: string;
+}
+
+type LlmFallbackFn = (input: string) => Promise<string | null>;
+
+export async function executeAction(
+  action: Action,
+  llmFallback?: LlmFallbackFn
+): Promise<ExecuteActionResult> {
   if (action.action === "open") {
     const rawTarget = action.target.trim();
     const lowerTarget = rawTarget.toLowerCase();
@@ -47,18 +62,18 @@ export async function executeAction(action: Action): Promise<string> {
       const url = rawTarget.startsWith("http") ? rawTarget : `https://${rawTarget}`;
       try {
         await invoke("open_target", { target: url });
-        return `Opening ${rawTarget}`;
-      } catch (e) {
-        return `Failed to open ${rawTarget}`;
+        return { spokenResponse: `Opening ${rawTarget}` };
+      } catch {
+        return { spokenResponse: `Failed to open ${rawTarget}` };
       }
     }
 
     if (isFilePath(rawTarget)) {
       try {
         await invoke("open_target", { target: rawTarget });
-        return `Opening file path`;
-      } catch (e) {
-        return `Failed to open path`;
+        return { spokenResponse: `Opening file path` };
+      } catch {
+        return { spokenResponse: `Failed to open path` };
       }
     }
 
@@ -66,14 +81,30 @@ export async function executeAction(action: Action): Promise<string> {
     if (alias) {
       try {
         await invoke("open_target", { target: alias.launchCommand });
-        return `Opening ${alias.name}`;
-      } catch (e) {
-        return `Failed to open ${alias.name}`;
+        return { spokenResponse: `Opening ${alias.name}` };
+      } catch {
+        return { spokenResponse: `Failed to open ${alias.name}` };
       }
     }
 
-    return `I couldn't find an app named "${rawTarget}"`;
+    const result = await resolveTarget(rawTarget, llmFallback);
+    if (result.found && result.target) {
+      const id = await saveAndConfirm(result, rawTarget);
+      if (needsConfirmation(result)) {
+        return {
+          spokenResponse: `I found ${result.displayName}. Should I open it?`,
+          needsConfirmation: true,
+          pendingResult: result,
+          learnedActionId: id ?? undefined,
+          input: rawTarget,
+        };
+      }
+      await invoke("open_target", { target: result.target });
+      return { spokenResponse: `Opening ${result.displayName}` };
+    }
+
+    return { spokenResponse: `I couldn't find an app named "${rawTarget}"` };
   }
 
-  return "Unknown action";
+  return { spokenResponse: "Unknown action" };
 }

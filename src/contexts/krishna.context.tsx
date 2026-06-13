@@ -8,7 +8,10 @@ import { safeLocalStorage } from "@/lib";
 import { STORAGE_KEYS } from "@/config";
 import { setKrishnaSpeaking } from "@/lib/krishna-mutex";
 import { listen } from "@tauri-apps/api/event";
+import { invoke } from "@tauri-apps/api/core";
+import { parseYesNo } from "@/lib/parse-yes-no";
 import type { AssistantStatus } from "@/types/assistant";
+import type { ExecuteActionResult } from "@/lib/actions";
 
 interface KrishnaContextType {
   enabled: boolean;
@@ -21,6 +24,8 @@ interface KrishnaContextType {
   setVoice: (name: string) => void;
   rate: number;
   setRate: (v: number) => void;
+  llmFallbackEnabled: boolean;
+  setLlmFallbackEnabled: (v: boolean) => void;
 }
 
 const KrishnaContext = createContext<KrishnaContextType | undefined>(undefined);
@@ -34,9 +39,8 @@ CRITICAL - Action Protocol:
 \`\`\`
 - The JSON block will NOT be read aloud — it is only used to trigger the action.
 - Speak naturally in the spoken part. Keep responses concise.
-- Supported apps: notepad, chrome, edge, vscode, calculator, explorer, cmd, powershell, spotify
 - For URLs, just use the URL as target (e.g., "https://youtube.com").
-- For unknown apps, just say you couldn't find it and do NOT output an action block.`;
+- Always output the action block for any app the user asks to open — even if you don't recognize it. The system will auto-resolve unknown apps.`;
 
 export function KrishnaProvider({ children }: { children: ReactNode }) {
   const { selectedAIProvider, allAiProviders } = useApp();
@@ -127,6 +131,11 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
     ttsRef.current.setRate(v);
   }, []);
 
+  const setLlmFallback = useCallback((value: boolean) => {
+    setLlmFallbackEnabled(value);
+    safeLocalStorage.setItem(STORAGE_KEYS.KRISHNA_LLM_FALLBACK, String(value));
+  }, []);
+
   const stopSpeaking = useCallback(() => {
     ttsRef.current.stop();
     if (abortRef.current) {
@@ -137,8 +146,102 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
     setKrishnaSpeaking(false);
   }, []);
 
+  const pendingConfirmationRef = useRef<ExecuteActionResult | null>(null);
+  const reAskRef = useRef(false);
+
+  const [llmFallbackEnabled, setLlmFallbackEnabled] = useState<boolean>(() => {
+    return safeLocalStorage.getItem(STORAGE_KEYS.KRISHNA_LLM_FALLBACK) !== "false";
+  });
+
+  const llmFallback = useCallback(
+    async (input: string): Promise<string | null> => {
+      if (!selectedAIProvider.provider) return null;
+      if (!llmFallbackEnabled) return null;
+      const provider = allAiProviders.find((p) => p.id === selectedAIProvider.provider);
+      if (!provider) return null;
+
+      const fallbackPrompt = `The user wants to launch '${input}' on Windows. What is the most likely executable name, .lnk path, or file path? Respond with just the path/name, nothing else.`;
+      try {
+        let response = "";
+        for await (const chunk of fetchAIResponse({
+          provider,
+          selectedProvider: selectedAIProvider,
+          systemPrompt: "You resolve Windows app names to executable paths. Reply with only the path or name.",
+          history: [],
+          userMessage: fallbackPrompt,
+          imagesBase64: [],
+          signal: new AbortController().signal,
+        })) {
+          response += chunk;
+        }
+        const cleaned = response.trim().split("\n")[0]?.trim() || "";
+        return cleaned.length > 0 ? cleaned : null;
+      } catch {
+        return null;
+      }
+    },
+    [selectedAIProvider, allAiProviders]
+  );
+
   const processCommand = useCallback(
     async (transcription: string) => {
+      // Confirmation turn — user responded to a yes/no question
+      if (pendingConfirmationRef.current) {
+        const answer = parseYesNo(transcription);
+        const pending = pendingConfirmationRef.current;
+        if (answer === "yes") {
+          pendingConfirmationRef.current = null;
+          reAskRef.current = false;
+          if (pending.pendingResult?.target) {
+            setStatus("speaking");
+            try {
+              await invoke("open_target", { target: pending.pendingResult.target });
+              const speak = `Opening ${pending.pendingResult.displayName}`;
+              setLastSpoken(speak);
+              setKrishnaSpeaking(true);
+              await ttsRef.current.speak(speak);
+            } finally {
+              setKrishnaSpeaking(false);
+              setStatus("idle");
+            }
+          }
+          return;
+        }
+        if (answer === "no") {
+          pendingConfirmationRef.current = null;
+          reAskRef.current = false;
+          setStatus("speaking");
+          try {
+            const speak = "Okay, I won't open it.";
+            setLastSpoken(speak);
+            setKrishnaSpeaking(true);
+            await ttsRef.current.speak(speak);
+          } finally {
+            setKrishnaSpeaking(false);
+            setStatus("idle");
+          }
+          return;
+        }
+        // Ambiguous — re-ask once
+        if (!reAskRef.current) {
+          reAskRef.current = true;
+          setStatus("speaking");
+          try {
+            const speak = "Sorry, I didn't catch that. Should I open it? Say yes or no.";
+            setLastSpoken(speak);
+            setKrishnaSpeaking(true);
+            await ttsRef.current.speak(speak);
+          } finally {
+            setKrishnaSpeaking(false);
+          }
+          return;
+        }
+        pendingConfirmationRef.current = null;
+        reAskRef.current = false;
+        setStatus("idle");
+        return;
+      }
+
       const wakeResult = detectWakeWord(transcription);
       if (!wakeResult.detected) return;
 
@@ -196,7 +299,33 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
         }
 
         for (const action of actions) {
-          await executeAction(action);
+          const result = await executeAction(action, llmFallback);
+          if (result.needsConfirmation && result.pendingResult) {
+            pendingConfirmationRef.current = result;
+            reAskRef.current = false;
+            setStatus("confirming");
+            setLastSpoken(result.spokenResponse);
+            setKrishnaSpeaking(true);
+            try {
+              await ttsRef.current.speak(result.spokenResponse);
+            } finally {
+              setKrishnaSpeaking(false);
+            }
+            return;
+          }
+          if (result.spokenResponse) {
+            const isStatus = result.spokenResponse.startsWith("Opening") || result.spokenResponse.startsWith("Failed");
+            if (isStatus) {
+              setStatus("speaking");
+              setLastSpoken(result.spokenResponse);
+              setKrishnaSpeaking(true);
+              try {
+                await ttsRef.current.speak(result.spokenResponse);
+              } finally {
+                setKrishnaSpeaking(false);
+              }
+            }
+          }
         }
       } catch (err) {
         if (signal.aborted) {
@@ -212,22 +341,25 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
           setKrishnaSpeaking(false);
         }
       } finally {
-        setStatus("idle");
+        if (!pendingConfirmationRef.current) {
+          setStatus("idle");
+        }
       }
     },
-    [selectedAIProvider, allAiProviders]
+    [selectedAIProvider, allAiProviders, llmFallback]
   );
 
   return (
-    <KrishnaContext.Provider
-      value={{
-        enabled, setKrishnaEnabled,
-        status, lastSpoken,
-        processCommand, stopSpeaking,
-        voice, setVoice,
-        rate, setRate,
-      }}
-    >
+      <KrishnaContext.Provider
+        value={{
+          enabled, setKrishnaEnabled,
+          status, lastSpoken,
+          processCommand, stopSpeaking,
+          voice, setVoice,
+          rate, setRate,
+          llmFallbackEnabled, setLlmFallbackEnabled: setLlmFallback,
+        }}
+      >
       {children}
     </KrishnaContext.Provider>
   );
