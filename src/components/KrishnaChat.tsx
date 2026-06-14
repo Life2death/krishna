@@ -15,7 +15,6 @@ import {
   PopoverTrigger,
 } from "@/components";
 import { useKrishna } from "@/hooks";
-import { safeLocalStorage } from "@/lib";
 
 interface VoiceOption {
   name: string;
@@ -98,10 +97,7 @@ export const KrishnaChat = () => {
                 variant="ghost"
                 className="h-6 w-6 p-0 text-muted-foreground hover:text-red-500"
                 title="Clear conversation"
-                onClick={() => {
-                  krishna.setConversationHistory([]);
-                  try { safeLocalStorage.removeItem("krishna_conversation_history"); } catch {}
-                }}
+                onClick={() => krishna.clearActiveConversation()}
               >
                 <Trash2 className="h-3.5 w-3.5" />
               </Button>

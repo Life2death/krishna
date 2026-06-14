@@ -27,7 +27,7 @@ export const APP_ALIASES: AppAlias[] = [
   },
   {
     name: "VS Code",
-    aliases: ["vscode", "visual studio code", "code", "vs code", "visual studio"],
+    aliases: ["vscode", "visual studio code", "code", "vs code"],
     launchCommand: "code",
     type: "app",
   },

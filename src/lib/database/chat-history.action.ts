@@ -425,12 +425,45 @@ export async function appendMessages(
     }
     await db.execute(
       "INSERT INTO messages (id, conversation_id, role, content, timestamp, attached_files) VALUES (?, ?, ?, ?, ?, ?)",
-      [String(Date.now()) + String(Math.random()), conversationId, msg.role, msg.content, msg.timestamp, null]
+      [crypto.randomUUID(), conversationId, msg.role, msg.content, msg.timestamp, null]
     );
   }
+}
 
-  // Touch the updated_at timestamp
-  await db.execute("UPDATE conversations SET updated_at = ? WHERE id = ?", [Date.now(), conversationId]);
+/**
+ * Get the most recent conversation (for rehydrating the overlay after restart).
+ */
+export async function getMostRecentConversation(): Promise<ChatConversation | null> {
+  const db = await getDatabase();
+  try {
+    const convs = await db.select<DbConversation[]>(
+      "SELECT * FROM conversations ORDER BY updated_at DESC LIMIT 1"
+    );
+    if (convs.length === 0) return null;
+
+    const conv = convs[0];
+    const messages = await db.select<DbMessage[]>(
+      "SELECT * FROM messages WHERE conversation_id = ? ORDER BY timestamp ASC",
+      [conv.id]
+    );
+
+    return {
+      id: conv.id,
+      title: conv.title,
+      createdAt: conv.created_at,
+      updatedAt: conv.updated_at,
+      messages: messages.map((msg) => ({
+        id: msg.id,
+        role: msg.role,
+        content: msg.content,
+        timestamp: msg.timestamp,
+        attachedFiles: safeJsonParse(msg.attached_files, undefined),
+      })),
+    };
+  } catch (error) {
+    console.error("Failed to get most recent conversation:", error);
+    return null;
+  }
 }
 
 /**

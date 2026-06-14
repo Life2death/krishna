@@ -76,6 +76,19 @@ export function useHistory(): UseHistoryReturn {
     refreshConversations();
   }, [refreshConversations]);
 
+  // Refresh on window focus (cross-window sync with overlay)
+  useEffect(() => {
+    const onFocus = () => refreshConversations();
+    window.addEventListener("focus", onFocus);
+    window.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "visible") onFocus();
+    });
+    return () => {
+      window.removeEventListener("focus", onFocus);
+      window.removeEventListener("visibilitychange", onFocus);
+    };
+  }, [refreshConversations]);
+
   const handleViewConversation = (conversation: ChatConversation) => {
     setViewingConversation(conversation);
   };

@@ -18,7 +18,7 @@ import { parseRememberCommand, buildMemoryPrompt } from "@/lib/memory";
 import { detectWakeWord } from "@/lib/wake-word";
 import { parseReminderCommand } from "@/lib/reminders";
 import { createReminder, getDueReminders, updateReminder, cancelReminder } from "@/lib/database/reminders.action";
-import { createConversation, appendMessages, generateConversationTitle } from "@/lib/database/chat-history.action";
+import { createConversation, appendMessages, generateConversationTitle, getMostRecentConversation, deleteConversation } from "@/lib/database/chat-history.action";
 import { isLookCommand, isUndoCommand } from "@/lib/perception";
 import { createAuditEntry, getLastReversible } from "@/lib/database/audit.action";
 import type { AssistantStatus, StepAction } from "@/types/assistant";
@@ -60,6 +60,7 @@ interface KrishnaContextType {
   setElModelId: (id: string) => void;
   conversationHistory: ConversationTurn[];
   setConversationHistory: (turns: ConversationTurn[]) => void;
+  clearActiveConversation: () => void;
   wakeWordEnabled: boolean;
   setWakeWordEnabled: (v: boolean) => void;
   wakeWord: string;
@@ -213,12 +214,7 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
   const [pendingCommand, setPendingCommand] = useState<string | null>(null);
   const [lastError, setLastError] = useState<string | null>(null);
   const clearLastError = useCallback(() => setLastError(null), []);
-  const [conversationHistory, setConversationHistory] = useState<ConversationTurn[]>(() => {
-    try {
-      const stored = safeLocalStorage.getItem("krishna_conversation_history");
-      return stored ? JSON.parse(stored) : [];
-    } catch { return []; }
-  });
+  const [conversationHistory, setConversationHistory] = useState<ConversationTurn[]>([]);
   const pendingUserTextRef = useRef<string>("");
   const [voice, setVoiceState] = useState<string>(() => {
     return safeLocalStorage.getItem(STORAGE_KEYS.KRISHNA_VOICE) || "";
@@ -294,6 +290,19 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
     safeLocalStorage.setItem(STORAGE_KEYS.KRISHNA_WAKE_WORD, w);
   }, []);
 
+  const clearActiveConversation = useCallback(async () => {
+    if (activeConversationRef.current) {
+      try {
+        await deleteConversation(activeConversationRef.current);
+      } catch (e) {
+        console.error("Failed to delete active conversation:", e);
+      }
+      activeConversationRef.current = null;
+      lastTurnTimeRef.current = 0;
+    }
+    setConversationHistory([]);
+  }, []);
+
   const abortRef = useRef<AbortController | null>(null);
   const historyRef = useRef<Message[]>([]);
   const activeConversationRef = useRef<string | null>(null);
@@ -334,6 +343,37 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     ttsRef.current.setRate(rate);
   }, [rate]);
+
+  // Hydrate conversation history from SQLite on mount
+  useEffect(() => {
+    (async () => {
+      try {
+        const recent = await getMostRecentConversation();
+        if (recent && recent.messages.length > 0) {
+          const turns: ConversationTurn[] = [];
+          let currentTurn: ConversationTurn | null = null;
+          for (const msg of recent.messages) {
+            if (msg.role === "user") {
+              currentTurn = { id: String(Date.now()), userText: msg.content, assistantText: "", timestamp: msg.timestamp };
+            } else if (msg.role === "assistant" && currentTurn) {
+              currentTurn.assistantText = msg.content;
+              turns.push(currentTurn);
+              currentTurn = null;
+            }
+          }
+          if (currentTurn) {
+            // Orphaned user message — push anyway
+            turns.push(currentTurn);
+          }
+          setConversationHistory(turns.reverse());
+          activeConversationRef.current = recent.id;
+          lastTurnTimeRef.current = recent.updatedAt;
+        }
+      } catch (e) {
+        console.error("Failed to hydrate conversation history from SQLite:", e);
+      }
+    })();
+  }, []);
 
   const schedulerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -1018,7 +1058,6 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
               { role: "assistant", content: spokenText, timestamp: now + 1 },
             ]);
             lastTurnTimeRef.current = now;
-            window.dispatchEvent(new CustomEvent("conversationUpdated", { detail: activeConversationRef.current }));
           } catch (e) {
             console.error("Failed to persist voice turn to SQLite:", e);
           }
@@ -1141,6 +1180,7 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
           elModelId, setElModelId,
           conversationHistory,
           setConversationHistory,
+          clearActiveConversation,
           wakeWordEnabled, setWakeWordEnabled,
           wakeWord, setWakeWord,
         }}

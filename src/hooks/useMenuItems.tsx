@@ -22,7 +22,7 @@ export const useMenuItems = () => {
     label: string;
     href: string;
     count?: number;
-  }[  ] = [
+  }[] = [
     {
       icon: HomeIcon,
       label: "Dashboard",

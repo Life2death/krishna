@@ -12,6 +12,26 @@
 
 ---
 
+## v1.2.0 (2026-06-15) — UX Consolidation + Wake Word + Store Unification
+
+**Phase 6 cleanup (UX_CONSOLIDATION_PLAN.md + PHASE_7_FIXES.md):**
+
+- **Wake word (Item 1):** Configurable gate wired into `processCommand` — "Require wake word" toggle + custom phrase in Krishna Settings. Uses `detectWakeWord()` (fuzzy + custom word patterns)
+- **Unified chat store (Item 2):** SQLite is now the single source of truth for voice conversation history. Overlay + Dashboard backed by the same store. Old `krishna_conversation_history` localStorage key no longer used. `appendMessages()` helper added, session model with 15-min idle threshold creates new conversations automatically
+- **Delete conversations UI (Item 3):** Trash icon per conversation card with inline confirm, "Clear all" button in Dashboard, clear button in overlay header
+- **Error banner on Dashboard (Item 4):** Surfaces `krishna.lastError` with dismiss control
+- **Dashboard merge (Item 5):** Dashboard now shows the full conversation list (replaces placeholder). "Chats" nav item and route removed. `/chats/view/:id` preserved
+- **Settings merge (Item 6):** Response components (Length, Language, AutoScroll) imported into Settings page. "Responses" nav item and route removed
+- **Cross-window sync:** Dashboard refreshes on window focus/visibilitychange — live updates from overlay
+- **Alias fix:** Removed incorrect `"visual studio"` from VS Code aliases (Visual Studio ≠ VS Code)
+- **Cleanups:** Deleted dead `pages/chats/index.tsx` and `pages/responses/index.tsx`, fixed stray whitespace in `useMenuItems.tsx`
+
+**Verification:**
+- `npx tsc --noEmit` clean
+- 164/164 tests pass
+
+---
+
 ## v1.1.0 (2026-06-14) — Interview features removed, full Krishna rebrand
 
 **What changed:**
