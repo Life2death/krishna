@@ -38,6 +38,40 @@ fn open_path_safe(app_handle: &tauri::AppHandle, path: &str) -> Result<String, S
     Ok(format!("Opened path: {}", path))
 }
 
+#[tauri::command]
+pub fn run_shell_command(command: String) -> Result<String, String> {
+    if command.len() > 500 {
+        return Err("Command too long (max 500 chars)".to_string());
+    }
+
+    #[cfg(target_os = "windows")]
+    let output = std::process::Command::new("cmd")
+        .args(["/C", &command])
+        .output()
+        .map_err(|e| format!("Failed to run command: {}", e))?;
+
+    #[cfg(not(target_os = "windows"))]
+    let output = std::process::Command::new("sh")
+        .args(["-c", &command])
+        .output()
+        .map_err(|e| format!("Failed to run command: {}", e))?;
+
+    let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+    let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+
+    if output.status.success() {
+        let result = if stdout.trim().is_empty() {
+            "Command completed successfully.".to_string()
+        } else {
+            stdout.trim().to_string()
+        };
+        Ok(result)
+    } else {
+        let detail = if stderr.trim().is_empty() { stdout.trim().to_string() } else { stderr.trim().to_string() };
+        Err(format!("Command failed (exit {:?}): {}", output.status.code(), detail))
+    }
+}
+
 fn open_app_safe(app: &str) -> Result<String, String> {
     #[cfg(target_os = "windows")]
     {

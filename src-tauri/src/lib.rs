@@ -128,6 +128,7 @@ pub fn run() {
             speaker::get_input_devices,
             speaker::get_output_devices,
             assistant::open_target,
+            assistant::run_shell_command,
             resolver::resolve_app,
             resolver::verify_target,
         ])
