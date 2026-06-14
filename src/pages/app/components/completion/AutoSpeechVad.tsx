@@ -26,6 +26,8 @@ const AutoSpeechVADInternal = ({
   const vad = useMicVAD({
     userSpeakingThreshold: 0.6,
     startOnLoad: true,
+    baseAssetPath: "/",
+    onnxWASMBasePath: "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.26.0/dist/",
     onSpeechEnd: async (audio) => {
       try {
         // convert float32array to blob

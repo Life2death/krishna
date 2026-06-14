@@ -838,7 +838,9 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
       try {
         historyRef.current = [...historyRef.current, { role: "user" as const, content: command }].slice(-8);
         const memories = await getAllMemories();
-        const systemPrompt = buildMemoryPrompt(KRISHNA_SYSTEM_PROMPT, memories);
+        const now = new Date();
+        const timeContext = `\n\nCurrent date and time: ${now.toLocaleString("en-IN", { timeZone: "Asia/Kolkata", weekday: "long", year: "numeric", month: "long", day: "numeric", hour: "2-digit", minute: "2-digit" })} IST`;
+        const systemPrompt = buildMemoryPrompt(KRISHNA_SYSTEM_PROMPT + timeContext, memories);
         let fullResponse = "";
         for await (const chunk of fetchAIResponse({
           provider,
