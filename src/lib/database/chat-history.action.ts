@@ -402,6 +402,38 @@ export async function deleteAllConversations(): Promise<void> {
 }
 
 /**
+ * Append messages to an existing conversation without rewriting existing messages.
+ * Lightweight alternative to updateConversation() which deletes and re-inserts all messages.
+ */
+export async function appendMessages(
+  conversationId: string,
+  messages: { role: "user" | "assistant"; content: string; timestamp: number }[]
+): Promise<void> {
+  if (!conversationId || typeof conversationId !== "string") {
+    throw new Error("Invalid conversation id");
+  }
+  if (!Array.isArray(messages) || messages.length === 0) {
+    return;
+  }
+
+  const db = await getDatabase();
+
+  for (const msg of messages) {
+    if (!msg.role || !msg.content) {
+      console.warn("Skipping invalid message in appendMessages");
+      continue;
+    }
+    await db.execute(
+      "INSERT INTO messages (id, conversation_id, role, content, timestamp, attached_files) VALUES (?, ?, ?, ?, ?, ?)",
+      [String(Date.now()) + String(Math.random()), conversationId, msg.role, msg.content, msg.timestamp, null]
+    );
+  }
+
+  // Touch the updated_at timestamp
+  await db.execute("UPDATE conversations SET updated_at = ? WHERE id = ?", [Date.now(), conversationId]);
+}
+
+/**
  * Return the user message as the conversation title
  */
 export function generateConversationTitle(userMessage: string): string {

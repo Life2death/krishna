@@ -1,7 +1,6 @@
 import {
   Settings,
   Code,
-  MessagesSquare,
   WandSparkles,
   AudioLinesIcon,
   SquareSlashIcon,
@@ -10,7 +9,6 @@ import {
   PowerIcon,
   MailIcon,
   BugIcon,
-  MessageSquareTextIcon,
 } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
 import { useApp } from "@/contexts";
@@ -24,16 +22,11 @@ export const useMenuItems = () => {
     label: string;
     href: string;
     count?: number;
-  }[] = [
+  }[  ] = [
     {
       icon: HomeIcon,
       label: "Dashboard",
       href: "/dashboard",
-    },
-    {
-      icon: MessagesSquare,
-      label: "Chats",
-      href: "/chats",
     },
     {
       icon: WandSparkles,
@@ -44,11 +37,6 @@ export const useMenuItems = () => {
       icon: Settings,
       label: "App Settings",
       href: "/settings",
-    },
-    {
-      icon: MessageSquareTextIcon,
-      label: "Responses",
-      href: "/responses",
     },
     {
       icon: MonitorIcon,

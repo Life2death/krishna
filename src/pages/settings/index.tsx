@@ -7,8 +7,13 @@ import {
   AutostartToggle,
   KrishnaSettings,
 } from "./components";
+import {
+  ResponseLength,
+  LanguageSelector,
+  AutoScrollToggle,
+} from "@/pages/responses/components";
 import { PageLayout } from "@/layouts";
-import { Button } from "@/components";
+import { Button, Header } from "@/components";
 import { SaveIcon, CheckIcon } from "lucide-react";
 
 type ThemeValue = "dark" | "light" | "system";
@@ -77,6 +82,23 @@ const Settings = () => {
 
       {/* Krishna Assistant */}
       <KrishnaSettings />
+
+      <div className="border-t pt-4">
+        <Header
+          title="Response Settings"
+          description="Customize how AI generates and displays responses"
+          isMainTitle
+        />
+      </div>
+
+      {/* Response Length */}
+      <ResponseLength />
+
+      {/* Language Selector */}
+      <LanguageSelector />
+
+      {/* Auto-Scroll Toggle */}
+      <AutoScrollToggle />
 
     </PageLayout>
   );

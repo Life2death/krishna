@@ -6,6 +6,7 @@ import {
   Volume2Icon,
   ChevronDownIcon,
   ZapIcon,
+  Trash2,
 } from "lucide-react";
 import {
   Button,
@@ -14,6 +15,7 @@ import {
   PopoverTrigger,
 } from "@/components";
 import { useKrishna } from "@/hooks";
+import { safeLocalStorage } from "@/lib";
 
 interface VoiceOption {
   name: string;
@@ -89,7 +91,22 @@ export const KrishnaChat = () => {
         {/* Header */}
         <div className="flex items-center justify-between px-3 py-2 border-b">
           <span className="text-sm font-semibold">Krishna</span>
-          {/* Voice indicator / quick-picker */}
+          <div className="flex items-center gap-1">
+            {krishna.conversationHistory.length > 0 && (
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-6 w-6 p-0 text-muted-foreground hover:text-red-500"
+                title="Clear conversation"
+                onClick={() => {
+                  krishna.setConversationHistory([]);
+                  try { safeLocalStorage.removeItem("krishna_conversation_history"); } catch {}
+                }}
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </Button>
+            )}
+            {/* Voice indicator / quick-picker */}
           <div className="relative">
             <Button
               size="sm"
@@ -140,6 +157,7 @@ export const KrishnaChat = () => {
                 )}
               </div>
             )}
+            </div>
           </div>
         </div>
 

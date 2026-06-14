@@ -15,8 +15,10 @@ import { saveAndConfirm } from "@/lib/resolver";
 import { getAllSkills, getSkillByName, createSkill, updateSkillUseCount } from "@/lib/database/skills.action";
 import { getAllMemories, createMemory } from "@/lib/database/memories.action";
 import { parseRememberCommand, buildMemoryPrompt } from "@/lib/memory";
+import { detectWakeWord } from "@/lib/wake-word";
 import { parseReminderCommand } from "@/lib/reminders";
 import { createReminder, getDueReminders, updateReminder, cancelReminder } from "@/lib/database/reminders.action";
+import { createConversation, appendMessages, generateConversationTitle } from "@/lib/database/chat-history.action";
 import { isLookCommand, isUndoCommand } from "@/lib/perception";
 import { createAuditEntry, getLastReversible } from "@/lib/database/audit.action";
 import type { AssistantStatus, StepAction } from "@/types/assistant";
@@ -57,6 +59,11 @@ interface KrishnaContextType {
   elModelId: string;
   setElModelId: (id: string) => void;
   conversationHistory: ConversationTurn[];
+  setConversationHistory: (turns: ConversationTurn[]) => void;
+  wakeWordEnabled: boolean;
+  setWakeWordEnabled: (v: boolean) => void;
+  wakeWord: string;
+  setWakeWord: (w: string) => void;
 }
 
 const KrishnaContext = createContext<KrishnaContextType | undefined>(undefined);
@@ -238,6 +245,13 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
     return safeLocalStorage.getItem(STORAGE_KEYS.KRISHNA_EL_MODEL_ID) || "eleven_turbo_v2_5";
   });
 
+  const [wakeWordEnabled, setWakeWordEnabledState] = useState<boolean>(() => {
+    return safeLocalStorage.getItem(STORAGE_KEYS.KRISHNA_WAKE_WORD_ENABLED) !== "false";
+  });
+  const [wakeWord, setWakeWordState] = useState<string>(() => {
+    return safeLocalStorage.getItem(STORAGE_KEYS.KRISHNA_WAKE_WORD) || "hey krishna";
+  });
+
   const elTtsRef = useRef(getElevenLabsTTS());
 
   // Swap ttsRef when provider or EL config changes
@@ -271,8 +285,20 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
     safeLocalStorage.setItem(STORAGE_KEYS.KRISHNA_EL_MODEL_ID, id);
   }, []);
 
+  const setWakeWordEnabled = useCallback((v: boolean) => {
+    setWakeWordEnabledState(v);
+    safeLocalStorage.setItem(STORAGE_KEYS.KRISHNA_WAKE_WORD_ENABLED, String(v));
+  }, []);
+  const setWakeWord = useCallback((w: string) => {
+    setWakeWordState(w);
+    safeLocalStorage.setItem(STORAGE_KEYS.KRISHNA_WAKE_WORD, w);
+  }, []);
+
   const abortRef = useRef<AbortController | null>(null);
   const historyRef = useRef<Message[]>([]);
+  const activeConversationRef = useRef<string | null>(null);
+  const lastTurnTimeRef = useRef<number>(0);
+  const IDLE_THRESHOLD = 15 * 60 * 1000; // 15 minutes
 
   // Initialize natural voice on first mount
   const voiceInitRef = useRef(false);
@@ -700,7 +726,17 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
         return;
       }
 
-      const command = transcription.trim() || "hello";
+      let command = transcription.trim() || "hello";
+
+      if (wakeWordEnabled && !pendingConfirmationRef.current) {
+        const { detected, remainder } = detectWakeWord(transcription, wakeWord);
+        if (!detected) {
+          setStatus("idle");
+          return;
+        }
+        command = remainder || command;
+      }
+
       pendingUserTextRef.current = command;
       setLastError(null);
       setPendingCommand(command);
@@ -952,17 +988,40 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
         if (spokenText) {
           setStatus("speaking");
           setLastSpoken(spokenText);
+          const now = Date.now();
           const turn: ConversationTurn = {
-            id: String(Date.now()),
+            id: String(now),
             userText: pendingUserTextRef.current,
             assistantText: spokenText,
-            timestamp: Date.now(),
+            timestamp: now,
           };
           setConversationHistory(prev => {
             const updated = [turn, ...prev].slice(0, 100);
-            try { safeLocalStorage.setItem("krishna_conversation_history", JSON.stringify(updated)); } catch {}
             return updated;
           });
+
+          // Persist to SQLite — session model
+          try {
+            const idle = now - lastTurnTimeRef.current;
+            if (!activeConversationRef.current || idle > IDLE_THRESHOLD) {
+              const conv = await createConversation({
+                id: String(now),
+                title: generateConversationTitle(pendingUserTextRef.current),
+                createdAt: now,
+                updatedAt: now,
+                messages: [],
+              });
+              activeConversationRef.current = conv.id;
+            }
+            await appendMessages(activeConversationRef.current, [
+              { role: "user", content: pendingUserTextRef.current, timestamp: now },
+              { role: "assistant", content: spokenText, timestamp: now + 1 },
+            ]);
+            lastTurnTimeRef.current = now;
+            window.dispatchEvent(new CustomEvent("conversationUpdated", { detail: activeConversationRef.current }));
+          } catch (e) {
+            console.error("Failed to persist voice turn to SQLite:", e);
+          }
           setKrishnaSpeaking(true);
           try {
             await ttsRef.current.speak(spokenText);
@@ -1061,7 +1120,7 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
         }
       }
     },
-    [selectedAIProvider, allAiProviders, llmFallback]
+    [selectedAIProvider, allAiProviders, llmFallback, wakeWordEnabled, wakeWord]
   );
 
   return (
@@ -1081,6 +1140,9 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
           elVoiceName, setElVoiceName,
           elModelId, setElModelId,
           conversationHistory,
+          setConversationHistory,
+          wakeWordEnabled, setWakeWordEnabled,
+          wakeWord, setWakeWord,
         }}
       >
       {children}

@@ -28,6 +28,8 @@ export const STORAGE_KEYS = {
   KRISHNA_EL_API_KEY: "krishna_el_api_key",
   KRISHNA_EL_VOICE_ID: "krishna_el_voice_id",
   KRISHNA_EL_MODEL_ID: "krishna_el_model_id",
+  KRISHNA_WAKE_WORD_ENABLED: "krishna_wake_word_enabled",
+  KRISHNA_WAKE_WORD: "krishna_wake_word",
 } as const;
 
 // Max number of files that can be attached to a message

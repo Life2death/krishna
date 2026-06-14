@@ -37,6 +37,8 @@ export const KrishnaSettings = () => {
     elVoiceId, setElVoiceId,
     elVoiceName, setElVoiceName,
     elModelId, setElModelId,
+    wakeWordEnabled, setWakeWordEnabled,
+    wakeWord, setWakeWord,
   } = useKrishna();
 
   const { actions, isLoading, removeAction, clearAll } = useLearnedActions();
@@ -102,6 +104,34 @@ export const KrishnaSettings = () => {
         </div>
         <Switch checked={enabled} onCheckedChange={setKrishnaEnabled} />
       </div>
+
+      {/* Wake word */}
+      <div className="flex items-center justify-between">
+        <div>
+          <Label className="text-sm font-medium">Require wake word</Label>
+          <p className="text-xs text-muted-foreground mt-1">
+            {wakeWordEnabled
+              ? `Krishna only responds when you say "${wakeWord}" first`
+              : "Every utterance is processed (always-on)"
+            }
+          </p>
+        </div>
+        <Switch checked={wakeWordEnabled} onCheckedChange={setWakeWordEnabled} />
+      </div>
+      {wakeWordEnabled && (
+        <div className="space-y-1.5">
+          <Label className="text-sm font-medium">Wake word phrase</Label>
+          <input
+            type="text"
+            className="w-full rounded-md border bg-background px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+            value={wakeWord}
+            onChange={(e) => setWakeWord(e.target.value)}
+          />
+          <p className="text-xs text-muted-foreground">
+            Say this before a command, e.g. "{wakeWord}, open VS Code". Leave the toggle off for always-on.
+          </p>
+        </div>
+      )}
 
       {/* TTS Provider */}
       <div className="space-y-3">
