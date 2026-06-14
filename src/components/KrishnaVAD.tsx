@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useMicVAD } from "@ricky0123/vad-react";
 import {
   MicIcon,
@@ -21,13 +21,14 @@ export const KrishnaVAD = () => {
   const krishna = useKrishna();
 
   const missingAI = !selectedAIProvider.provider;
+  const missingSTT = !selectedSttProvider.provider;
+  const missingProviders = missingAI || missingSTT;
 
   const vad = useMicVAD({
     positiveSpeechThreshold: 0.4,
     negativeSpeechThreshold: 0.2,
-    minSpeechFrames: 2,
     userSpeakingThreshold: 0.4,
-    startOnLoad: !missingAI,
+    startOnLoad: !missingProviders,
     baseAssetPath: "/",
     onnxWASMBasePath: "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.26.0/dist/",
     onSpeechEnd: async (audio) => {
@@ -60,6 +61,17 @@ export const KrishnaVAD = () => {
     },
   });
 
+  // `startOnLoad` is evaluated once when the VAD effect first runs, but providers
+  // load asynchronously from localStorage — so on a fresh load the VAD often
+  // initializes before providers are ready and never auto-starts. This backstop
+  // starts it as soon as providers are present, the engine is ready, and the
+  // user hasn't manually muted. No-ops once it's already listening.
+  useEffect(() => {
+    if (!missingProviders && !muted && !vad.loading && !vad.errored && !vad.listening) {
+      vad.start();
+    }
+  }, [missingProviders, muted, vad.loading, vad.errored, vad.listening]);
+
   const handleMuteToggle = () => {
     if (muted) {
       vad.start();
@@ -70,8 +82,10 @@ export const KrishnaVAD = () => {
     }
   };
 
+  // Green = actively listening/working. Red = can't work / inactive.
+  // Spinner = transient (loading model, transcribing, thinking).
   const getIcon = () => {
-    if (missingAI) return <AlertCircleIcon className="h-4 w-4 text-orange-500" />;
+    if (missingProviders) return <AlertCircleIcon className="h-4 w-4 text-red-500" />;
     if (vad.errored) return <AlertCircleIcon className="h-4 w-4 text-red-500" />;
     if (vad.loading) return <LoaderCircleIcon className="h-4 w-4 animate-spin text-muted-foreground" />;
     if (muted) return <MicOffIcon className="h-4 w-4 text-red-500" />;
@@ -80,13 +94,15 @@ export const KrishnaVAD = () => {
     if (krishna.status === "speaking")
       return <BotIcon className="h-4 w-4 text-green-500 animate-pulse" />;
     if (vad.userSpeaking)
-      return <LoaderCircleIcon className="h-4 w-4 animate-spin text-orange-400" />;
+      return <MicIcon className="h-4 w-4 text-green-600 animate-pulse" />;
     if (vad.listening)
       return <MicIcon className="h-4 w-4 text-green-500 animate-pulse" />;
-    return <MicOffIcon className="h-4 w-4 text-muted-foreground" />;
+    return <MicOffIcon className="h-4 w-4 text-red-500" />;
   };
 
   const getTitle = () => {
+    if (missingSTT && missingAI) return "No speech or AI provider — open Settings";
+    if (missingSTT) return "No speech provider — open Settings › Speech";
     if (missingAI) return "No AI provider — open Settings › Brain";
     if (vad.errored) return "Mic error — reload app to retry";
     if (vad.loading) return "Loading voice detection…";
@@ -96,26 +112,28 @@ export const KrishnaVAD = () => {
     if (krishna.status === "speaking") return "Krishna is speaking";
     if (vad.userSpeaking) return "Listening...";
     if (vad.listening) return "Mic active — click to mute";
-    return "Mic paused";
+    return "Mic paused — click to start";
   };
 
   return (
     <Button
       size="icon"
       title={getTitle()}
-      onClick={missingAI ? undefined : handleMuteToggle}
+      onClick={missingProviders ? undefined : handleMuteToggle}
       className={
-        missingAI
-          ? "bg-orange-50 hover:bg-orange-100"
+        missingProviders
+          ? "bg-red-50 hover:bg-red-100"
           : vad.errored
           ? "bg-red-50 hover:bg-red-100"
           : muted
           ? "bg-red-50 hover:bg-red-100"
+          : krishna.status === "speaking"
+          ? "bg-green-50 hover:bg-green-100"
           : vad.userSpeaking
-          ? "bg-orange-50 hover:bg-orange-100"
+          ? "bg-green-50 hover:bg-green-100"
           : vad.listening
           ? "bg-green-50 hover:bg-green-100"
-          : ""
+          : "bg-red-50 hover:bg-red-100"
       }
     >
       {getIcon()}

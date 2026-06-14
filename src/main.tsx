@@ -18,17 +18,19 @@ if (windowLabel.startsWith("capture-overlay-")) {
     </React.StrictMode>
   );
 } else {
+  // NOTE: StrictMode intentionally omitted here. React StrictMode double-invokes
+  // effects in dev, which races vad-react@0.0.36's setup/cleanup and makes
+  // useMicVAD destroy() a half-initialized instance, surfacing the spurious
+  // "MicVAD has null stream, audio context, or processor adapter" error.
   ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
-    <React.StrictMode>
-      <ThemeProvider defaultTheme="light">
-        <AppProvider>
-          <ExpandedLayoutProvider>
-            <KrishnaProvider>
-              <AppRoutes />
-            </KrishnaProvider>
-          </ExpandedLayoutProvider>
-        </AppProvider>
-      </ThemeProvider>
-    </React.StrictMode>
+    <ThemeProvider defaultTheme="light">
+      <AppProvider>
+        <ExpandedLayoutProvider>
+          <KrishnaProvider>
+            <AppRoutes />
+          </KrishnaProvider>
+        </ExpandedLayoutProvider>
+      </AppProvider>
+    </ThemeProvider>
   );
 }

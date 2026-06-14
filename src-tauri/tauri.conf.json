@@ -21,7 +21,7 @@
         "alwaysOnTop": false,
         "resizable": false,
         "visibleOnAllWorkspaces": true,
-        "skipTaskbar": true,
+        "skipTaskbar": false,
         "visible": true,
         "center": false,
         "focus": false,
