@@ -21,16 +21,14 @@ export const KrishnaVAD = () => {
   const { selectedSttProvider, allSttProviders, selectedAIProvider } = useApp();
   const krishna = useKrishna();
 
-  const missingSTT = !selectedSttProvider.provider;
   const missingAI = !selectedAIProvider.provider;
-  const missingProviders = missingSTT || missingAI;
 
   const vad = useMicVAD({
     positiveSpeechThreshold: 0.4,
     negativeSpeechThreshold: 0.2,
     minSpeechFrames: 2,
     userSpeakingThreshold: 0.4,
-    startOnLoad: !missingProviders,
+    startOnLoad: !missingAI,
     baseAssetPath: "/",
     onnxWASMBasePath: "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.26.0/dist/",
     onSpeechEnd: async (audio) => {
@@ -39,9 +37,6 @@ export const KrishnaVAD = () => {
       try {
         const audioBlob = floatArrayToWav(audio, 16000, "wav");
         const useNaukriLeloAPI = await shouldUseNaukriLeloAPI();
-
-        if (!selectedSttProvider.provider && !useNaukriLeloAPI) return;
-
         const providerConfig = allSttProviders.find(
           (p) => p.id === selectedSttProvider.provider
         );
@@ -78,7 +73,9 @@ export const KrishnaVAD = () => {
   };
 
   const getIcon = () => {
-    if (missingProviders) return <AlertCircleIcon className="h-4 w-4 text-orange-500" />;
+    if (missingAI) return <AlertCircleIcon className="h-4 w-4 text-orange-500" />;
+    if (vad.errored) return <AlertCircleIcon className="h-4 w-4 text-red-500" />;
+    if (vad.loading) return <LoaderCircleIcon className="h-4 w-4 animate-spin text-muted-foreground" />;
     if (muted) return <MicOffIcon className="h-4 w-4 text-red-500" />;
     if (isTranscribing || krishna.status === "thinking")
       return <LoaderCircleIcon className="h-4 w-4 animate-spin text-primary" />;
@@ -92,8 +89,9 @@ export const KrishnaVAD = () => {
   };
 
   const getTitle = () => {
-    if (missingSTT) return "No speech provider — open Settings › Speech";
     if (missingAI) return "No AI provider — open Settings › Brain";
+    if (vad.errored) return "Mic error — reload app to retry";
+    if (vad.loading) return "Loading voice detection…";
     if (muted) return "Mic muted — click to unmute";
     if (isTranscribing) return "Transcribing...";
     if (krishna.status === "thinking") return "Krishna is thinking...";
@@ -107,10 +105,12 @@ export const KrishnaVAD = () => {
     <Button
       size="icon"
       title={getTitle()}
-      onClick={missingProviders ? undefined : handleMuteToggle}
+      onClick={missingAI ? undefined : handleMuteToggle}
       className={
-        missingProviders
+        missingAI
           ? "bg-orange-50 hover:bg-orange-100"
+          : vad.errored
+          ? "bg-red-50 hover:bg-red-100"
           : muted
           ? "bg-red-50 hover:bg-red-100"
           : vad.userSpeaking
