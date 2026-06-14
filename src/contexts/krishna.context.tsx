@@ -176,9 +176,7 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
   const { selectedAIProvider, allAiProviders } = useApp();
   const ttsRef = useRef(getTTS());
 
-  const [enabled, setEnabled] = useState<boolean>(() => {
-    return safeLocalStorage.getItem(STORAGE_KEYS.KRISHNA_ENABLED) === "true";
-  });
+  const [enabled, setEnabled] = useState<boolean>(true);
   const [status, setStatus] = useState<AssistantStatus>("idle");
   const [lastSpoken, setLastSpoken] = useState<string>("");
   const [voice, setVoiceState] = useState<string>(() => {
