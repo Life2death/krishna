@@ -4,7 +4,8 @@ const LOOK_PATTERNS = [
   /read the screen/i,
   /summarize this/i,
   /what app/i,
-  /look at/i,
+  /look(ing)? at/i,
+  /what are we (looking|seeing)/i,
   /what('s| is) on your screen/i,
 ];
 

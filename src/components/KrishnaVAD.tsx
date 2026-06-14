@@ -17,6 +17,7 @@ import { isKrishnaSpeaking } from "@/lib/krishna-mutex";
 
 export const KrishnaVAD = () => {
   const [isTranscribing, setIsTranscribing] = useState(false);
+  const [pendingText, setPendingText] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
   const { selectedSttProvider, allSttProviders, selectedAIProvider } = useApp();
   const krishna = useKrishna();
@@ -57,7 +58,12 @@ export const KrishnaVAD = () => {
         });
 
         if (transcription) {
-          await krishna.processCommand(transcription);
+          setPendingText(transcription);
+          try {
+            await krishna.processCommand(transcription);
+          } finally {
+            setPendingText(null);
+          }
         }
       } catch (error) {
         console.error("Krishna VAD transcription failed:", error);
@@ -135,9 +141,38 @@ export const KrishnaVAD = () => {
         </div>
 
         <div className="max-h-72 overflow-y-auto divide-y">
-          {krishna.conversationHistory.length === 0 ? (
+          {/* Live pending item */}
+          {pendingText && (
+            <div className="px-3 py-2 space-y-1 bg-muted/40">
+              <div className="flex items-start gap-2">
+                <span className="text-xs font-medium text-primary mt-0.5">You</span>
+                <p className="text-xs text-foreground flex-1">{pendingText}</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-medium text-green-600">Krishna</span>
+                <LoaderCircleIcon className="h-3 w-3 animate-spin text-muted-foreground" />
+                <span className="text-xs text-muted-foreground">thinking…</span>
+              </div>
+            </div>
+          )}
+
+          {/* Last error */}
+          {krishna.lastError && !pendingText && (
+            <div className="px-3 py-2 flex items-start gap-2 bg-red-50 dark:bg-red-950/20">
+              <AlertCircleIcon className="h-3.5 w-3.5 text-red-500 mt-0.5 shrink-0" />
+              <p className="text-xs text-red-600 dark:text-red-400 flex-1">{krishna.lastError}</p>
+              <button
+                className="text-[10px] text-muted-foreground hover:text-foreground shrink-0"
+                onClick={() => krishna.clearLastError()}
+              >
+                ✕
+              </button>
+            </div>
+          )}
+
+          {!pendingText && !krishna.lastError && krishna.conversationHistory.length === 0 ? (
             <div className="px-3 py-6 text-center text-sm text-muted-foreground">
-              No conversations yet. Say "Hey Krishna…" to start.
+              No conversations yet. Just speak to start.
             </div>
           ) : (
             krishna.conversationHistory.map((turn) => (

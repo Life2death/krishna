@@ -1,7 +1,6 @@
 import { createContext, useContext, useState, useCallback, useRef, useEffect, ReactNode } from "react";
 import { useApp } from "@/contexts";
 import { fetchAIResponse } from "@/lib/functions";
-import { detectWakeWord } from "@/lib/wake-word";
 import { parseActions, executeAction } from "@/lib/actions";
 import { executePlan, resolvePlaceholders } from "@/lib/executor";
 import { getToolDescriptions } from "@/lib/tools";
@@ -38,6 +37,8 @@ interface KrishnaContextType {
   lastSpoken: string;
   processCommand: (transcription: string) => Promise<void>;
   stopSpeaking: () => void;
+  lastError: string | null;
+  clearLastError: () => void;
   voice: string;
   setVoice: (name: string) => void;
   rate: number;
@@ -187,6 +188,8 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
   const [enabled, setEnabled] = useState<boolean>(true);
   const [status, setStatus] = useState<AssistantStatus>("idle");
   const [lastSpoken, setLastSpoken] = useState<string>("");
+  const [lastError, setLastError] = useState<string | null>(null);
+  const clearLastError = useCallback(() => setLastError(null), []);
   const [conversationHistory, setConversationHistory] = useState<ConversationTurn[]>(() => {
     try {
       const stored = safeLocalStorage.getItem("krishna_conversation_history");
@@ -630,15 +633,14 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
         return;
       }
 
-      const wakeResult = detectWakeWord(transcription);
-      if (!wakeResult.detected) return;
-
+      const command = transcription.trim() || "hello";
+      pendingUserTextRef.current = command;
+      setLastError(null);
       setStatus("thinking");
 
-      const command = wakeResult.remainder || "hello";
-      pendingUserTextRef.current = command;
-
       if (!selectedAIProvider.provider) {
+        const errMsg = "No AI provider configured — open Settings › Brain.";
+        setLastError(errMsg);
         setStatus("idle");
         return;
       }
@@ -647,6 +649,8 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
         (p) => p.id === selectedAIProvider.provider
       );
       if (!provider) {
+        const errMsg = "AI provider not found — check Settings › Brain.";
+        setLastError(errMsg);
         setStatus("idle");
         return;
       }
@@ -974,6 +978,7 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
           return;
         }
         const msg = err instanceof Error ? err.message : "Something went wrong";
+        setLastError(msg);
         setStatus("speaking");
         setKrishnaSpeaking(true);
         try {
@@ -996,6 +1001,7 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
           enabled, setKrishnaEnabled,
           status, lastSpoken,
           processCommand, stopSpeaking,
+          lastError, clearLastError,
           voice, setVoice,
           rate, setRate,
           llmFallbackEnabled, setLlmFallbackEnabled: setLlmFallback,
