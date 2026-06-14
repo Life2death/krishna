@@ -1,4 +1,4 @@
-import { Card, Updater, DragButton, CustomCursor, Button, KrishnaVAD } from "@/components";
+import { Card, Updater, DragButton, CustomCursor, Button, KrishnaVAD, KrishnaChat } from "@/components";
 import { Completion, BrainSelector, SystemPromptSelector } from "./components";
 import { useApp, useKrishna } from "@/hooks";
 import { useApp as useAppContext } from "@/contexts";
@@ -43,6 +43,7 @@ const App = () => {
             <Completion isHidden={isHidden} />
             <BrainSelector />
             <SystemPromptSelector />
+            <KrishnaChat />
             <Button
               size="icon"
               className="cursor-pointer"

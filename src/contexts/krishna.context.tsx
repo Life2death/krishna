@@ -37,6 +37,7 @@ interface KrishnaContextType {
   lastSpoken: string;
   processCommand: (transcription: string) => Promise<void>;
   stopSpeaking: () => void;
+  pendingCommand: string | null;
   lastError: string | null;
   clearLastError: () => void;
   voice: string;
@@ -188,6 +189,7 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
   const [enabled, setEnabled] = useState<boolean>(true);
   const [status, setStatus] = useState<AssistantStatus>("idle");
   const [lastSpoken, setLastSpoken] = useState<string>("");
+  const [pendingCommand, setPendingCommand] = useState<string | null>(null);
   const [lastError, setLastError] = useState<string | null>(null);
   const clearLastError = useCallback(() => setLastError(null), []);
   const [conversationHistory, setConversationHistory] = useState<ConversationTurn[]>(() => {
@@ -636,6 +638,7 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
       const command = transcription.trim() || "hello";
       pendingUserTextRef.current = command;
       setLastError(null);
+      setPendingCommand(command);
       setStatus("thinking");
 
       if (!selectedAIProvider.provider) {
@@ -987,6 +990,7 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
           setKrishnaSpeaking(false);
         }
       } finally {
+        setPendingCommand(null);
         if (!pendingConfirmationRef.current) {
           setStatus("idle");
         }
@@ -1001,6 +1005,7 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
           enabled, setKrishnaEnabled,
           status, lastSpoken,
           processCommand, stopSpeaking,
+          pendingCommand,
           lastError, clearLastError,
           voice, setVoice,
           rate, setRate,
