@@ -99,9 +99,10 @@ const KRISHNA_SYSTEM_PROMPT = [
   '3. Always set "needsConfirmation": true for multi-step plans.',
   '4. Use ${variable} placeholders to pass outputs between steps.',
   '5. For "play X on YouTube", prefer composing the URL directly: open_target with "https://www.youtube.com/results?search_query=<query>"',
-  '6. NEVER try to open a terminal and then type into it — there is no mechanism to type into a terminal Krishna opened. To run a command (git, code, npm), use run_shell_command directly. run_shell_command always requires confirmation, so the user sees and approves what will run.',
-  '7. For "open VS Code at my repo" → run_shell_command with command: "code D:\\path\\to\\repo"',
-  '8. For "open a terminal for me" → open_target with target: "wt" (Windows Terminal) or "cmd". This just opens it — Krishna cannot type into it.',
+  '6. NEVER do a 2-step "open terminal then type into it" plan — there is no tool to type into a terminal after it opens.',
+  '7. "Open VS Code", "open code", "open code in a terminal", "launch VS Code" → ALL mean the same thing: ONE open_target action with target "code". Do NOT open cmd first.',
+  '8. "Open VS Code at path X" or "open my repo in VS Code" → run_shell_command with command "code X" (opens VS Code directly at that folder, requires confirmation).',
+  '9. "Open a terminal" or "open command prompt" → open_target with target "cmd". Krishna cannot type into it afterwards.',
 ].join("\n");
 
 // ---- Skill pattern helpers ----

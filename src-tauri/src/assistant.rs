@@ -75,8 +75,19 @@ pub fn run_shell_command(command: String) -> Result<String, String> {
 fn open_app_safe(app: &str) -> Result<String, String> {
     #[cfg(target_os = "windows")]
     {
+        // Inherit the full user PATH so apps installed to %LOCALAPPDATA% (e.g. VS Code)
+        // are found. We build it by prepending common user bin dirs to the current PATH.
+        let base_path = std::env::var("PATH").unwrap_or_default();
+        let local_app_data = std::env::var("LOCALAPPDATA").unwrap_or_default();
+        let extra = format!(
+            "{0}\\Programs\\Microsoft VS Code\\bin;{0}\\Programs\\Microsoft VS Code;",
+            local_app_data
+        );
+        let full_path = format!("{}{}", extra, base_path);
+
         Command::new("cmd")
             .args(["/C", "start", "", app])
+            .env("PATH", &full_path)
             .spawn()
             .map_err(|e| format!("Failed to open app '{}': {}", app, e))?;
         Ok(format!("Opened: {}", app))
