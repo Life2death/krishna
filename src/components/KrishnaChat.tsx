@@ -5,6 +5,7 @@ import {
   AlertCircleIcon,
   Volume2Icon,
   ChevronDownIcon,
+  ZapIcon,
 } from "lucide-react";
 import {
   Button,
@@ -26,7 +27,10 @@ export const KrishnaChat = () => {
   const [voiceOpen, setVoiceOpen] = useState(false);
   const krishna = useKrishna();
 
+  const isElevenLabs = krishna.ttsProvider === "elevenlabs";
+
   useEffect(() => {
+    if (isElevenLabs) return; // browser voices not needed when using EL
     const load = () => {
       const all = window.speechSynthesis.getVoices();
       const en = all
@@ -36,10 +40,8 @@ export const KrishnaChat = () => {
     };
     load();
     window.speechSynthesis.onvoiceschanged = load;
-    return () => {
-      window.speechSynthesis.onvoiceschanged = null;
-    };
-  }, []);
+    return () => { window.speechSynthesis.onvoiceschanged = null; };
+  }, [isElevenLabs]);
 
   const preview = (name: string) => {
     window.speechSynthesis.cancel();
@@ -50,6 +52,12 @@ export const KrishnaChat = () => {
     utt.rate = krishna.rate;
     window.speechSynthesis.speak(utt);
   };
+
+  const activeVoiceLabel = isElevenLabs
+    ? krishna.elVoiceName || "EL voice"
+    : krishna.voice
+      ? krishna.voice.replace("Microsoft ", "").split(" ").slice(0, 2).join(" ")
+      : "Pick voice";
 
   const formatTime = (ts: number) =>
     new Date(ts).toLocaleTimeString("en-IN", {
@@ -81,22 +89,27 @@ export const KrishnaChat = () => {
         {/* Header */}
         <div className="flex items-center justify-between px-3 py-2 border-b">
           <span className="text-sm font-semibold">Krishna</span>
-          {/* Voice picker */}
+          {/* Voice indicator / quick-picker */}
           <div className="relative">
             <Button
               size="sm"
               variant="ghost"
               className="h-6 text-xs gap-1 text-muted-foreground"
-              onClick={() => setVoiceOpen((p) => !p)}
+              title={isElevenLabs ? "ElevenLabs voice — change in Settings › Krishna" : "Pick browser voice"}
+              onClick={() => !isElevenLabs && setVoiceOpen((p) => !p)}
             >
-              <Volume2Icon className="h-3 w-3" />
-              {krishna.voice
-                ? krishna.voice.split(" ").slice(0, 2).join(" ")
-                : "Pick voice"}
-              <ChevronDownIcon className="h-3 w-3" />
+              {isElevenLabs
+                ? <ZapIcon className="h-3 w-3 text-yellow-500" />
+                : <Volume2Icon className="h-3 w-3" />
+              }
+              <span className={isElevenLabs ? "text-yellow-600 dark:text-yellow-400" : ""}>
+                {activeVoiceLabel}
+              </span>
+              {!isElevenLabs && <ChevronDownIcon className="h-3 w-3" />}
             </Button>
 
-            {voiceOpen && (
+            {/* Browser voice dropdown (only when not using ElevenLabs) */}
+            {voiceOpen && !isElevenLabs && (
               <div className="absolute right-0 top-7 z-50 w-72 rounded-md border bg-popover shadow-lg max-h-64 overflow-y-auto">
                 <div className="px-2 py-1.5 text-[10px] text-muted-foreground uppercase tracking-wide border-b">
                   English voices — click to preview · double-click to select
@@ -118,10 +131,9 @@ export const KrishnaChat = () => {
                         setVoiceOpen(false);
                       }}
                     >
-                      <span>{v.name}</span>
+                      <span>{v.name.replace("Microsoft ", "")}</span>
                       <span className="text-[10px] text-muted-foreground group-hover:text-foreground">
-                        {v.lang}
-                        {krishna.voice === v.name ? " ✓" : ""}
+                        {v.lang}{krishna.voice === v.name ? " ✓" : ""}
                       </span>
                     </div>
                   ))

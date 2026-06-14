@@ -30,6 +30,10 @@ export const STORAGE_KEYS = {
   KRISHNA_VOICE: "krishna_voice",
   KRISHNA_RATE: "krishna_rate",
   KRISHNA_LLM_FALLBACK: "krishna_llm_fallback",
+  KRISHNA_TTS_PROVIDER: "krishna_tts_provider",
+  KRISHNA_EL_API_KEY: "krishna_el_api_key",
+  KRISHNA_EL_VOICE_ID: "krishna_el_voice_id",
+  KRISHNA_EL_MODEL_ID: "krishna_el_model_id",
 } as const;
 
 // Maximum age for jobs shown in search results (days)

@@ -4,7 +4,7 @@ import { fetchAIResponse } from "@/lib/functions";
 import { parseActions, executeAction } from "@/lib/actions";
 import { executePlan, resolvePlaceholders } from "@/lib/executor";
 import { getToolDescriptions } from "@/lib/tools";
-import { getTTS } from "@/lib/tts";
+import { getTTS, getElevenLabsTTS, type TTSProvider } from "@/lib/tts";
 import { safeLocalStorage } from "@/lib";
 import { STORAGE_KEYS } from "@/config";
 import { setKrishnaSpeaking } from "@/lib/krishna-mutex";
@@ -46,6 +46,16 @@ interface KrishnaContextType {
   setRate: (v: number) => void;
   llmFallbackEnabled: boolean;
   setLlmFallbackEnabled: (v: boolean) => void;
+  ttsProvider: "browser" | "elevenlabs";
+  setTtsProvider: (p: "browser" | "elevenlabs") => void;
+  elApiKey: string;
+  setElApiKey: (k: string) => void;
+  elVoiceId: string;
+  setElVoiceId: (id: string) => void;
+  elVoiceName: string;
+  setElVoiceName: (name: string) => void;
+  elModelId: string;
+  setElModelId: (id: string) => void;
   conversationHistory: ConversationTurn[];
 }
 
@@ -184,7 +194,7 @@ function matchSkillPattern(command: string, skill: Skill): Record<string, string
 
 export function KrishnaProvider({ children }: { children: ReactNode }) {
   const { selectedAIProvider, allAiProviders } = useApp();
-  const ttsRef = useRef(getTTS());
+  const ttsRef = useRef<TTSProvider>(getTTS());
 
   const [enabled, setEnabled] = useState<boolean>(true);
   const [status, setStatus] = useState<AssistantStatus>("idle");
@@ -206,6 +216,57 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
     const stored = safeLocalStorage.getItem(STORAGE_KEYS.KRISHNA_RATE);
     return stored ? parseFloat(stored) : 1.0;
   });
+
+  // ElevenLabs TTS settings
+  const [ttsProvider, setTtsProviderState] = useState<"browser" | "elevenlabs">(() => {
+    return (safeLocalStorage.getItem(STORAGE_KEYS.KRISHNA_TTS_PROVIDER) as "browser" | "elevenlabs") || "browser";
+  });
+  const [elApiKey, setElApiKeyState] = useState<string>(() => {
+    return safeLocalStorage.getItem(STORAGE_KEYS.KRISHNA_EL_API_KEY) || "";
+  });
+  const [elVoiceId, setElVoiceIdState] = useState<string>(() => {
+    return safeLocalStorage.getItem(STORAGE_KEYS.KRISHNA_EL_VOICE_ID) || "21m00Tcm4TlvDq8ikWAM";
+  });
+  const [elVoiceName, setElVoiceNameState] = useState<string>(() => {
+    return safeLocalStorage.getItem("krishna_el_voice_name") || "Rachel";
+  });
+  const [elModelId, setElModelIdState] = useState<string>(() => {
+    return safeLocalStorage.getItem(STORAGE_KEYS.KRISHNA_EL_MODEL_ID) || "eleven_turbo_v2_5";
+  });
+
+  const elTtsRef = useRef(getElevenLabsTTS());
+
+  // Swap ttsRef when provider or EL config changes
+  useEffect(() => {
+    if (ttsProvider === "elevenlabs") {
+      elTtsRef.current.configure({ apiKey: elApiKey, voiceId: elVoiceId, modelId: elModelId });
+      ttsRef.current = elTtsRef.current;
+    } else {
+      ttsRef.current = getTTS();
+    }
+  }, [ttsProvider, elApiKey, elVoiceId, elModelId]);
+
+  const setTtsProvider = useCallback((p: "browser" | "elevenlabs") => {
+    setTtsProviderState(p);
+    safeLocalStorage.setItem(STORAGE_KEYS.KRISHNA_TTS_PROVIDER, p);
+  }, []);
+  const setElApiKey = useCallback((k: string) => {
+    setElApiKeyState(k);
+    safeLocalStorage.setItem(STORAGE_KEYS.KRISHNA_EL_API_KEY, k);
+  }, []);
+  const setElVoiceId = useCallback((id: string) => {
+    setElVoiceIdState(id);
+    safeLocalStorage.setItem(STORAGE_KEYS.KRISHNA_EL_VOICE_ID, id);
+  }, []);
+  const setElVoiceName = useCallback((name: string) => {
+    setElVoiceNameState(name);
+    safeLocalStorage.setItem("krishna_el_voice_name", name);
+  }, []);
+  const setElModelId = useCallback((id: string) => {
+    setElModelIdState(id);
+    safeLocalStorage.setItem(STORAGE_KEYS.KRISHNA_EL_MODEL_ID, id);
+  }, []);
+
   const abortRef = useRef<AbortController | null>(null);
   const historyRef = useRef<Message[]>([]);
 
@@ -1010,6 +1071,11 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
           voice, setVoice,
           rate, setRate,
           llmFallbackEnabled, setLlmFallbackEnabled: setLlmFallback,
+          ttsProvider, setTtsProvider,
+          elApiKey, setElApiKey,
+          elVoiceId, setElVoiceId,
+          elVoiceName, setElVoiceName,
+          elModelId, setElModelId,
           conversationHistory,
         }}
       >
