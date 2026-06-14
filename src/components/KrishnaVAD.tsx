@@ -7,7 +7,7 @@ import {
   BotIcon,
   AlertCircleIcon,
 } from "lucide-react";
-import { Button } from "@/components";
+import { Button, Popover, PopoverContent, PopoverTrigger } from "@/components";
 import { fetchSTT } from "@/lib";
 import { floatArrayToWav } from "@/lib/utils";
 import { useApp } from "@/contexts";
@@ -17,8 +17,8 @@ import { isKrishnaSpeaking } from "@/lib/krishna-mutex";
 
 export const KrishnaVAD = () => {
   const [isTranscribing, setIsTranscribing] = useState(false);
-  const { selectedSttProvider, allSttProviders, selectedAIProvider } =
-    useApp();
+  const [open, setOpen] = useState(false);
+  const { selectedSttProvider, allSttProviders, selectedAIProvider } = useApp();
   const krishna = useKrishna();
 
   const missingSTT = !selectedSttProvider.provider;
@@ -68,57 +68,94 @@ export const KrishnaVAD = () => {
   });
 
   const getIcon = () => {
-    if (missingProviders)
-      return <AlertCircleIcon className="h-4 w-4 text-orange-500" />;
+    if (missingProviders) return <AlertCircleIcon className="h-4 w-4 text-orange-500" />;
     if (isTranscribing || krishna.status === "thinking")
       return <LoaderCircleIcon className="h-4 w-4 animate-spin text-primary" />;
     if (krishna.status === "speaking")
       return <BotIcon className="h-4 w-4 text-green-500 animate-pulse" />;
     if (vad.userSpeaking)
-      return (
-        <LoaderCircleIcon className="h-4 w-4 animate-spin text-orange-400" />
-      );
+      return <LoaderCircleIcon className="h-4 w-4 animate-spin text-orange-400" />;
     if (vad.listening)
       return <MicIcon className="h-4 w-4 text-green-500 animate-pulse" />;
     return <MicOffIcon className="h-4 w-4 text-muted-foreground" />;
   };
 
   const getTitle = () => {
-    if (missingSTT) return "No speech provider — open Settings › Speech to add one";
-    if (missingAI) return "No AI provider — open Settings › Brain to add one";
+    if (missingSTT) return "No speech provider — open Settings › Speech";
+    if (missingAI) return "No AI provider — open Settings › Brain";
     if (isTranscribing) return "Transcribing...";
     if (krishna.status === "thinking") return "Krishna is thinking...";
     if (krishna.status === "speaking") return "Krishna is speaking";
     if (vad.userSpeaking) return "Listening...";
-    if (vad.listening) return "Say 'Hey Krishna...' — click to pause mic";
-    return "Mic paused — click to resume";
+    if (vad.listening) return "Listening — click to see conversations";
+    return "Mic paused";
   };
 
-  const handleClick = () => {
-    if (missingProviders) return;
-    if (vad.listening) {
-      vad.pause();
-    } else {
-      vad.start();
-    }
+  const formatTime = (ts: number) => {
+    return new Date(ts).toLocaleTimeString("en-IN", {
+      hour: "2-digit",
+      minute: "2-digit",
+      timeZone: "Asia/Kolkata",
+    });
   };
 
   return (
-    <Button
-      size="icon"
-      title={getTitle()}
-      onClick={handleClick}
-      className={
-        missingProviders
-          ? "bg-orange-50 hover:bg-orange-100"
-          : vad.userSpeaking
-          ? "bg-orange-50 hover:bg-orange-100"
-          : vad.listening
-          ? "bg-green-50 hover:bg-green-100"
-          : ""
-      }
-    >
-      {getIcon()}
-    </Button>
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          size="icon"
+          title={getTitle()}
+          className={
+            missingProviders
+              ? "bg-orange-50 hover:bg-orange-100"
+              : vad.userSpeaking
+              ? "bg-orange-50 hover:bg-orange-100"
+              : vad.listening
+              ? "bg-green-50 hover:bg-green-100"
+              : ""
+          }
+        >
+          {getIcon()}
+        </Button>
+      </PopoverTrigger>
+
+      <PopoverContent align="start" side="bottom" sideOffset={8} className="w-80 p-0">
+        <div className="flex items-center justify-between px-3 py-2 border-b">
+          <span className="text-sm font-semibold">Conversations</span>
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-6 text-xs text-muted-foreground"
+            onClick={() => {
+              if (vad.listening) vad.pause(); else vad.start();
+            }}
+          >
+            {vad.listening ? "Pause mic" : "Resume mic"}
+          </Button>
+        </div>
+
+        <div className="max-h-72 overflow-y-auto divide-y">
+          {krishna.conversationHistory.length === 0 ? (
+            <div className="px-3 py-6 text-center text-sm text-muted-foreground">
+              No conversations yet. Say "Hey Krishna…" to start.
+            </div>
+          ) : (
+            krishna.conversationHistory.map((turn) => (
+              <div key={turn.id} className="px-3 py-2 space-y-1">
+                <div className="flex items-start gap-2">
+                  <span className="text-xs font-medium text-primary mt-0.5">You</span>
+                  <p className="text-xs text-foreground flex-1">{turn.userText}</p>
+                  <span className="text-[10px] text-muted-foreground shrink-0">{formatTime(turn.timestamp)}</span>
+                </div>
+                <div className="flex items-start gap-2">
+                  <span className="text-xs font-medium text-green-600 mt-0.5">Krishna</span>
+                  <p className="text-xs text-muted-foreground flex-1">{turn.assistantText}</p>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      </PopoverContent>
+    </Popover>
   );
 };

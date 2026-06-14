@@ -24,6 +24,13 @@ import type { AssistantStatus, StepAction } from "@/types/assistant";
 import type { Skill } from "@/types/skill";
 import type { Message } from "@/types";
 
+export interface ConversationTurn {
+  id: string;
+  userText: string;
+  assistantText: string;
+  timestamp: number;
+}
+
 interface KrishnaContextType {
   enabled: boolean;
   setKrishnaEnabled: (v: boolean) => void;
@@ -37,6 +44,7 @@ interface KrishnaContextType {
   setRate: (v: number) => void;
   llmFallbackEnabled: boolean;
   setLlmFallbackEnabled: (v: boolean) => void;
+  conversationHistory: ConversationTurn[];
 }
 
 const KrishnaContext = createContext<KrishnaContextType | undefined>(undefined);
@@ -179,6 +187,13 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
   const [enabled, setEnabled] = useState<boolean>(true);
   const [status, setStatus] = useState<AssistantStatus>("idle");
   const [lastSpoken, setLastSpoken] = useState<string>("");
+  const [conversationHistory, setConversationHistory] = useState<ConversationTurn[]>(() => {
+    try {
+      const stored = safeLocalStorage.getItem("krishna_conversation_history");
+      return stored ? JSON.parse(stored) : [];
+    } catch { return []; }
+  });
+  const pendingUserTextRef = useRef<string>("");
   const [voice, setVoiceState] = useState<string>(() => {
     return safeLocalStorage.getItem(STORAGE_KEYS.KRISHNA_VOICE) || "";
   });
@@ -621,6 +636,7 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
       setStatus("thinking");
 
       const command = wakeResult.remainder || "hello";
+      pendingUserTextRef.current = command;
 
       if (!selectedAIProvider.provider) {
         setStatus("idle");
@@ -864,6 +880,17 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
         if (spokenText) {
           setStatus("speaking");
           setLastSpoken(spokenText);
+          const turn: ConversationTurn = {
+            id: String(Date.now()),
+            userText: pendingUserTextRef.current,
+            assistantText: spokenText,
+            timestamp: Date.now(),
+          };
+          setConversationHistory(prev => {
+            const updated = [turn, ...prev].slice(0, 100);
+            try { safeLocalStorage.setItem("krishna_conversation_history", JSON.stringify(updated)); } catch {}
+            return updated;
+          });
           setKrishnaSpeaking(true);
           try {
             await ttsRef.current.speak(spokenText);
@@ -972,6 +999,7 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
           voice, setVoice,
           rate, setRate,
           llmFallbackEnabled, setLlmFallbackEnabled: setLlmFallback,
+          conversationHistory,
         }}
       >
       {children}
