@@ -12,7 +12,6 @@ import {
 } from "@/components";
 import { UseCompletionReturn } from "@/types";
 import { MessageHistory } from "./MessageHistory";
-import { ProfileContextBanner } from "./ProfileContextBanner";
 
 export const Input = ({
   isPopoverOpen,
@@ -153,10 +152,6 @@ export const Input = ({
               </Button>
             </div>
           </div>
-
-          {/* Profile context indicator — reminds the user which Interview Profile's
-              resume + goals + docs are being injected into the system prompt. */}
-          <ProfileContextBanner />
 
           <ScrollArea ref={scrollAreaRef} className="h-[calc(100vh-7rem)]">
             <div className="p-4 overflow-x-hidden">

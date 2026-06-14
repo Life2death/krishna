@@ -11,7 +11,6 @@ import { Button } from "@/components";
 import { fetchSTT } from "@/lib";
 import { floatArrayToWav } from "@/lib/utils";
 import { useApp } from "@/contexts";
-import { shouldUseNaukriLeloAPI } from "@/lib/functions/naukri-lelo.api";
 import { useKrishna } from "@/hooks";
 import { isKrishnaSpeaking } from "@/lib/krishna-mutex";
 
@@ -36,17 +35,16 @@ export const KrishnaVAD = () => {
 
       try {
         const audioBlob = floatArrayToWav(audio, 16000, "wav");
-        const useNaukriLeloAPI = await shouldUseNaukriLeloAPI();
         const providerConfig = allSttProviders.find(
           (p) => p.id === selectedSttProvider.provider
         );
 
-        if (!providerConfig && !useNaukriLeloAPI) return;
+        if (!providerConfig) return;
 
         setIsTranscribing(true);
 
         const transcription = await fetchSTT({
-          provider: useNaukriLeloAPI ? undefined : providerConfig,
+          provider: providerConfig,
           selectedProvider: selectedSttProvider,
           audio: audioBlob,
         });

@@ -1,14 +1,16 @@
-import { NaukriLeloApiSetup, RecentJobs } from "./components";
 import { PageLayout } from "@/layouts";
 
 const Dashboard = () => {
   return (
     <PageLayout
       title="Dashboard"
-      description="Focus Assistant — configure your API keys to get started."
+      description="Krishna — your AI voice assistant"
     >
-      <NaukriLeloApiSetup />
-      <RecentJobs />
+      <div className="flex flex-col items-center justify-center py-12 text-center">
+        <p className="text-muted-foreground">
+          Welcome to Krishna. Use the sidebar to configure providers and settings.
+        </p>
+      </div>
     </PageLayout>
   );
 };

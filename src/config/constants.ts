@@ -13,19 +13,13 @@ export const STORAGE_KEYS = {
   SYSTEM_AUDIO_CONTEXT: "system_audio_context",
   SYSTEM_AUDIO_QUICK_ACTIONS: "system_audio_quick_actions",
   CUSTOMIZABLE: "customizable",
-  NAUKRI_LELO_API_ENABLED: "naukri_lelo_api_enabled",
   SHORTCUTS: "shortcuts",
   AUTOSTART_INITIALIZED: "autostart_initialized",
 
   SELECTED_AUDIO_DEVICES: "selected_audio_devices",
   RESPONSE_SETTINGS: "response_settings",
   SUPPORTS_IMAGES: "supports_images",
-  ACTIVE_PROFILE_ID: "active_profile_id",
   PROVIDER_VARIABLES: "curl_provider_variables",
-  JOB_PROVIDER: "job_provider",
-  JOB_HISTORY: "job_history",
-  JOB_SEARCH_SKILLS: "job_search_skills",
-  PROFILE_CONTEXT_SETTINGS: "profile_context_settings",
   KRISHNA_ENABLED: "krishna_enabled",
   KRISHNA_VOICE: "krishna_voice",
   KRISHNA_RATE: "krishna_rate",
@@ -35,11 +29,6 @@ export const STORAGE_KEYS = {
   KRISHNA_EL_VOICE_ID: "krishna_el_voice_id",
   KRISHNA_EL_MODEL_ID: "krishna_el_model_id",
 } as const;
-
-// Maximum age for jobs shown in search results (days)
-export const JOB_MAX_AGE_DAYS = 5;
-// History retention window (days)
-export const JOB_HISTORY_RETENTION_DAYS = 7;
 
 // Max number of files that can be attached to a message
 export const MAX_FILES = 6;

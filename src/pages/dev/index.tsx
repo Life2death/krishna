@@ -1,4 +1,4 @@
-import { AIProviders, STTProviders, JobDiscoveryConfig } from "./components";
+import { AIProviders, STTProviders } from "./components";
 import Contribute from "@/components/Contribute";
 import { useSettings } from "@/hooks";
 import { PageLayout } from "@/layouts";
@@ -14,9 +14,6 @@ const DevSpace = () => {
 
       {/* STT Providers */}
       <STTProviders {...settings} />
-
-      {/* Job Discovery Providers (Tavily / Serper) */}
-      <JobDiscoveryConfig />
     </PageLayout>
   );
 };

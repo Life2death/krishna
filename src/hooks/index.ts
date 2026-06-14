@@ -14,6 +14,5 @@ export * from "./useTitles";
 export * from "./useSystemPrompts";
 export * from "./useApp";
 export * from "./useMenuItems";
-export * from "./useProfiles";
 export * from "./useOpenRouterModels";
 export * from "./useKrishna";

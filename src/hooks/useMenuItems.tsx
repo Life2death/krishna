@@ -11,7 +11,6 @@ import {
   MailIcon,
   BugIcon,
   MessageSquareTextIcon,
-  UserCircle2Icon,
 } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
 import { useApp } from "@/contexts";
@@ -35,11 +34,6 @@ export const useMenuItems = () => {
       icon: MessagesSquare,
       label: "Chats",
       href: "/chats",
-    },
-    {
-      icon: UserCircle2Icon,
-      label: "Interview Profiles",
-      href: "/profiles",
     },
     {
       icon: WandSparkles,
@@ -85,18 +79,18 @@ export const useMenuItems = () => {
           {
             icon: MailIcon,
             label: "Contact Support",
-            href: "mailto:support@naukri-lelo.com",
+            href: "https://github.com/Life2death/krishna/issues",
           },
         ]
       : []),
     {
       icon: BugIcon,
       label: "Report a bug",
-      href: "https://github.com/Life2death/naukri-lelo/issues/new?template=bug-report.yml",
+      href: "https://github.com/Life2death/krishna/issues/new?template=bug-report.yml",
     },
     {
       icon: PowerIcon,
-      label: "Quit Focus Assistant",
+      label: "Quit Krishna",
       action: async () => {
         await invoke("exit_app");
       },
@@ -111,7 +105,7 @@ export const useMenuItems = () => {
     {
       title: "GitHub",
       icon: GithubIcon,
-      link: "https://github.com/Life2death/naukri-lelo",
+      link: "https://github.com/Life2death/krishna",
     },
   ];
 

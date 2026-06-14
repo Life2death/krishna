@@ -11,9 +11,6 @@ import {
   Screenshot,
   Chats,
   Responses,
-  Profiles,
-  PrepSession,
-  Jobs,
 } from "@/pages";
 import { DashboardLayout } from "@/layouts";
 
@@ -33,9 +30,6 @@ export default function AppRoutes() {
           <Route path="/audio" element={<Audio />} />
           <Route path="/responses" element={<Responses />} />
           <Route path="/dev-space" element={<DevSpace />} />
-          <Route path="/profiles" element={<Profiles />} />
-          <Route path="/profiles/:id/prep" element={<PrepSession />} />
-          <Route path="/profiles/:id/jobs" element={<Jobs />} />
         </Route>
       </Routes>
     </Router>

@@ -5,7 +5,7 @@ import { safeLocalStorage } from "@/lib/storage";
 
 import { Button, Card, CardContent, CardDescription, CardTitle } from "./ui";
 
-const STORAGE_KEY = "naukri-lelo-promote-card-dismissed";
+const STORAGE_KEY = "krishna-promote-card-dismissed";
 
 const Promote = () => {
   // Always show promotion card since app is free
@@ -25,16 +25,16 @@ const Promote = () => {
       <CardContent className="flex flex-col gap-4 p-4 py-0 md:flex-row md:items-center md:justify-between">
         <div className="space-y-2 md:max-w-[70%]">
           <CardTitle className="text-xs lg:text-sm">
-            Support Focus Assistant
+            Support Krishna
           </CardTitle>
           <CardDescription className="text-[10px] lg:text-xs">
-            Share Focus Assistant and help others discover this free,
-            open-source productivity tool. Star us on GitHub!
+            Share Krishna and help others discover this free,
+            open-source AI assistant. Star us on GitHub!
           </CardDescription>
         </div>
         <Button asChild className="w-full md:w-auto text-[10px] lg:text-xs">
           <a
-            href="https://github.com/Life2death/naukri-lelo"
+            href="https://github.com/Life2death/krishna"
             rel="noopener noreferrer"
             target="_blank"
           >

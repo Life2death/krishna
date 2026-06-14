@@ -149,24 +149,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     safeLocalStorage.setItem(STORAGE_KEYS.SUPPORTS_IMAGES, String(value));
   };
 
-  // Active Interview Profile
-  const [activeProfileId, setActiveProfileIdState] = useState<string | null>(
-    safeLocalStorage.getItem(STORAGE_KEYS.ACTIVE_PROFILE_ID) || null
-  );
-
-  const setActiveProfileId = (id: string | null) => {
-    setActiveProfileIdState(id);
-    if (id) {
-      safeLocalStorage.setItem(STORAGE_KEYS.ACTIVE_PROFILE_ID, id);
-    } else {
-      safeLocalStorage.removeItem(STORAGE_KEYS.ACTIVE_PROFILE_ID);
-    }
-  };
-
-  // Naukri Lelo API State
-  const [naukriLeloApiEnabled, setNaukriLeloApiEnabledState] = useState<boolean>(
-    safeLocalStorage.getItem(STORAGE_KEYS.NAUKRI_LELO_API_ENABLED) === "true"
-  );
+  // Naukri Lelo is fully free — no license validation needed
 
   // Naukri Lelo is fully free — no license validation needed
   const getActiveLicenseStatus = async () => {
@@ -342,14 +325,6 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       }
     }
 
-    // Load Naukri Lelo API enabled state
-    const savedNaukriLeloApiEnabled = safeLocalStorage.getItem(
-      STORAGE_KEYS.NAUKRI_LELO_API_ENABLED
-    );
-    if (savedNaukriLeloApiEnabled !== null) {
-      setNaukriLeloApiEnabledState(savedNaukriLeloApiEnabled === "true");
-    }
-
     // Load selected audio devices
     const savedAudioDevices = safeLocalStorage.getItem(
       STORAGE_KEYS.SELECTED_AUDIO_DEVICES
@@ -499,10 +474,6 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         setSupportsImagesState(e.newValue === "true");
       }
 
-      if (e.key === STORAGE_KEYS.ACTIVE_PROFILE_ID) {
-        setActiveProfileIdState(e.newValue || null);
-      }
-
       if (
         e.key === STORAGE_KEYS.CUSTOM_AI_PROVIDERS ||
         e.key === STORAGE_KEYS.SELECTED_AI_PROVIDER ||
@@ -523,41 +494,16 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
 
   // Check if the current AI provider/model supports images
   useEffect(() => {
-    const checkImageSupport = async () => {
-      if (naukriLeloApiEnabled) {
-        // For Naukri Lelo API, check the selected model's modality
-        try {
-          const storage = await invoke<{
-            selected_model?: string;
-          }>("secure_storage_get");
-
-          if (storage.selected_model) {
-            const model = JSON.parse(storage.selected_model);
-            const hasImageSupport = model.modality?.includes("image") ?? false;
-            setSupportsImages(hasImageSupport);
-          } else {
-            // No model selected, assume no image support
-            setSupportsImages(false);
-          }
-        } catch (error) {
-          setSupportsImages(false);
-        }
-      } else {
-        // For custom AI providers, check if curl contains {{IMAGE}}
-        const provider = allAiProviders.find(
-          (p) => p.id === selectedAIProvider.provider
-        );
-        if (provider) {
-          const hasImageSupport = provider.curl?.includes("{{IMAGE}}") ?? false;
-          setSupportsImages(hasImageSupport);
-        } else {
-          setSupportsImages(true);
-        }
-      }
-    };
-
-    checkImageSupport();
-  }, [naukriLeloApiEnabled, selectedAIProvider.provider]);
+    const provider = allAiProviders.find(
+      (p) => p.id === selectedAIProvider.provider
+    );
+    if (provider) {
+      const hasImageSupport = provider.curl?.includes("{{IMAGE}}") ?? false;
+      setSupportsImages(hasImageSupport);
+    } else {
+      setSupportsImages(true);
+    }
+  }, [selectedAIProvider.provider]);
 
   // Sync selected AI to localStorage
   useEffect(() => {
@@ -612,15 +558,13 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     }
 
     // Update supportsImages immediately when provider changes
-    if (!naukriLeloApiEnabled) {
-      const selectedProvider = allAiProviders.find((p) => p.id === provider);
-      if (selectedProvider) {
-        const hasImageSupport =
-          selectedProvider.curl?.includes("{{IMAGE}}") ?? false;
-        setSupportsImages(hasImageSupport);
-      } else {
-        setSupportsImages(true);
-      }
+    const selectedProvider = allAiProviders.find((p) => p.id === provider);
+    if (selectedProvider) {
+      const hasImageSupport =
+        selectedProvider.curl?.includes("{{IMAGE}}") ?? false;
+      setSupportsImages(hasImageSupport);
+    } else {
+      setSupportsImages(true);
     }
 
     // Per-provider variable persistence:
@@ -710,44 +654,6 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     loadData();
   };
 
-  const setNaukriLeloApiEnabled = async (enabled: boolean) => {
-    setNaukriLeloApiEnabledState(enabled);
-    safeLocalStorage.setItem(STORAGE_KEYS.NAUKRI_LELO_API_ENABLED, String(enabled));
-
-    if (enabled) {
-      try {
-        const storage = await invoke<{
-          selected_model?: string;
-        }>("secure_storage_get");
-
-        if (storage.selected_model) {
-          const model = JSON.parse(storage.selected_model);
-          const hasImageSupport = model.modality?.includes("image") ?? false;
-          setSupportsImages(hasImageSupport);
-        } else {
-          // No model selected, assume no image support
-          setSupportsImages(false);
-        }
-      } catch (error) {
-        console.debug("Failed to check Naukri Lelo model image support:", error);
-        setSupportsImages(false);
-      }
-    } else {
-      // Switching to regular provider - check if curl contains {{IMAGE}}
-      const provider = allAiProviders.find(
-        (p) => p.id === selectedAIProvider.provider
-      );
-      if (provider) {
-        const hasImageSupport = provider.curl?.includes("{{IMAGE}}") ?? false;
-        setSupportsImages(hasImageSupport);
-      } else {
-        setSupportsImages(true);
-      }
-    }
-
-    loadData();
-  };
-
   // Create the context value (extend IContextType accordingly)
   const value: IContextType = {
     systemPrompt,
@@ -768,8 +674,6 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     toggleAlwaysOnTop,
     toggleAutostart,
     loadData,
-    naukriLeloApiEnabled,
-    setNaukriLeloApiEnabled,
     hasActiveLicense,
     setHasActiveLicense,
     getActiveLicenseStatus,
@@ -778,8 +682,6 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     setCursorType,
     supportsImages,
     setSupportsImages,
-    activeProfileId,
-    setActiveProfileId,
   };
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
