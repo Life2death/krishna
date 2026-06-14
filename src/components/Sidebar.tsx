@@ -19,12 +19,12 @@ export const Sidebar = () => {
       >
         <div className="flex size-6 lg:size-7 items-center justify-center rounded-lg bg-primary shrink-0">
           <span className="text-xs lg:text-sm font-black text-primary-foreground leading-none tracking-tight select-none">
-            F
+            K
           </span>
         </div>
         <div className="flex flex-col">
           <h1 className="text-xs lg:text-md font-semibold text-foreground transition-all duration-300">
-            Focus Assistant
+            Krishna
           </h1>
           <span className="text-[8px] lg:text-[10px] text-muted-foreground -mt-1 block">
             {isLoading ? "Loading..." : `(v${version})`}

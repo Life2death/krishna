@@ -23,7 +23,7 @@ export const CursorSelection = ({ className }: CursorSelectionProps) => {
     <div id="cursor" className={`space-y-2 ${className}`}>
       <Header
         title="Cursor"
-        description="Control Naukri Lelo cursor visibility"
+        description="Control Krishna cursor visibility"
         isMainTitle
         rightSlot={
           <Select

@@ -1,32 +1,47 @@
-# Focus Assistant — Changelog & Application Notes
+# Krishna — Changelog & Application Notes
 
-> A free, open-source productivity assistant. Built on **Tauri 2** (Rust
+> A free, open-source AI voice assistant. Built on **Tauri 2** (Rust
 > backend) + **React 19 + TypeScript + Vite 7** (frontend) with **Shadcn UI
-> + Tailwind 4** styling. Local-first — your resume and API keys never
+> + Tailwind 4** styling. Local-first — your API keys never
 > leave your machine.
 >
-> _Previously branded **Naukri Lelo** through v2.1.2. The application binary,
-> Windows installer, Task Manager entry, and visible UI are all
-> "Focus Assistant" from v2.1.3 onward. The GitHub repository remains
-> `naukri-lelo-v2` for continuity of issue history and release URLs._
+> _Previously branded **Naukri Lelo** (interview assistant), then **Focus Assistant**.
+> Now rebranded as **Krishna** — a pure voice AI desktop assistant._
+
+---
+
+---
+
+## v1.1.0 (2026-06-14) — Interview features removed, full Krishna rebrand
+
+**What changed:**
+- Removed Interview Profiles, Job search/discovery, and Naukri-Lelo API mode
+- Stripped all interview-prep context injection from AI prompts
+- Rebranded all user-facing strings from "Focus Assistant" / "Naukri Lelo" to "Krishna"
+- Removed 25+ files, updated 6 barrel exports, cleaned up config keys
+- Cleared the two interview prompt presets from the Templates dropdown
+- Updated documentation (CHANGELOG, README, PROJECT_STRUCTURE)
+
+**Verification:**
+- `npx tsc --noEmit` clean (except pre-existing `minSpeechFrames` error)
+- 164/164 tests pass
+- Zero grep matches for `interview`, `Naukri Lelo`, `Focus Assistant` in `src/`
 
 ---
 
 ## What this app does today
 
-| Page              | Purpose                                                                                                                            |
-| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| Dashboard         | Configure the free OpenRouter / Groq API keys + see **Recent Job Activity** across all profiles                                    |
-| Chats             | Browse past interview-prep conversations                                                                                           |
-| Interview Profiles| Create/edit profiles (resume + goals). Each card has **Start Prep** and **Find Jobs** buttons                                       |
-| Find Jobs         | Per-profile job search via Tavily or Serper, AI-scored against your resume, with skill chip editor + history                       |
-| System Prompts    | Manage prompt library for the AI                                                                                                   |
-| Dev Space         | API key configuration for: AI providers (LLMs), STT providers (speech), and **Job Discovery** (Tavily + Serper with active toggle) |
-| Settings          | Theme, transparency, autostart                                                                                                     |
-| Responses         | Configure response length & language                                                                                               |
-| Screenshot        | Stealth screen-capture for invisible interview help                                                                                |
-| Audio             | System audio devices & transcription settings                                                                                      |
-| Shortcuts         | Global keyboard shortcuts + cursor settings                                                                                        |
+| Page         | Purpose                                                                 |
+|--------------|-------------------------------------------------------------------------|
+| Dashboard    | Configure AI + STT API keys and view usage                              |
+| Chats        | Browse past conversations                                                |
+| System Prompts | Manage prompt library for the AI                                      |
+| Dev Space    | API key configuration for AI providers (LLMs) and STT providers (speech) |
+| Settings     | Theme, transparency, autostart, Krishna assistant config                 |
+| Responses    | Configure response length & language                                    |
+| Screenshot   | Stealth screen-capture for AI screenshot analysis                        |
+| Audio        | System audio devices & transcription settings                            |
+| Shortcuts    | Global keyboard shortcuts + cursor settings                             |
 
 ### How the Find Jobs flow works
 
