@@ -100,6 +100,11 @@ describe("parseRememberCommand", () => {
   it("returns null when value is empty", () => {
     expect(parseRememberCommand("remember my key is")).toBeNull();
   });
+
+  it("returns null when key after 'as' contains a URL (defer to LLM)", () => {
+    const result = parseRememberCommand("save this url as jobs https://job-hunter-x5l1.onrender.com/");
+    expect(result).toBeNull();
+  });
 });
 
 describe("buildMemoryPrompt", () => {

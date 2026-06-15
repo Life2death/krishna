@@ -24,6 +24,8 @@ export function parseRememberCommand(command: string): { key: string | null; val
     const value = asMatch[1].trim();
     const key = asMatch[2].trim();
     if (!value) return null;
+    // If key contains a URL, don't eat it — let the LLM handle this case
+    if (/:\/\//.test(key)) return null;
     return { key: key || null, value };
   }
 
