@@ -128,9 +128,9 @@ const KRISHNA_SYSTEM_PROMPT = [
   '4. Use ${variable} placeholders to pass outputs between steps.',
   '5. For "play X on YouTube", prefer composing the URL directly: open_target with "https://www.youtube.com/results?search_query=<query>"',
   '6. NEVER do a 2-step "open terminal then type into it" plan — there is no tool to type into a terminal after it opens.',
-  '7. "Open VS Code", "open code", "open code in a terminal", "launch VS Code" → ALL mean the same thing: ONE open_target action with target "code". Do NOT open cmd first.',
-  '8. "Open VS Code at path X" or "open my repo in VS Code" → run_shell_command with command "code X" (opens VS Code directly at that folder, requires confirmation).',
-  '9. "Open a terminal" or "open command prompt" → open_target with target "cmd". Krishna cannot type into it afterwards.',
+'7. "Open VS Code", "open code", "open code in a terminal", "launch VS Code" → ALL mean the same thing: ONE open_target action with target "code". Do NOT open cmd first.',
+'8. "Open VS Code at path X" or "open my repo in VS Code" → open_target with target "code" and args path (opens VS Code directly at that folder).',
+'9. "Open a terminal" or "open command prompt" → open_target with target "cmd". Krishna cannot type into it afterwards.',
 ].join("\n");
 
 // ---- Skill pattern helpers ----
@@ -953,15 +953,51 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
         for (const skill of skills) {
           const vars = matchSkillPattern(command, skill);
           if (vars !== null) {
+            const rawSteps: StepAction[] = JSON.parse(skill.planTemplate);
+            const steps: StepAction[] = rawSteps.map(step => ({
+              ...step,
+              args: Object.fromEntries(
+                Object.entries(step.args).map(([k, v]) => [k, resolvePlaceholders(v, vars)])
+              ),
+            }));
+
+            // Require confirmation if any step opens a URL or file path
+            const hasSensitiveStep = steps.some(s =>
+              s.tool === "open_target" && (
+                s.args.target?.startsWith("http://") ||
+                s.args.target?.startsWith("https://") ||
+                s.args.target?.includes("/") ||
+                s.args.target?.includes("\\")
+              )
+            );
+            if (hasSensitiveStep) {
+              pendingConfirmationRef.current = {
+                type: "plan",
+                spokenResponse: "Should I run the skill \"" + skill.name + "\"?",
+                steps,
+                input: command,
+              };
+              reAskRef.current = false;
+              clearConfirmTimeout();
+              confirmTimeoutRef.current = setTimeout(() => {
+                pendingConfirmationRef.current = null;
+                reAskRef.current = false;
+                setStatus("idle");
+                ttsRef.current.speak("I'll take that as a no.");
+              }, 15000);
+              setStatus("confirming");
+              setLastSpoken("Should I run the skill \"" + skill.name + "\"?");
+              setKrishnaSpeaking(true);
+              try {
+                await ttsRef.current.speak("Should I run the skill \"" + skill.name + "\"?");
+              } finally {
+                setKrishnaSpeaking(false);
+              }
+              return;
+            }
+
             setStatus("thinking");
             try {
-              const rawSteps: StepAction[] = JSON.parse(skill.planTemplate);
-              const steps: StepAction[] = rawSteps.map(step => ({
-                ...step,
-                args: Object.fromEntries(
-                  Object.entries(step.args).map(([k, v]) => [k, resolvePlaceholders(v, vars)])
-                ),
-              }));
               const result = await executePlan(steps);
               await updateSkillUseCount(skill.id);
               if (result.success) {

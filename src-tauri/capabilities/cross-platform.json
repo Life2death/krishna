@@ -31,6 +31,7 @@
     "core:window:allow-start-dragging",
     "sql:default",
     "sql:allow-select",
+    "sql:allow-execute",
     "posthog:default",
     "posthog:allow-capture",
     "autostart:allow-enable",
@@ -43,7 +44,8 @@
         { "url": "https://api.elevenlabs.io/**" },
         { "url": "https://www.googleapis.com/**" },
         { "url": "https://app.posthog.com/**" }
-      ]
+      ],
+      "note": "When adding a new LLM/STT/TTS provider, add its API host URL here AND add the host to CSP connect-src in tauri.conf.json"
     }
   ]
 }

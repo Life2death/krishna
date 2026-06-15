@@ -1,7 +1,6 @@
 import { openTargetTool } from "./open-target";
 import { youtubeSearchTool } from "./youtube-search";
 import { webSearchTool } from "./web-search";
-import { runShellCommandTool } from "./run-shell-command";
 
 export interface Tool {
   name: string;
@@ -36,7 +35,6 @@ function register(tool: Tool): void {
 register(openTargetTool);
 register(youtubeSearchTool);
 register(webSearchTool);
-register(runShellCommandTool);
 
 export function getTool(name: string): Tool | undefined {
   return tools.get(name);

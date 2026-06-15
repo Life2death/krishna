@@ -5,6 +5,7 @@ import {
   STORAGE_KEYS,
 } from "@/config";
 import { getPlatform, safeLocalStorage, trackAppStart } from "@/lib";
+import { secureStorage } from "@/lib/secure-storage";
 import { getShortcutsConfig } from "@/lib/storage";
 import {
   getCustomizableState,
@@ -246,6 +247,17 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         parsed.variables.model = "meta-llama/llama-3.3-70b-instruct:free";
       }
       setSelectedAIProvider(parsed);
+      // Resolve api_key from encrypted storage
+      if (parsed.provider) {
+        secureStorage.get(`provider_${parsed.provider}_api_key`).then((key) => {
+          if (key) {
+            setSelectedAIProvider((prev) => ({
+              ...prev,
+              variables: { ...prev.variables, api_key: key },
+            }));
+          }
+        });
+      }
     } else {
       // First-time user: default to OpenRouter with a free model pre-selected
       // Users only need to paste their free API key from openrouter.ai/keys
@@ -291,7 +303,19 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       STORAGE_KEYS.SELECTED_STT_PROVIDER
     );
     if (savedSelectedStt) {
-      setSelectedSttProvider(JSON.parse(savedSelectedStt));
+      const parsed = JSON.parse(savedSelectedStt);
+      setSelectedSttProvider(parsed);
+      // Resolve api_key from encrypted storage
+      if (parsed.provider) {
+        secureStorage.get(`stt_provider_${parsed.provider}_api_key`).then((key) => {
+          if (key) {
+            setSelectedSttProvider((prev) => ({
+              ...prev,
+              variables: { ...prev.variables, api_key: key },
+            }));
+          }
+        });
+      }
     } else {
       // First-time user: default to Groq (free tier, no credit card required)
       // Users only need to paste their free API key from console.groq.com
@@ -339,6 +363,19 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         console.warn("Failed to parse selected audio devices");
       }
     }
+
+    // One-time migration: copy legacy plaintext keys from localStorage to secureStorage
+    const migrateLegacyKey = async (legacyKey: string, secureKey: string) => {
+      const existingSecure = await secureStorage.get(secureKey);
+      if (!existingSecure) {
+        const legacyValue = safeLocalStorage.getItem(legacyKey);
+        if (legacyValue) {
+          await secureStorage.set(secureKey, legacyValue);
+          safeLocalStorage.removeItem(legacyKey);
+        }
+      }
+    };
+    migrateLegacyKey(STORAGE_KEYS.KRISHNA_EL_API_KEY, STORAGE_KEYS.KRISHNA_EL_API_KEY);
   };
 
   const updateCursor = (type: CursorType | undefined) => {
@@ -570,11 +607,25 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     // Per-provider variable persistence:
     // - If variables are provided (non-empty), use them and save to the map
     // - If variables is empty (switch/restore), look up saved vars for this provider
+    // - API keys are stored in secureStorage (encrypted), not localStorage
     const hasExplicitVars =
       variables && Object.keys(variables).length > 0;
     const resolvedVars = hasExplicitVars
       ? variables
       : providerVariables[provider] ?? {};
+
+    // Resolve api_key from secureStorage if not in explicit vars
+    if (!resolvedVars.api_key && provider) {
+      secureStorage.get(`provider_${provider}_api_key`).then((key) => {
+        if (key) {
+          setSelectedAIProvider((prev) => ({
+            ...prev,
+            provider,
+            variables: { ...resolvedVars, api_key: key },
+          }));
+        }
+      });
+    }
 
     setSelectedAIProvider((prev) => ({
       ...prev,
@@ -582,12 +633,16 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       variables: resolvedVars,
     }));
 
-    // Persist explicit variables to provider map
+    // Persist non-secret variables to provider map; store api_key in encrypted storage
     if (hasExplicitVars && provider) {
+      const { api_key, ...safeVars } = variables;
       setProviderVariables((prev) => ({
         ...prev,
-        [provider]: variables,
+        [provider]: safeVars,
       }));
+      if (api_key) {
+        secureStorage.set(`provider_${provider}_api_key`, api_key);
+      }
     }
   };
 
@@ -604,7 +659,12 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       return;
     }
 
-    setSelectedSttProvider((prev) => ({ ...prev, provider, variables }));
+    // Store api_key in encrypted storage
+    const { api_key, ...safeVars } = variables;
+    if (api_key && provider) {
+      secureStorage.set(`stt_provider_${provider}_api_key`, api_key);
+    }
+    setSelectedSttProvider((prev) => ({ ...prev, provider, variables: safeVars }));
   };
 
   // Toggle handlers
