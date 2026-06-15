@@ -25,6 +25,7 @@ export type IContextType = {
     provider: string;
     variables: Record<string, string>;
   };
+  sttProviderVariables: Record<string, Record<string, string>>;
   onSetSelectedSttProvider: ({
     provider,
     variables,

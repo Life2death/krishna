@@ -126,6 +126,11 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     variables: {},
   });
 
+  // Per-provider STT variable persistence (model + other non-key vars saved per provider)
+  const [sttProviderVariables, setSttProviderVariables] = useState<
+    Record<string, Record<string, string>>
+  >({});
+
   const [screenshotConfiguration, setScreenshotConfiguration] =
     useState<ScreenshotConfig>({
       mode: "manual",
@@ -295,6 +300,21 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
             }));
           }
         } catch {}
+      }
+    }
+
+    // Load per-STT-provider variable persistence map
+    const savedSttProviderVars = safeLocalStorage.getItem(
+      STORAGE_KEYS.STT_PROVIDER_VARIABLES
+    );
+    if (savedSttProviderVars) {
+      try {
+        const parsed = JSON.parse(savedSttProviderVars);
+        if (typeof parsed === "object" && parsed !== null) {
+          setSttProviderVariables(parsed);
+        }
+      } catch {
+        console.warn("Failed to parse STT provider variables map");
       }
     }
 
@@ -570,6 +590,14 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     }
   }, [selectedSttProvider]);
 
+  // Sync STT provider variables map to localStorage
+  useEffect(() => {
+    safeLocalStorage.setItem(
+      STORAGE_KEYS.STT_PROVIDER_VARIABLES,
+      JSON.stringify(sttProviderVariables)
+    );
+  }, [sttProviderVariables]);
+
   // Computed all AI providers
   const allAiProviders: TYPE_PROVIDER[] = [
     ...AI_PROVIDERS,
@@ -659,12 +687,39 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       return;
     }
 
-    // Store api_key in encrypted storage
-    const { api_key, ...safeVars } = variables;
-    if (api_key && provider) {
-      secureStorage.set(`stt_provider_${provider}_api_key`, api_key);
+    // Per-provider variable persistence (mirrors AI provider pattern):
+    // - Explicit vars supplied → use them and save to map
+    // - Empty vars (provider switch) → restore saved vars for this provider
+    const hasExplicitVars = variables && Object.keys(variables).length > 0;
+    const resolvedVars = hasExplicitVars
+      ? variables
+      : sttProviderVariables[provider] ?? {};
+
+    // Resolve api_key from secureStorage if not in explicit vars
+    if (!resolvedVars.api_key && provider) {
+      secureStorage.get(`stt_provider_${provider}_api_key`).then((key) => {
+        if (key) {
+          setSelectedSttProvider((prev) => ({
+            ...prev,
+            variables: { ...prev.variables, api_key: key },
+          }));
+        }
+      });
     }
-    setSelectedSttProvider((prev) => ({ ...prev, provider, variables: safeVars }));
+
+    setSelectedSttProvider((prev) => ({ ...prev, provider, variables: resolvedVars }));
+
+    // Persist non-secret variables to provider map; store api_key in encrypted storage
+    if (hasExplicitVars && provider) {
+      const { api_key, ...safeVars } = variables;
+      setSttProviderVariables((prev) => ({
+        ...prev,
+        [provider]: safeVars,
+      }));
+      if (api_key) {
+        secureStorage.set(`stt_provider_${provider}_api_key`, api_key);
+      }
+    }
   };
 
   // Toggle handlers
@@ -726,6 +781,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     allSttProviders,
     customSttProviders,
     selectedSttProvider,
+    sttProviderVariables,
     onSetSelectedSttProvider,
     screenshotConfiguration,
     setScreenshotConfiguration,

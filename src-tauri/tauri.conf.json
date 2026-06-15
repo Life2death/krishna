@@ -29,7 +29,7 @@
         "shadow": false
       }
     ],
-    "security": { "csp": "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' https://api.groq.com https://api.elevenlabs.io https://www.googleapis.com https://app.posthog.com https://cdn.jsdelivr.net; font-src 'self'; media-src 'self'; object-src 'none'; frame-src 'none'; base-uri 'self'", "freezePrototype": true, "note": "If adding a new LLM/STT provider, add its API host to CSP connect-src above AND to the http: capability in capabilities/*.json" }
+    "security": { "csp": "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' https://api.groq.com https://api.elevenlabs.io https://www.googleapis.com https://app.posthog.com https://cdn.jsdelivr.net; font-src 'self'; media-src 'self'; object-src 'none'; frame-src 'none'; base-uri 'self'", "devCsp": "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' ws: http://localhost:* https://api.groq.com https://api.elevenlabs.io https://www.googleapis.com https://app.posthog.com https://cdn.jsdelivr.net; font-src 'self'; media-src 'self'; object-src 'none'; base-uri 'self'" }
   },
   "bundle": {
     "active": true,

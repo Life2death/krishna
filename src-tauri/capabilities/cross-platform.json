@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "cross-platform",
-  "description": "Capability for the main window on Windows and Linux",
+  "description": "Capability for the main window on Windows and Linux. NOTE: when adding a new LLM/STT/TTS provider, add its API host to the http: scope below AND to CSP connect-src in tauri.conf.json.",
   "windows": ["main", "dashboard"],
   "platforms": ["windows", "linux"],
   "permissions": [
@@ -44,8 +44,7 @@
         { "url": "https://api.elevenlabs.io/**" },
         { "url": "https://www.googleapis.com/**" },
         { "url": "https://app.posthog.com/**" }
-      ],
-      "note": "When adding a new LLM/STT/TTS provider, add its API host URL here AND add the host to CSP connect-src in tauri.conf.json"
+      ]
     }
   ]
 }

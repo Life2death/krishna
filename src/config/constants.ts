@@ -20,6 +20,7 @@ export const STORAGE_KEYS = {
   RESPONSE_SETTINGS: "response_settings",
   SUPPORTS_IMAGES: "supports_images",
   PROVIDER_VARIABLES: "curl_provider_variables",
+  STT_PROVIDER_VARIABLES: "curl_stt_provider_variables",
   KRISHNA_ENABLED: "krishna_enabled",
   KRISHNA_VOICE: "krishna_voice",
   KRISHNA_RATE: "krishna_rate",
