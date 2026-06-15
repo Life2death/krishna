@@ -1,4 +1,4 @@
-import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
+import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
 import {
   Dashboard,
   App,
@@ -26,6 +26,10 @@ export default function AppRoutes() {
           <Route path="/settings" element={<Settings />} />
           <Route path="/audio" element={<Audio />} />
           <Route path="/dev-space" element={<DevSpace />} />
+          {/* Redirect removed routes (merged in Phase 7) so stale persisted URLs don't render blank */}
+          <Route path="/chats" element={<Navigate to="/dashboard" replace />} />
+          <Route path="/responses" element={<Navigate to="/settings" replace />} />
+          <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Route>
       </Routes>
     </Router>
