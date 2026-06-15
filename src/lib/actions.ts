@@ -4,8 +4,8 @@ import { resolveAppAlias, isUrl, isFilePath } from "@/config/app-aliases";
 import { resolveTarget, saveAndConfirm, needsConfirmation } from "@/lib/resolver";
 import type { ResolveResult } from "@/lib/resolver";
 
-const ACTION_REGEX = /```action\n([\s\S]*?)```/;
-const JSON_BLOCK_REGEX = /```json\n([\s\S]*?)```/;
+const ACTION_REGEX = /```action\n([\s\S]*?)```/g;
+const JSON_BLOCK_REGEX = /```json\n([\s\S]*?)```/g;
 const PLAN_REGEX = /```plan\n([\s\S]*?)```/;
 
 export function parseActions(reply: string): ParsedReply {
@@ -39,30 +39,21 @@ export function parseActions(reply: string): ParsedReply {
   }
 
   if (!plan) {
-    const actionMatch = reply.match(ACTION_REGEX);
-    if (actionMatch) {
+    // Collect all action blocks (both ```action and ```json)
+    const allBlocks = [...reply.matchAll(ACTION_REGEX), ...reply.matchAll(JSON_BLOCK_REGEX)];
+    for (const match of allBlocks) {
       try {
-        const parsed = JSON.parse(actionMatch[1].trim());
+        const parsed = JSON.parse(match[1].trim());
         if (parsed && parsed.action === "open" && parsed.target) {
           actions.push({ action: "open", target: parsed.target });
+        }
+        if (parsed && parsed.action === "remember" && parsed.value) {
+          actions.push({ action: "remember", key: parsed.key ?? null, value: parsed.value });
         }
       } catch {
         // Not valid JSON, ignore
       }
-      spokenText = spokenText.replace(actionMatch[0], "").trim();
-    }
-
-    const jsonMatch = reply.match(JSON_BLOCK_REGEX);
-    if (jsonMatch) {
-      try {
-        const parsed = JSON.parse(jsonMatch[1].trim());
-        if (parsed && parsed.action === "open" && parsed.target) {
-          actions.push({ action: "open", target: parsed.target });
-        }
-      } catch {
-        // Not valid JSON, ignore
-      }
-      spokenText = spokenText.replace(jsonMatch[0], "").trim();
+      spokenText = spokenText.replace(match[0], "").trim();
     }
   }
 

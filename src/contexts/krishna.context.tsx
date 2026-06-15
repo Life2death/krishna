@@ -91,6 +91,18 @@ const KRISHNA_SYSTEM_PROMPT = [
   '- For URLs, just use the URL as target (e.g., "https://youtube.com").',
   '- Always output the action block for any app the user asks to open -- even if you don\'t recognize it. The system will auto-resolve unknown apps.',
   '',
+  'MEMORY & REMEMBER:',
+  '- You have persistent, on-device long-term memory. You CAN remember facts across sessions.',
+  '- When the user asks you to remember / save / note something (a URL, name, preference, ID), append a memory action block:',
+  '```action',
+  '{"action":"remember","key":"<short label or null>","value":"<the exact fact to store>"}',
+  '```',
+  '- The JSON "key" is a short label (e.g. "jobs url", "my name"), or null if no label given.',
+  '- The JSON "value" is the exact fact to store (e.g. a full URL, a name, a preference).',
+  '- The block will NOT be read aloud -- it is only used to trigger the save.',
+  '- NEVER claim you cannot remember or that memory only lasts this session. The save is confirmed with the user before storing.',
+  '- Already-known facts are listed under "Things I know about the user" in each prompt — do not re-save them.',
+  '',
   'MULTI-STEP TASK PLANNING (Phase 4):',
   'For complex requests like "play this song on YouTube", you can output a multi-step plan instead of a single action.',
   'Use the ```plan JSON block:',
@@ -557,6 +569,31 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
     };
   }, [clearConfirmTimeout]);
 
+  const promptMemoryConfirmation = useCallback(async (key: string | null, value: string, inputText: string) => {
+    pendingConfirmationRef.current = {
+      type: "memory",
+      spokenResponse: "Should I remember that " + (key ? key + " is " : "") + value + "?",
+      memoryData: { key, value },
+      input: inputText,
+    };
+    reAskRef.current = false;
+    clearConfirmTimeout();
+    confirmTimeoutRef.current = setTimeout(() => {
+      pendingConfirmationRef.current = null;
+      reAskRef.current = false;
+      setStatus("idle");
+      ttsRef.current.speak("I'll forget about it.");
+    }, 15000);
+    setStatus("confirming");
+    setLastSpoken(pendingConfirmationRef.current.spokenResponse);
+    setKrishnaSpeaking(true);
+    try {
+      await ttsRef.current.speak(pendingConfirmationRef.current.spokenResponse);
+    } finally {
+      setKrishnaSpeaking(false);
+    }
+  }, [clearConfirmTimeout]);
+
   const setKrishnaEnabled = useCallback((value: boolean) => {
     setEnabled(value);
     safeLocalStorage.setItem(STORAGE_KEYS.KRISHNA_ENABLED, String(value));
@@ -959,28 +996,7 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
       const rememberResult = parseRememberCommand(command);
       if (rememberResult && rememberResult.value) {
         const { key, value } = rememberResult;
-        pendingConfirmationRef.current = {
-          type: "memory",
-          spokenResponse: "Should I remember that " + (key ? key + " is " : "") + value + "?",
-          memoryData: { key, value },
-          input: command,
-        };
-        reAskRef.current = false;
-        clearConfirmTimeout();
-        confirmTimeoutRef.current = setTimeout(() => {
-          pendingConfirmationRef.current = null;
-          reAskRef.current = false;
-          setStatus("idle");
-          ttsRef.current.speak("I'll forget about it.");
-        }, 15000);
-        setStatus("confirming");
-        setLastSpoken(pendingConfirmationRef.current.spokenResponse);
-        setKrishnaSpeaking(true);
-        try {
-          await ttsRef.current.speak(pendingConfirmationRef.current.spokenResponse);
-        } finally {
-          setKrishnaSpeaking(false);
-        }
+        await promptMemoryConfirmation(key, value, command);
         return;
       }
 
@@ -1179,6 +1195,11 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
 
         // Handle legacy single actions
         for (const action of actions) {
+          // Intercept memory action before executeAction (which only handles "open")
+          if (action.action === "remember") {
+            await promptMemoryConfirmation(action.key, action.value, command);
+            return;
+          }
           const result = await executeAction(action, llmFallback);
           if (result.needsConfirmation && result.pendingResult) {
             pendingConfirmationRef.current = {
@@ -1242,7 +1263,7 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
         }
       }
     },
-    [selectedAIProvider, allAiProviders, llmFallback, wakeWordEnabled, wakeWord, clearFiles]
+    [selectedAIProvider, allAiProviders, llmFallback, wakeWordEnabled, wakeWord, clearFiles, promptMemoryConfirmation]
   );
 
   return (

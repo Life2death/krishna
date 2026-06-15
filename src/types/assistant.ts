@@ -6,10 +6,9 @@ export interface KrishnaSettings {
   ttsPitch: number;
 }
 
-export interface Action {
-  action: "open";
-  target: string;
-}
+export type Action =
+  | { action: "open"; target: string }
+  | { action: "remember"; key: string | null; value: string };
 
 export interface StepAction {
   tool: string;

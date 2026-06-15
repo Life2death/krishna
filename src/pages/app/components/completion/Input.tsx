@@ -11,22 +11,25 @@ import {
   CopyButton,
 } from "@/components";
 import { useKrishna } from "@/hooks";
-import { MessageHistory } from "./MessageHistory";
 
 export const Input = ({ isHidden }: { isHidden: boolean }) => {
   const krishna = useKrishna();
   const [input, setInput] = useState("");
-  const [messageHistoryOpen, setMessageHistoryOpen] = useState(false);
   const [isPopoverOpen, setIsPopoverOpen] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const scrollAreaRef = useRef<HTMLDivElement | null>(null);
 
   const isLoading = krishna.status === "thinking" || krishna.status === "speaking";
 
+  // Auto-open on reply/error/loading; also open on focus
   useEffect(() => {
     const shouldBeOpen = krishna.lastError !== null || isLoading || krishna.lastSpoken.length > 0;
     setIsPopoverOpen(shouldBeOpen);
   }, [krishna.lastError, isLoading, krishna.lastSpoken]);
+
+  const openOnFocus = useCallback(() => {
+    if (!isPopoverOpen) setIsPopoverOpen(true);
+  }, [isPopoverOpen]);
 
   const handleKeyPress = useCallback(
     (e: React.KeyboardEvent) => {
@@ -66,29 +69,10 @@ export const Input = ({ isHidden }: { isHidden: boolean }) => {
               onChange={(e) => setInput(e.target.value)}
               onKeyPress={handleKeyPress}
               onPaste={handlePaste}
+              onFocus={openOnFocus}
               disabled={isLoading || isHidden}
-              className={`${
-                krishna.conversationHistory.length > 0
-                  ? "pr-14"
-                  : "pr-2"
-              }`}
+              className="pr-2 focus-visible:ring-ring/40"
             />
-
-            {/* Conversation thread indicator */}
-            {krishna.conversationHistory.length > 0 && !isLoading && (
-              <div className="absolute select-none right-1 top-1/2 -translate-y-1/2 flex items-center gap-1">
-                <MessageHistory
-                  conversationHistory={krishna.conversationHistory.flatMap(t => [
-                    { id: t.id + "-user", role: "user" as const, content: t.userText, timestamp: t.timestamp },
-                    { id: t.id + "-assistant", role: "assistant" as const, content: t.assistantText, timestamp: t.timestamp + 1 },
-                  ])}
-                  currentConversationId={null}
-                  onStartNewConversation={krishna.clearActiveConversation}
-                  messageHistoryOpen={messageHistoryOpen}
-                  setMessageHistoryOpen={setMessageHistoryOpen}
-                />
-              </div>
-            )}
 
             {/* Loading indicator */}
             {isLoading && (
@@ -134,18 +118,17 @@ export const Input = ({ isHidden }: { isHidden: boolean }) => {
                   <strong>Error:</strong> {krishna.lastError}
                 </div>
               )}
+
+              {/* Pending bubble — shown while loading */}
               {isLoading && (
                 <div className="flex items-center gap-2 my-4 text-muted-foreground animate-pulse select-none">
                   <Loader2 className="h-4 w-4 animate-spin" />
                   <span className="text-sm">Processing...</span>
                 </div>
               )}
-              {krishna.lastSpoken && !isLoading && (
-                <Markdown>{krishna.lastSpoken}</Markdown>
-              )}
 
-              {/* Conversation History */}
-              {krishna.conversationHistory.length > 1 && (
+              {/* Conversation History — always visible when non-empty */}
+              {krishna.conversationHistory.length > 0 && (
                 <div className="space-y-3 pt-3">
                   {krishna.conversationHistory.map((turn) => (
                     <div

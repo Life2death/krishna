@@ -46,7 +46,12 @@ describe("parsePlan (via parseActions)", () => {
     const result = parseActions(reply);
     expect(result.plan).toBeUndefined();
     expect(result.actions).toHaveLength(1);
-    expect(result.actions[0].target).toBe("firefox");
+    const first = result.actions[0];
+    if (first.action === "open") {
+      expect(first.target).toBe("firefox");
+    } else {
+      throw new Error("Expected open action");
+    }
   });
 
   it("parses a single open_target plan as legacy action too", () => {
@@ -67,7 +72,7 @@ describe("parsePlan (via parseActions)", () => {
     expect(result.plan).toBeDefined();
     expect(result.actions).toHaveLength(1);
     expect(result.actions[0].action).toBe("open");
-    expect(result.actions[0].target).toBe("https://youtube.com");
+    expect((result.actions[0] as { action: "open"; target: string }).target).toBe("https://youtube.com");
   });
 
   it("extracts spoken text from the reply", () => {
