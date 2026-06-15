@@ -1,7 +1,7 @@
 {
   "name": "krishna",
   "private": false,
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Krishna — a talking desktop AI assistant. Voice-in, voice-out, open apps/websites/files via voice command.",
   "author": {
     "name": "life2death",
