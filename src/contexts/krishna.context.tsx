@@ -1135,9 +1135,11 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
 
         const { spokenText, actions, plan } = parseActions(fullResponse);
         historyRef.current = [...historyRef.current, { role: "assistant" as const, content: fullResponse }].slice(-8);
+        let spokenTextRecorded = false;
 
         if (spokenText) {
           await recordTurn(pendingUserTextRef.current, spokenText);
+          spokenTextRecorded = true;
           setStatus("speaking");
           setLastSpoken(spokenText);
           setKrishnaSpeaking(true);
@@ -1205,7 +1207,7 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
           }
           if (result.spokenResponse) {
             const isStatus = result.spokenResponse.startsWith("Opening") || result.spokenResponse.startsWith("Failed");
-            if (isStatus) {
+            if (isStatus && !spokenTextRecorded) {
               await recordTurn(pendingUserTextRef.current, result.spokenResponse);
               setStatus("speaking");
               setLastSpoken(result.spokenResponse);
