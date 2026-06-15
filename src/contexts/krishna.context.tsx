@@ -23,7 +23,8 @@ import { isLookCommand, isUndoCommand } from "@/lib/perception";
 import { createAuditEntry, getLastReversible } from "@/lib/database/audit.action";
 import type { AssistantStatus, StepAction } from "@/types/assistant";
 import type { Skill } from "@/types/skill";
-import type { Message } from "@/types";
+import type { Message, AttachedFile } from "@/types";
+import { MAX_FILES } from "@/config";
 
 export interface ConversationTurn {
   id: string;
@@ -37,7 +38,7 @@ interface KrishnaContextType {
   setKrishnaEnabled: (v: boolean) => void;
   status: AssistantStatus;
   lastSpoken: string;
-  processCommand: (transcription: string) => Promise<void>;
+  processCommand: (transcription: string, opts?: { skipWakeWord?: boolean }) => Promise<void>;
   stopSpeaking: () => void;
   pendingCommand: string | null;
   lastError: string | null;
@@ -65,6 +66,12 @@ interface KrishnaContextType {
   setWakeWordEnabled: (v: boolean) => void;
   wakeWord: string;
   setWakeWord: (w: string) => void;
+  attachedFiles: AttachedFile[];
+  addFile: (file: File) => Promise<void>;
+  removeFile: (fileId: string) => void;
+  clearFiles: () => void;
+  captureScreenshot: () => Promise<void>;
+  isScreenshotLoading: boolean;
 }
 
 const KrishnaContext = createContext<KrishnaContextType | undefined>(undefined);
@@ -308,6 +315,95 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
   const activeConversationRef = useRef<string | null>(null);
   const lastTurnTimeRef = useRef<number>(0);
   const IDLE_THRESHOLD = 15 * 60 * 1000; // 15 minutes
+  const attachedFilesRef = useRef<AttachedFile[]>([]);
+
+  const [attachedFiles, setAttachedFiles] = useState<AttachedFile[]>([]);
+  const [isScreenshotLoading, setIsScreenshotLoading] = useState(false);
+
+  // Sync attached files ref
+  useEffect(() => {
+    attachedFilesRef.current = attachedFiles;
+  }, [attachedFiles]);
+
+  const recordTurn = async (userText: string, assistantText: string) => {
+    if (!userText && !assistantText) return;
+    const now = Date.now();
+    const turn: ConversationTurn = {
+      id: String(now),
+      userText,
+      assistantText,
+      timestamp: now,
+    };
+    setConversationHistory(prev => [turn, ...prev].slice(0, 100));
+    try {
+      const idle = now - lastTurnTimeRef.current;
+      if (!activeConversationRef.current || idle > IDLE_THRESHOLD) {
+        const conv = await createConversation({
+          id: String(now),
+          title: generateConversationTitle(userText),
+          createdAt: now,
+          updatedAt: now,
+          messages: [],
+        });
+        activeConversationRef.current = conv.id;
+      }
+      await appendMessages(activeConversationRef.current, [
+        { role: "user", content: userText, timestamp: now },
+        { role: "assistant", content: assistantText, timestamp: now + 1 },
+      ]);
+      lastTurnTimeRef.current = now;
+    } catch (e) {
+      console.error("Failed to persist turn to SQLite:", e);
+    }
+  };
+
+  const addFile = useCallback(async (file: File) => {
+    if (attachedFiles.length >= MAX_FILES) return;
+    try {
+      const buffer = await file.arrayBuffer();
+      const bytes = new Uint8Array(buffer);
+      let binary = "";
+      bytes.forEach(b => { binary += String.fromCharCode(b); });
+      const base64 = btoa(binary);
+      const attachedFile: AttachedFile = {
+        id: String(Date.now()),
+        name: file.name,
+        type: file.type,
+        base64,
+        size: file.size,
+      };
+      setAttachedFiles(prev => [...prev, attachedFile]);
+    } catch (err) {
+      console.error("Failed to attach file:", err);
+    }
+  }, [attachedFiles.length]);
+
+  const removeFile = useCallback((fileId: string) => {
+    setAttachedFiles(prev => prev.filter(f => f.id !== fileId));
+  }, []);
+
+  const clearFiles = useCallback(() => {
+    setAttachedFiles([]);
+  }, []);
+
+  const captureScreenshot = useCallback(async () => {
+    setIsScreenshotLoading(true);
+    try {
+      const base64 = await invoke<string>("capture_to_base64");
+      const attachedFile: AttachedFile = {
+        id: String(Date.now()),
+        name: "screenshot.png",
+        type: "image/png",
+        base64,
+        size: 0,
+      };
+      setAttachedFiles(prev => [...prev, attachedFile]);
+    } catch (err) {
+      console.error("Failed to capture screenshot:", err);
+    } finally {
+      setIsScreenshotLoading(false);
+    }
+  }, []);
 
   // Initialize natural voice on first mount
   const voiceInitRef = useRef(false);
@@ -530,7 +626,7 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
   );
 
   const processCommand = useCallback(
-    async (transcription: string) => {
+    async (transcription: string, opts?: { skipWakeWord?: boolean }) => {
       if (pendingConfirmationRef.current) {
         clearConfirmTimeout();
         const pending = pendingConfirmationRef.current;
@@ -581,6 +677,7 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
                     createdAt: Date.now(),
                   });
                 } catch { /* non-critical */ }
+                await recordTurn(pending.input || "", successMsg);
                 setLastSpoken(successMsg);
                 setKrishnaSpeaking(true);
                 setStatus("speaking");
@@ -591,6 +688,7 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
                 }
               } else {
                 const errorMsg = result.error || "Plan execution failed.";
+                await recordTurn(pending.input || "", errorMsg);
                 setLastSpoken(errorMsg);
                 setKrishnaSpeaking(true);
                 setStatus("speaking");
@@ -602,6 +700,7 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
               }
             } catch (err) {
               const msg = err instanceof Error ? err.message : "Plan execution failed";
+              await recordTurn(pending.input || "", "I had trouble: " + msg);
               setStatus("speaking");
               setKrishnaSpeaking(true);
               try {
@@ -638,6 +737,7 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
                 });
               } catch { /* non-critical */ }
               const speak = "Got it, I'll remember that " + pending.memoryData.value;
+              await recordTurn(pending.input || "", speak);
               setLastSpoken(speak);
               setKrishnaSpeaking(true);
               setStatus("speaking");
@@ -648,6 +748,7 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
               }
             } catch (err) {
               const msg = err instanceof Error ? err.message : "Failed to save memory";
+              await recordTurn(pending.input || "", "I had trouble: " + msg);
               setStatus("speaking");
               setKrishnaSpeaking(true);
               try {
@@ -683,6 +784,7 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
                 });
               } catch { /* non-critical */ }
               const speak = "Got it, I'll remind you to " + pending.reminderData.text + ".";
+              await recordTurn(pending.input || "", speak);
               setLastSpoken(speak);
               setKrishnaSpeaking(true);
               setStatus("speaking");
@@ -693,6 +795,7 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
               }
             } catch (err) {
               const msg = err instanceof Error ? err.message : "Failed to set reminder";
+              await recordTurn(pending.input || "", "I had trouble: " + msg);
               setStatus("speaking");
               setKrishnaSpeaking(true);
               try {
@@ -722,6 +825,7 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
                 });
               } catch { /* non-critical */ }
               const speak = "Opening " + pending.pendingResult.displayName;
+              await recordTurn(pending.input || "", speak);
               setLastSpoken(speak);
               setKrishnaSpeaking(true);
               await ttsRef.current.speak(speak);
@@ -768,7 +872,7 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
 
       let command = transcription.trim() || "hello";
 
-      if (wakeWordEnabled && !pendingConfirmationRef.current) {
+      if (wakeWordEnabled && !opts?.skipWakeWord && !pendingConfirmationRef.current) {
         const { detected, remainder } = detectWakeWord(transcription, wakeWord);
         if (!detected) {
           setStatus("idle");
@@ -818,6 +922,7 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
               await updateSkillUseCount(skill.id);
               if (result.success) {
                 const msg = result.finalOutput || "Done!";
+                await recordTurn(pendingUserTextRef.current, msg);
                 setLastSpoken(msg);
                 setKrishnaSpeaking(true);
                 setStatus("speaking");
@@ -828,6 +933,7 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
                 }
               } else {
                 const msg = result.error || "Failed to execute skill.";
+                await recordTurn(pendingUserTextRef.current, msg);
                 setLastSpoken(msg);
                 setKrishnaSpeaking(true);
                 setStatus("speaking");
@@ -857,6 +963,7 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
           type: "memory",
           spokenResponse: "Should I remember that " + (key ? key + " is " : "") + value + "?",
           memoryData: { key, value },
+          input: command,
         };
         reAskRef.current = false;
         clearConfirmTimeout();
@@ -925,6 +1032,7 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
           }
           const { spokenText } = parseActions(visionResponse);
           const speak = spokenText || visionResponse;
+          await recordTurn(pendingUserTextRef.current, speak);
           setLastSpoken(speak);
           setKrishnaSpeaking(true);
           setStatus("speaking");
@@ -935,6 +1043,7 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
           }
         } catch (err) {
           const msg = err instanceof Error ? err.message : "Failed to capture screen";
+          await recordTurn(pendingUserTextRef.current, "I had trouble looking at your screen: " + msg);
           setStatus("speaking");
           setKrishnaSpeaking(true);
           try {
@@ -972,6 +1081,7 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
               undoSuccess = true;
             }
             const speak = undoSuccess ? "Done, I've undone that." : "I can't undo that action.";
+            await recordTurn(pendingUserTextRef.current, speak);
             setLastSpoken(speak);
             setKrishnaSpeaking(true);
             setStatus("speaking");
@@ -981,6 +1091,7 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
               setKrishnaSpeaking(false);
             }
           } catch {
+            await recordTurn(pendingUserTextRef.current, "I had trouble undoing that.");
             setStatus("speaking");
             setKrishnaSpeaking(true);
             try {
@@ -1010,7 +1121,7 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
           systemPrompt,
           history: historyRef.current,
           userMessage: command,
-          imagesBase64: [],
+          imagesBase64: attachedFilesRef.current.map(f => f.base64),
           signal,
         })) {
           if (signal.aborted) break;
@@ -1026,41 +1137,9 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
         historyRef.current = [...historyRef.current, { role: "assistant" as const, content: fullResponse }].slice(-8);
 
         if (spokenText) {
+          await recordTurn(pendingUserTextRef.current, spokenText);
           setStatus("speaking");
           setLastSpoken(spokenText);
-          const now = Date.now();
-          const turn: ConversationTurn = {
-            id: String(now),
-            userText: pendingUserTextRef.current,
-            assistantText: spokenText,
-            timestamp: now,
-          };
-          setConversationHistory(prev => {
-            const updated = [turn, ...prev].slice(0, 100);
-            return updated;
-          });
-
-          // Persist to SQLite — session model
-          try {
-            const idle = now - lastTurnTimeRef.current;
-            if (!activeConversationRef.current || idle > IDLE_THRESHOLD) {
-              const conv = await createConversation({
-                id: String(now),
-                title: generateConversationTitle(pendingUserTextRef.current),
-                createdAt: now,
-                updatedAt: now,
-                messages: [],
-              });
-              activeConversationRef.current = conv.id;
-            }
-            await appendMessages(activeConversationRef.current, [
-              { role: "user", content: pendingUserTextRef.current, timestamp: now },
-              { role: "assistant", content: spokenText, timestamp: now + 1 },
-            ]);
-            lastTurnTimeRef.current = now;
-          } catch (e) {
-            console.error("Failed to persist voice turn to SQLite:", e);
-          }
           setKrishnaSpeaking(true);
           try {
             await ttsRef.current.speak(spokenText);
@@ -1127,6 +1206,7 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
           if (result.spokenResponse) {
             const isStatus = result.spokenResponse.startsWith("Opening") || result.spokenResponse.startsWith("Failed");
             if (isStatus) {
+              await recordTurn(pendingUserTextRef.current, result.spokenResponse);
               setStatus("speaking");
               setLastSpoken(result.spokenResponse);
               setKrishnaSpeaking(true);
@@ -1153,13 +1233,14 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
           setKrishnaSpeaking(false);
         }
       } finally {
+        clearFiles();
         setPendingCommand(null);
         if (!pendingConfirmationRef.current) {
           setStatus("idle");
         }
       }
     },
-    [selectedAIProvider, allAiProviders, llmFallback, wakeWordEnabled, wakeWord]
+    [selectedAIProvider, allAiProviders, llmFallback, wakeWordEnabled, wakeWord, clearFiles]
   );
 
   return (
@@ -1183,6 +1264,12 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
           clearActiveConversation,
           wakeWordEnabled, setWakeWordEnabled,
           wakeWord, setWakeWord,
+          attachedFiles,
+          addFile,
+          removeFile,
+          clearFiles,
+          captureScreenshot,
+          isScreenshotLoading,
         }}
       >
       {children}

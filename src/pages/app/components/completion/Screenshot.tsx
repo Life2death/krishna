@@ -1,26 +1,18 @@
 import { Button } from "@/components";
-import { LaptopMinimalIcon, Loader2, MousePointer2Icon } from "lucide-react";
-import { UseCompletionReturn } from "@/types";
+import { LaptopMinimalIcon, Loader2 } from "lucide-react";
 import { MAX_FILES } from "@/config";
 import { useApp } from "@/contexts";
+import { useKrishna } from "@/hooks";
 
-export const Screenshot = ({
-  screenshotConfiguration,
-  attachedFiles,
-  isLoading,
-  captureScreenshot,
-  isScreenshotLoading,
-}: UseCompletionReturn) => {
+export const Screenshot = () => {
   const { supportsImages } = useApp();
-  const captureMode = screenshotConfiguration.enabled
-    ? "Screenshot"
-    : "Selection";
-  const processingMode = screenshotConfiguration.mode;
+  const krishna = useKrishna();
+  const isBusy = krishna.status !== "idle";
 
   const isDisabled =
-    attachedFiles.length >= MAX_FILES ||
-    isLoading ||
-    isScreenshotLoading ||
+    krishna.attachedFiles.length >= MAX_FILES ||
+    isBusy ||
+    krishna.isScreenshotLoading ||
     !supportsImages;
 
   return (
@@ -30,17 +22,15 @@ export const Screenshot = ({
       title={
         !supportsImages
           ? "Screenshot not supported by current AI provider"
-          : `${captureMode} mode (${processingMode}) - ${attachedFiles.length}/${MAX_FILES} files`
+          : `Screenshot - ${krishna.attachedFiles.length}/${MAX_FILES} files`
       }
-      onClick={captureScreenshot}
+      onClick={krishna.captureScreenshot}
       disabled={isDisabled}
     >
-      {isScreenshotLoading ? (
+      {krishna.isScreenshotLoading ? (
         <Loader2 className="h-4 w-4 animate-spin" />
-      ) : screenshotConfiguration.enabled ? (
-        <LaptopMinimalIcon className="h-4 w-4" />
       ) : (
-        <MousePointer2Icon className="h-4 w-4" />
+        <LaptopMinimalIcon className="h-4 w-4" />
       )}
     </Button>
   );

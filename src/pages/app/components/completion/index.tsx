@@ -1,16 +1,13 @@
-import { useCompletion } from "@/hooks";
+import { Input } from "./Input";
 import { Screenshot } from "./Screenshot";
 import { Files } from "./Files";
-import { Input } from "./Input";
 
 export const Completion = ({ isHidden }: { isHidden: boolean }) => {
-  const completion = useCompletion();
-
   return (
     <>
-      <Input {...completion} isHidden={isHidden} />
-      <Screenshot {...completion} />
-      <Files {...completion} />
+      <Input isHidden={isHidden} />
+      <Screenshot />
+      <Files />
     </>
   );
 };

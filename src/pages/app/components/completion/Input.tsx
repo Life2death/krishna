@@ -1,3 +1,4 @@
+import { useState, useCallback, useRef, useEffect } from "react";
 import { Loader2, XIcon } from "lucide-react";
 import {
   Popover,
@@ -7,44 +8,55 @@ import {
   ScrollArea,
   Input as InputComponent,
   Markdown,
-  Switch,
   CopyButton,
 } from "@/components";
-import { UseCompletionReturn } from "@/types";
+import { useKrishna } from "@/hooks";
 import { MessageHistory } from "./MessageHistory";
 
-export const Input = ({
-  isPopoverOpen,
-  isLoading,
-  reset,
-  input,
-  setInput,
-  handleKeyPress,
-  handlePaste,
-  currentConversationId,
-  conversationHistory,
-  startNewConversation,
-  messageHistoryOpen,
-  setMessageHistoryOpen,
-  error,
-  response,
-  cancel,
-  scrollAreaRef,
-  inputRef,
-  isHidden,
-  keepEngaged,
-  setKeepEngaged,
-}: UseCompletionReturn & { isHidden: boolean }) => {
+export const Input = ({ isHidden }: { isHidden: boolean }) => {
+  const krishna = useKrishna();
+  const [input, setInput] = useState("");
+  const [messageHistoryOpen, setMessageHistoryOpen] = useState(false);
+  const [isPopoverOpen, setIsPopoverOpen] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const scrollAreaRef = useRef<HTMLDivElement | null>(null);
+
+  const isLoading = krishna.status === "thinking" || krishna.status === "speaking";
+
+  useEffect(() => {
+    const shouldBeOpen = krishna.lastError !== null || isLoading || krishna.lastSpoken.length > 0;
+    setIsPopoverOpen(shouldBeOpen);
+  }, [krishna.lastError, isLoading, krishna.lastSpoken]);
+
+  const handleKeyPress = useCallback(
+    (e: React.KeyboardEvent) => {
+      if (e.key === "Enter" && !e.shiftKey) {
+        e.preventDefault();
+        const text = input.trim();
+        if (!text || krishna.status !== "idle") return;
+        setInput("");
+        krishna.processCommand(text, { skipWakeWord: true });
+      }
+    },
+    [input, krishna]
+  );
+
+  const handlePaste = useCallback(async (e: React.ClipboardEvent) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    for (const item of Array.from(items)) {
+      if (item.type.startsWith("image/")) {
+        const file = item.getAsFile();
+        if (file) {
+          await krishna.addFile(file);
+        }
+      }
+    }
+  }, [krishna]);
+
   return (
     <div className="relative flex-1">
-      <Popover
-        open={isPopoverOpen}
-        onOpenChange={(open) => {
-          if (!open && !isLoading && !keepEngaged) {
-            reset();
-          }
-        }}
-      >
+      <Popover open={isPopoverOpen} onOpenChange={setIsPopoverOpen}>
         <PopoverTrigger asChild className="!border-none !bg-transparent">
           <div className="relative select-none">
             <InputComponent
@@ -56,26 +68,27 @@ export const Input = ({
               onPaste={handlePaste}
               disabled={isLoading || isHidden}
               className={`${
-                currentConversationId && conversationHistory.length > 0
+                krishna.conversationHistory.length > 0
                   ? "pr-14"
                   : "pr-2"
               }`}
             />
 
             {/* Conversation thread indicator */}
-            {currentConversationId &&
-              conversationHistory.length > 0 &&
-              !isLoading && (
-                <div className="absolute select-none right-1 top-1/2 -translate-y-1/2 flex items-center gap-1">
-                  <MessageHistory
-                    conversationHistory={conversationHistory}
-                    currentConversationId={currentConversationId}
-                    onStartNewConversation={startNewConversation}
-                    messageHistoryOpen={messageHistoryOpen}
-                    setMessageHistoryOpen={setMessageHistoryOpen}
-                  />
-                </div>
-              )}
+            {krishna.conversationHistory.length > 0 && !isLoading && (
+              <div className="absolute select-none right-1 top-1/2 -translate-y-1/2 flex items-center gap-1">
+                <MessageHistory
+                  conversationHistory={krishna.conversationHistory.flatMap(t => [
+                    { id: t.id + "-user", role: "user" as const, content: t.userText, timestamp: t.timestamp },
+                    { id: t.id + "-assistant", role: "assistant" as const, content: t.assistantText, timestamp: t.timestamp + 1 },
+                  ])}
+                  currentConversationId={null}
+                  onStartNewConversation={krishna.clearActiveConversation}
+                  messageHistoryOpen={messageHistoryOpen}
+                  setMessageHistoryOpen={setMessageHistoryOpen}
+                />
+              </div>
+            )}
 
             {/* Loading indicator */}
             {isLoading && (
@@ -95,58 +108,19 @@ export const Input = ({
         >
           <div className="flex items-center justify-between px-4 py-2 border-b bg-muted/30">
             <div className="flex flex-row gap-1 items-center">
-              <h3 className="font-semibold text-xs select-none">
-                {keepEngaged ? "Conversation Mode" : "AI Response"}
-              </h3>
+              <h3 className="font-semibold text-xs select-none">Krishna</h3>
               <div className="text-[10px] text-muted-foreground/70">
                 (Use arrow keys to scroll)
               </div>
             </div>
             <div className="flex items-center gap-2 select-none">
-              <div className="flex flex-row items-center gap-2 mr-2">
-                <p className="text-[10px]">{`Toggle ${
-                  keepEngaged ? "AI response" : "conversation mode"
-                }`}</p>
-                <span className="text-[10px] text-muted-foreground/60 bg-muted/30 px-1 py-0 rounded border border-input/50">
-                  {navigator.platform.toLowerCase().includes("mac")
-                    ? "⌘"
-                    : "Ctrl"}{" "}
-                  + K
-                </span>
-                <Switch
-                  checked={keepEngaged}
-                  onCheckedChange={(checked) => {
-                    setKeepEngaged(checked);
-                    // Focus input after toggle
-                    setTimeout(() => {
-                      inputRef?.current?.focus();
-                    }, 100);
-                  }}
-                />
-              </div>
-              <CopyButton content={response} />
+              <CopyButton content={krishna.lastSpoken} />
               <Button
                 size="icon"
                 variant="ghost"
-                onClick={() => {
-                  if (isLoading) {
-                    cancel();
-                  } else if (keepEngaged) {
-                    // When keepEngaged is on, close everything and start new conversation
-                    setKeepEngaged(false);
-                    startNewConversation();
-                  } else {
-                    reset();
-                  }
-                }}
+                onClick={() => setIsPopoverOpen(false)}
                 className="cursor-pointer"
-                title={
-                  isLoading
-                    ? "Cancel loading"
-                    : keepEngaged
-                    ? "Close and start new conversation"
-                    : "Clear conversation"
-                }
+                title="Close"
               >
                 <XIcon />
               </Button>
@@ -155,55 +129,51 @@ export const Input = ({
 
           <ScrollArea ref={scrollAreaRef} className="h-[calc(100vh-7rem)]">
             <div className="p-4 overflow-x-hidden">
-              {error && (
+              {krishna.lastError && (
                 <div className="mb-4 p-3 bg-destructive/10 border border-destructive/20 rounded text-sm text-destructive break-words overflow-x-hidden">
-                  <strong>Error:</strong> {error}
+                  <strong>Error:</strong> {krishna.lastError}
                 </div>
               )}
               {isLoading && (
                 <div className="flex items-center gap-2 my-4 text-muted-foreground animate-pulse select-none">
                   <Loader2 className="h-4 w-4 animate-spin" />
-                  <span className="text-sm">Generating response...</span>
+                  <span className="text-sm">Processing...</span>
                 </div>
               )}
-              {response && <Markdown>{response}</Markdown>}
+              {krishna.lastSpoken && !isLoading && (
+                <Markdown>{krishna.lastSpoken}</Markdown>
+              )}
 
-              {/* Conversation History - Separate scroll, no auto-scroll */}
-              {keepEngaged && conversationHistory.length > 1 && (
+              {/* Conversation History */}
+              {krishna.conversationHistory.length > 1 && (
                 <div className="space-y-3 pt-3">
-                  {conversationHistory
-                    .sort((a, b) => b?.timestamp - a?.timestamp)
-                    .map((message, index) => {
-                      if (!isLoading && index === 0) {
-                        return null;
-                      }
-                      return (
-                        <div
-                          key={message.id}
-                          className={`p-3 rounded-lg text-sm ${
-                            message.role === "user"
-                              ? "bg-primary/10 border-l-4 border-primary"
-                              : "bg-muted/50"
-                          }`}
-                        >
-                          <div className="flex items-center gap-2 mb-2">
-                            <span className="text-xs font-medium text-muted-foreground uppercase">
-                              {message.role === "user" ? "You" : "AI"}
-                            </span>
-                            <span className="text-xs text-muted-foreground">
-                              {new Date(message.timestamp).toLocaleTimeString(
-                                [],
-                                {
-                                  hour: "2-digit",
-                                  minute: "2-digit",
-                                }
-                              )}
-                            </span>
-                          </div>
-                          <Markdown>{message.content}</Markdown>
-                        </div>
-                      );
-                    })}
+                  {krishna.conversationHistory.map((turn) => (
+                    <div
+                      key={turn.id}
+                      className="p-3 rounded-lg text-sm bg-muted/50"
+                    >
+                      <div className="flex items-center gap-2 mb-2">
+                        <span className="text-xs font-medium text-muted-foreground">You</span>
+                        <span className="text-xs text-muted-foreground">
+                          {new Date(turn.timestamp).toLocaleTimeString([], {
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })}
+                        </span>
+                      </div>
+                      <Markdown>{turn.userText}</Markdown>
+                      <div className="flex items-center gap-2 mt-3 mb-2">
+                        <span className="text-xs font-medium text-muted-foreground uppercase">Krishna</span>
+                        <span className="text-xs text-muted-foreground">
+                          {new Date(turn.timestamp + 1).toLocaleTimeString([], {
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })}
+                        </span>
+                      </div>
+                      <Markdown>{turn.assistantText}</Markdown>
+                    </div>
+                  ))}
                 </div>
               )}
             </div>
