@@ -1,5 +1,6 @@
 use aes_gcm::aead::{Aead, KeyInit};
 use aes_gcm::{Aes256Gcm, Nonce};
+use rand::RngCore;
 use sha2::{Digest, Sha256};
 use std::fs;
 use std::path::PathBuf;
@@ -72,5 +73,42 @@ pub fn get_stored_value(app: &AppHandle, key: &str) -> Result<Option<String>, St
         Some(serde_json::Value::String(val)) => Ok(Some(val.clone())),
         _ => Ok(None),
     }
+}
+
+pub fn encrypt_data(plaintext: &[u8], key: &[u8; 32]) -> Result<Vec<u8>, String> {
+    let mut nonce_bytes = [0u8; 12];
+    rand::thread_rng().fill_bytes(&mut nonce_bytes);
+    let nonce = Nonce::from_slice(&nonce_bytes);
+    let cipher = Aes256Gcm::new_from_slice(key).map_err(|e| format!("AES init failed: {}", e))?;
+    let ct = cipher
+        .encrypt(nonce, plaintext)
+        .map_err(|_| "Encryption failed".to_string())?;
+    let mut result = Vec::with_capacity(12 + ct.len());
+    result.extend_from_slice(&nonce_bytes);
+    result.extend_from_slice(&ct);
+    Ok(result)
+}
+
+pub fn set_stored_value(app: &AppHandle, key: &str, value: &str) -> Result<(), String> {
+    let path = get_storage_path(app)?;
+    let mut data = read_encrypted_json(app)?;
+    data[key] = serde_json::json!(value);
+    let plaintext = serde_json::to_vec(&data)
+        .map_err(|e| format!("Failed to serialize storage: {}", e))?;
+    let encryption_key = get_key(app)?;
+    let encrypted = encrypt_data(&plaintext, &encryption_key)?;
+    fs::write(&path, encrypted)
+        .map_err(|e| format!("Failed to write storage: {}", e))?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn secure_get(app: tauri::AppHandle, key: String) -> Result<Option<String>, String> {
+    get_stored_value(&app, &key)
+}
+
+#[tauri::command]
+pub fn secure_set(app: tauri::AppHandle, key: String, value: String) -> Result<(), String> {
+    set_stored_value(&app, &key, &value)
 }
 

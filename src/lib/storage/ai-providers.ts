@@ -1,6 +1,22 @@
 import { STORAGE_KEYS } from "@/config";
 import { TYPE_PROVIDER } from "@/types";
 
+const API_KEY_PATTERNS = [
+  /sk-[a-zA-Z0-9]{20,}/g,
+  /Bearer\s+[a-zA-Z0-9._-]{20,}/gi,
+  /api[_-]?key[=:]\s*[a-zA-Z0-9._-]{20,}/gi,
+  /Authorization:\s*[a-zA-Z0-9._-]{20,}/gi,
+];
+
+function sanitizeCurl(curl: string): string {
+  if (!curl) return curl;
+  let sanitized: string = curl;
+  for (const pattern of API_KEY_PATTERNS) {
+    sanitized = sanitized.replace(pattern, "{{API_KEY}}");
+  }
+  return sanitized;
+}
+
 export function getCustomAiProviders(): TYPE_PROVIDER[] {
   try {
     if (typeof window === "undefined") return [];
@@ -20,9 +36,13 @@ export function getCustomAiProviders(): TYPE_PROVIDER[] {
 export function setCustomAiProviders(providers: TYPE_PROVIDER[]): void {
   try {
     if (typeof window === "undefined") return;
+    const sanitized = providers.map((p) => ({
+      ...p,
+      curl: sanitizeCurl(p.curl || ""),
+    }));
     localStorage.setItem(
       STORAGE_KEYS.CUSTOM_AI_PROVIDERS,
-      JSON.stringify(providers)
+      JSON.stringify(sanitized)
     );
   } catch (error) {
     console.error("Error setting custom AI providers:", error);

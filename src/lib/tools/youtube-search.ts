@@ -1,4 +1,5 @@
 import type { Tool } from "./index";
+import { secureStorage } from "@/lib/secure-storage";
 
 const YOUTUBE_API_BASE = "https://www.googleapis.com/youtube/v3/search";
 
@@ -15,7 +16,7 @@ export const youtubeSearchTool: Tool = {
       return { success: false, error: "Missing required arg: query" };
     }
 
-    const apiKey = getYouTubeApiKey();
+    const apiKey = await getYouTubeApiKey();
 
     if (apiKey) {
       try {
@@ -76,9 +77,9 @@ async function searchYouTubeApi(
   };
 }
 
-function getYouTubeApiKey(): string | null {
+async function getYouTubeApiKey(): Promise<string | null> {
   try {
-    return localStorage.getItem("youtube_api_key");
+    return await secureStorage.get("youtube_api_key");
   } catch {
     return null;
   }

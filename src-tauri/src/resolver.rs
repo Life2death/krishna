@@ -151,21 +151,25 @@ fn fuzzy_match(query: &str, candidate: &str) -> bool {
     if candidate == query {
         return true;
     }
-    // Check if query is a substring of candidate or vice versa
-    if candidate.contains(query) || query.contains(candidate) {
-        return true;
-    }
-    // Check word boundaries
+    // Token-boundary prefix matching: each query word must be a prefix of some candidate word
     let query_words: Vec<&str> = query.split_whitespace().collect();
     let candidate_words: Vec<&str> = candidate.split_whitespace().collect();
+    if query_words.is_empty() || candidate_words.is_empty() {
+        return false;
+    }
     for qw in &query_words {
+        let mut matched = false;
         for cw in &candidate_words {
-            if cw.contains(qw) || qw.contains(cw) {
-                return true;
+            if cw.starts_with(qw) {
+                matched = true;
+                break;
             }
         }
+        if !matched {
+            return false;
+        }
     }
-    false
+    true
 }
 
 /// Resolves via PATH using `where` command on Windows, `which` on Unix.
@@ -243,7 +247,22 @@ pub fn resolve_app(name: String) -> Option<ResolvedApp> {
     None
 }
 
+fn is_allowed_extension(path: &str) -> bool {
+    let allowed = [".exe", ".lnk", ".bat", ".cmd", ".com", ".msi", ".app", ".url"];
+    let p = Path::new(path);
+    match p.extension().and_then(|s| s.to_str()) {
+        Some(ext) => {
+            let dot_ext = format!(".{}", ext.to_lowercase());
+            allowed.contains(&dot_ext.as_str()) || dot_ext == ".app"
+        }
+        None => true,
+    }
+}
+
 #[tauri::command]
 pub fn verify_target(path: String) -> bool {
-    Path::new(&path).exists()
+    if !Path::new(&path).exists() {
+        return false;
+    }
+    is_allowed_extension(&path)
 }

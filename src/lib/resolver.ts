@@ -111,7 +111,21 @@ export async function saveAndConfirm(
   return action.id;
 }
 
+const DANGEROUS_EXTENSIONS = [".exe", ".bat", ".cmd", ".com", ".scr", ".ps1", ".lnk", ".msi", ".vbs", ".js", ".hta"];
+
+function isDangerousTarget(target: string): boolean {
+  const lower = target.toLowerCase();
+  if (lower.startsWith("\\\\")) return true;
+  for (const ext of DANGEROUS_EXTENSIONS) {
+    if (lower.endsWith(ext)) return true;
+  }
+  return false;
+}
+
 export function needsConfirmation(result: ResolveResult): boolean {
+  if (result.resolvedVia === "learned" && result.target && isDangerousTarget(result.target)) {
+    return true;
+  }
   return result.resolvedVia !== "learned"
     && result.resolvedVia !== "alias"
     && (result.confidence ?? 0) < 0.7;

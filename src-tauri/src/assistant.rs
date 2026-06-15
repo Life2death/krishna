@@ -1,8 +1,18 @@
-use std::process::Command;
 use tauri_plugin_opener::OpenerExt;
 
 fn is_safe_app_name(s: &str) -> bool {
     s.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-' || c == '.')
+}
+
+fn is_dangerous_target(target: &str) -> bool {
+    let lower = target.to_lowercase();
+    let dangerous_extensions = [".exe", ".bat", ".cmd", ".com", ".scr", ".ps1", ".lnk", ".msi", ".vbs", ".js", ".hta"];
+    for ext in &dangerous_extensions {
+        if lower.ends_with(ext) {
+            return true;
+        }
+    }
+    lower.starts_with("\\\\")
 }
 
 #[tauri::command]
@@ -14,9 +24,15 @@ pub fn open_target(app_handle: tauri::AppHandle, target: String) -> Result<Strin
     } else if lower.starts_with("www.") {
         open_url_safe(&app_handle, &format!("https://{}", target))
     } else if lower.contains('\\') || lower.contains('/') || lower.ends_with(".exe") {
+        if is_dangerous_target(&target) {
+            return Err(format!("Blocked dangerous target: {}", target));
+        }
         open_path_safe(&app_handle, &target)
     } else if is_safe_app_name(&target) {
-        open_app_safe(&target)
+        if is_dangerous_target(&target) {
+            return Err(format!("Blocked dangerous target: {}", target));
+        }
+        open_app_safe(&app_handle, &target)
     } else {
         Err(format!("Invalid target: {}", target))
     }
@@ -38,8 +54,8 @@ fn open_path_safe(app_handle: &tauri::AppHandle, path: &str) -> Result<String, S
     Ok(format!("Opened path: {}", path))
 }
 
-#[tauri::command]
-pub fn run_shell_command(command: String) -> Result<String, String> {
+#[allow(dead_code)]
+fn run_shell_command(command: String) -> Result<String, String> {
     if command.len() > 500 {
         return Err("Command too long (max 500 chars)".to_string());
     }
@@ -72,44 +88,10 @@ pub fn run_shell_command(command: String) -> Result<String, String> {
     }
 }
 
-fn open_app_safe(app: &str) -> Result<String, String> {
-    #[cfg(target_os = "windows")]
-    {
-        // Inherit the full user PATH so apps installed to %LOCALAPPDATA% (e.g. VS Code)
-        // are found. We build it by prepending common user bin dirs to the current PATH.
-        let base_path = std::env::var("PATH").unwrap_or_default();
-        let local_app_data = std::env::var("LOCALAPPDATA").unwrap_or_default();
-        let extra = format!(
-            "{0}\\Programs\\Microsoft VS Code\\bin;{0}\\Programs\\Microsoft VS Code;",
-            local_app_data
-        );
-        let full_path = format!("{}{}", extra, base_path);
-
-        Command::new("cmd")
-            .args(["/C", "start", "", app])
-            .env("PATH", &full_path)
-            .spawn()
-            .map_err(|e| format!("Failed to open app '{}': {}", app, e))?;
-        Ok(format!("Opened: {}", app))
-    }
-    #[cfg(target_os = "macos")]
-    {
-        Command::new("open")
-            .arg("-a")
-            .arg(app)
-            .spawn()
-            .map_err(|e| format!("Failed to open app '{}': {}", app, e))?;
-        Ok(format!("Opened: {}", app))
-    }
-    #[cfg(target_os = "linux")]
-    {
-        Command::new(app)
-            .spawn()
-            .map_err(|e| format!("Failed to open app '{}': {}", app, e))?;
-        Ok(format!("Opened: {}", app))
-    }
-    #[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
-    {
-        Err("Unsupported platform".to_string())
-    }
+fn open_app_safe(app_handle: &tauri::AppHandle, app: &str) -> Result<String, String> {
+    app_handle
+        .opener()
+        .open_path(app, None::<&str>)
+        .map_err(|e| format!("Failed to open app '{}': {}", app, e))?;
+    Ok(format!("Opened: {}", app))
 }

@@ -53,7 +53,10 @@ fn validate_capture_window(app: &tauri::AppHandle) -> Result<(), String> {
 }
 
 #[tauri::command]
-pub async fn start_screen_capture(app: tauri::AppHandle) -> Result<(), String> {
+pub async fn start_screen_capture(window: tauri::WebviewWindow, app: tauri::AppHandle) -> Result<(), String> {
+    if window.label() != "main" {
+        return Err("Capture not allowed from this window".to_string());
+    }
     validate_capture_window(&app)?;
     // Get all monitors
     let capture_monitors = Monitor::all().map_err(|e| format!("Failed to get monitors: {}", e))?;
@@ -215,10 +218,14 @@ pub fn close_overlay_window(app: tauri::AppHandle) -> Result<(), String> {
 
 #[tauri::command]
 pub async fn capture_selected_area(
+    window: tauri::WebviewWindow,
     app: tauri::AppHandle,
     coords: SelectionCoords,
     monitor_index: usize,
 ) -> Result<String, String> {
+    if window.label() != "main" {
+        return Err("Capture not allowed from this window".to_string());
+    }
     // Get the stored captured monitors
     let state = app.state::<CaptureState>();
     let mut captured_monitors = state.captured_monitors.lock().unwrap();

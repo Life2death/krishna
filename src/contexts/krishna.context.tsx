@@ -6,6 +6,7 @@ import { executePlan, resolvePlaceholders } from "@/lib/executor";
 import { getToolDescriptions } from "@/lib/tools";
 import { getTTS, getElevenLabsTTS, type TTSProvider } from "@/lib/tts";
 import { safeLocalStorage } from "@/lib";
+import { secureStorage } from "@/lib/secure-storage";
 import { STORAGE_KEYS } from "@/config";
 import { setKrishnaSpeaking } from "@/lib/krishna-mutex";
 import { listen } from "@tauri-apps/api/event";
@@ -247,9 +248,15 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
   const [ttsProvider, setTtsProviderState] = useState<"browser" | "elevenlabs">(() => {
     return (safeLocalStorage.getItem(STORAGE_KEYS.KRISHNA_TTS_PROVIDER) as "browser" | "elevenlabs") || "browser";
   });
-  const [elApiKey, setElApiKeyState] = useState<string>(() => {
-    return safeLocalStorage.getItem(STORAGE_KEYS.KRISHNA_EL_API_KEY) || "";
-  });
+  const [elApiKey, setElApiKeyState] = useState<string>("");
+  const elApiKeyLoadedRef = useRef(false);
+  useEffect(() => {
+    if (elApiKeyLoadedRef.current) return;
+    elApiKeyLoadedRef.current = true;
+    secureStorage.get(STORAGE_KEYS.KRISHNA_EL_API_KEY).then((val) => {
+      if (val) setElApiKeyState(val);
+    });
+  }, []);
   const [elVoiceId, setElVoiceIdState] = useState<string>(() => {
     return safeLocalStorage.getItem(STORAGE_KEYS.KRISHNA_EL_VOICE_ID) || "21m00Tcm4TlvDq8ikWAM";
   });
@@ -285,7 +292,7 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
   }, []);
   const setElApiKey = useCallback((k: string) => {
     setElApiKeyState(k);
-    safeLocalStorage.setItem(STORAGE_KEYS.KRISHNA_EL_API_KEY, k);
+    secureStorage.set(STORAGE_KEYS.KRISHNA_EL_API_KEY, k);
   }, []);
   const setElVoiceId = useCallback((id: string) => {
     setElVoiceIdState(id);
