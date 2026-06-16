@@ -24,3 +24,15 @@ const UNDO_PATTERNS = [
 export function isUndoCommand(command: string): boolean {
   return UNDO_PATTERNS.some((pattern) => pattern.test(command.trim()));
 }
+
+const JOB_EXTRACTION_PATTERNS = [
+  /run.*(my )?(daily )?job (extraction|hunter)/i,
+  /kick ?off.*job.?hunter/i,
+  /fire.*(the )?job.?hunter/i,
+  /start.*job.?hunter/i,
+  /trigger.*(my )?(daily )?job (extraction|hunter)/i,
+];
+
+export function isJobExtractionCommand(command: string): boolean {
+  return JOB_EXTRACTION_PATTERNS.some((pattern) => pattern.test(command));
+}

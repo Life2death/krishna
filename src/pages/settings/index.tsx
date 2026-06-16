@@ -6,6 +6,7 @@ import {
   AppIconToggle,
   AutostartToggle,
   KrishnaSettings,
+  Integrations,
 } from "./components";
 import {
   ResponseLength,
@@ -82,6 +83,9 @@ const Settings = () => {
 
       {/* Krishna Assistant */}
       <KrishnaSettings />
+
+      {/* Integrations (GitHub, etc.) */}
+      <Integrations />
 
       <div className="border-t pt-4">
         <Header

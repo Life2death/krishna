@@ -20,7 +20,8 @@ import { detectWakeWord } from "@/lib/wake-word";
 import { parseReminderCommand } from "@/lib/reminders";
 import { createReminder, getDueReminders, updateReminder, cancelReminder } from "@/lib/database/reminders.action";
 import { createConversation, appendMessages, generateConversationTitle, getMostRecentConversation, deleteConversation } from "@/lib/database/chat-history.action";
-import { isLookCommand, isUndoCommand } from "@/lib/perception";
+import { isLookCommand, isUndoCommand, isJobExtractionCommand } from "@/lib/perception";
+import { triggerJobExtractionWorkflow } from "@/lib/integrations/github-workflow";
 import { createAuditEntry, getLastReversible } from "@/lib/database/audit.action";
 import type { AssistantStatus, StepAction } from "@/types/assistant";
 import type { Skill } from "@/types/skill";
@@ -539,7 +540,7 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const pendingConfirmationRef = useRef<{
-    type: "action" | "plan" | "memory" | "reminder";
+    type: "action" | "plan" | "memory" | "reminder" | "job_extraction";
     spokenResponse: string;
     pendingResult?: { found: boolean; target?: string; displayName?: string; [key: string]: any };
     input?: string;
@@ -803,6 +804,46 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
             } finally {
               setStatus("idle");
             }
+          } else if (pending.type === "job_extraction") {
+            setStatus("thinking");
+            try {
+              const result = await triggerJobExtractionWorkflow();
+              const speak = result.success
+                ? "Started your daily job extraction. You'll get the email report shortly."
+                : "I couldn't start it: " + (result.error || "unknown error");
+              try {
+                await createAuditEntry({
+                  id: String(Date.now()),
+                  actionType: "job_extraction",
+                  summary: speak,
+                  result: result.success ? "ok" : "failed",
+                  reversible: 0,
+                  undoPayload: null,
+                  createdAt: Date.now(),
+                });
+              } catch { /* non-critical */ }
+              await recordTurn(pending.input || "", speak);
+              setLastSpoken(speak);
+              setKrishnaSpeaking(true);
+              setStatus("speaking");
+              try {
+                await ttsRef.current.speak(speak);
+              } finally {
+                setKrishnaSpeaking(false);
+              }
+            } catch (err) {
+              const msg = err instanceof Error ? err.message : "Failed to trigger job extraction";
+              await recordTurn(pending.input || "", "I had trouble: " + msg);
+              setStatus("speaking");
+              setKrishnaSpeaking(true);
+              try {
+                await ttsRef.current.speak("I had trouble: " + msg);
+              } finally {
+                setKrishnaSpeaking(false);
+              }
+            } finally {
+              setStatus("idle");
+            }
           } else if (pending.type === "reminder" && pending.reminderData) {
             setStatus("thinking");
             try {
@@ -1040,6 +1081,32 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
       if (rememberResult && rememberResult.value) {
         const { key, value } = rememberResult;
         await promptMemoryConfirmation(key, value, command);
+        return;
+      }
+
+      // Job extraction: "run my daily job extraction"
+      if (isJobExtractionCommand(command)) {
+        pendingConfirmationRef.current = {
+          type: "job_extraction",
+          spokenResponse: "Should I run your daily job extraction now?",
+          input: command,
+        };
+        reAskRef.current = false;
+        clearConfirmTimeout();
+        confirmTimeoutRef.current = setTimeout(() => {
+          pendingConfirmationRef.current = null;
+          reAskRef.current = false;
+          setStatus("idle");
+          ttsRef.current.speak("Okay, I won't run it.");
+        }, 15000);
+        setStatus("confirming");
+        setLastSpoken(pendingConfirmationRef.current.spokenResponse);
+        setKrishnaSpeaking(true);
+        try {
+          await ttsRef.current.speak(pendingConfirmationRef.current.spokenResponse);
+        } finally {
+          setKrishnaSpeaking(false);
+        }
         return;
       }
 

@@ -44,7 +44,8 @@
         { "url": "https://api.groq.com/**" },
         { "url": "https://api.elevenlabs.io/**" },
         { "url": "https://www.googleapis.com/**" },
-        { "url": "https://app.posthog.com/**" }
+        { "url": "https://app.posthog.com/**" },
+        { "url": "https://api.github.com/**" }
       ]
     }
   ]
