@@ -41,6 +41,12 @@ fn decrypt_data(ciphertext: &[u8], key: &[u8; 32]) -> Result<Vec<u8>, String> {
         .map_err(|_| "Decryption failed (invalid key or corrupted data)".to_string())
 }
 
+// Fixed app seed for key derivation. MUST stay constant across releases —
+// deriving the key from the app version (the old behaviour) meant every version
+// bump produced a different key, which made all previously stored secrets
+// undecryptable and silently blocked new writes (set merges into the old blob).
+const APP_SEED: &str = "krishna-secure-storage-v1";
+
 fn get_key(app: &AppHandle) -> Result<[u8; 32], String> {
     let machine_id = app
         .machine_uid()
@@ -51,8 +57,7 @@ fn get_key(app: &AppHandle) -> Result<[u8; 32], String> {
     if machine_id.is_empty() {
         return Err("Machine identifier unavailable".to_string());
     }
-    let app_version: String = app.package_info().version.to_string();
-    Ok(derive_encryption_key(&machine_id, &app_version))
+    Ok(derive_encryption_key(&machine_id, APP_SEED))
 }
 
 pub fn read_encrypted_json(app: &AppHandle) -> Result<serde_json::Value, String> {
@@ -91,7 +96,13 @@ pub fn encrypt_data(plaintext: &[u8], key: &[u8; 32]) -> Result<Vec<u8>, String>
 
 pub fn set_stored_value(app: &AppHandle, key: &str, value: &str) -> Result<(), String> {
     let path = get_storage_path(app)?;
-    let mut data = read_encrypted_json(app)?;
+    // Self-healing: if the existing blob is missing, corrupt, or was written with
+    // an old (version-derived) key, start from an empty object instead of aborting
+    // the write. Otherwise one undecryptable file would permanently block all saves.
+    let mut data = read_encrypted_json(app).unwrap_or_else(|_| serde_json::json!({}));
+    if !data.is_object() {
+        data = serde_json::json!({});
+    }
     data[key] = serde_json::json!(value);
     let plaintext = serde_json::to_vec(&data)
         .map_err(|e| format!("Failed to serialize storage: {}", e))?;

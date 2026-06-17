@@ -7,6 +7,7 @@ export const Integrations = () => {
   const [patInput, setPatInput] = useState("");
   const [hasSavedPat, setHasSavedPat] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     secureStorage.get(GITHUB_PAT_STORAGE_KEY).then((key) => {
@@ -16,11 +17,22 @@ export const Integrations = () => {
 
   const handleSave = async () => {
     if (!patInput.trim()) return;
-    await secureStorage.set(GITHUB_PAT_STORAGE_KEY, patInput.trim());
-    setHasSavedPat(true);
-    setPatInput("");
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
+    setError(null);
+    try {
+      await secureStorage.set(GITHUB_PAT_STORAGE_KEY, patInput.trim());
+      // Read it straight back so the UI reflects what's actually persisted,
+      // rather than optimistically assuming the write succeeded.
+      const stored = await secureStorage.get(GITHUB_PAT_STORAGE_KEY);
+      if (!stored) {
+        throw new Error("Token did not persist — storage returned empty after save.");
+      }
+      setHasSavedPat(true);
+      setPatInput("");
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to save token.");
+    }
   };
 
   return (
@@ -60,7 +72,8 @@ export const Integrations = () => {
             {saved ? "Saved" : "Save"}
           </Button>
         </div>
-        {hasSavedPat && (
+        {error && <p className="text-xs text-red-500">{error}</p>}
+        {!error && hasSavedPat && (
           <p className="text-xs text-green-500">✓ Token configured</p>
         )}
       </div>
