@@ -4,6 +4,10 @@ import type { TYPE_PROVIDER } from "@/types";
 
 // ── Mocks ─────────────────────────────────────────────────────────────────────
 
+// Create the tauriFetch mock via vi.hoisted so it's available in vi.mock factories
+// and we never import the actual @tauri-apps/plugin-http (which loads native bindings).
+const mockTauriFetch = vi.hoisted(() => vi.fn());
+
 vi.mock("@bany/curl-to-json", () => ({
   default: (curl: string) => {
     if (curl.includes("bad-curl:::")) throw new Error("bad syntax");
@@ -24,7 +28,7 @@ vi.mock("@bany/curl-to-json", () => ({
 }));
 
 vi.mock("@tauri-apps/plugin-http", () => ({
-  fetch: vi.fn(),
+  fetch: mockTauriFetch,
 }));
 
 // Mock the response-settings module (used inside ai-response.function.ts)
@@ -42,8 +46,7 @@ vi.mock("@/config/constants", () => ({
   MARKDOWN_FORMATTING_INSTRUCTIONS: "",
 }));
 
-const mockFetch = vi.fn();
-vi.stubGlobal("fetch", mockFetch);
+vi.stubGlobal("fetch", vi.fn());
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -86,14 +89,14 @@ function makeSseStream(chunks: string[], done = true): ReadableStream<Uint8Array
 }
 
 function mockStreamingResponse(chunks: string[]) {
-  mockFetch.mockResolvedValueOnce({
+  mockTauriFetch.mockResolvedValueOnce({
     ok: true,
     body: makeSseStream(chunks),
   } as unknown as Response);
 }
 
 function mockNonStreamingResponse(content: string) {
-  mockFetch.mockResolvedValueOnce({
+  mockTauriFetch.mockResolvedValueOnce({
     ok: true,
     json: async () => ({ choices: [{ message: { content } }] }),
     body: null,
@@ -101,7 +104,7 @@ function mockNonStreamingResponse(content: string) {
 }
 
 function mockErrorResponse(status: number, body = "Error") {
-  mockFetch.mockResolvedValueOnce({
+  mockTauriFetch.mockResolvedValueOnce({
     ok: false,
     status,
     statusText: body,
@@ -120,6 +123,7 @@ async function collectChunks(gen: AsyncIterable<string>): Promise<string[]> {
 describe("fetchAIResponse", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockTauriFetch.mockReset();
   });
 
   // ── Streaming mode ───────────────────────────────────────────────────────
@@ -152,7 +156,7 @@ describe("fetchAIResponse", () => {
         c.close();
       },
     });
-    mockFetch.mockResolvedValueOnce({ ok: true, body } as unknown as Response);
+    mockTauriFetch.mockResolvedValueOnce({ ok: true, body } as unknown as Response);
     const chunks = await collectChunks(
       fetchAIResponse({ provider: openAiProvider, selectedProvider, userMessage: "test" })
     );
@@ -229,7 +233,7 @@ describe("fetchAIResponse", () => {
       })
     );
     expect(chunks).toHaveLength(0);
-    expect(mockFetch).not.toHaveBeenCalled();
+    expect(mockTauriFetch).not.toHaveBeenCalled();
   });
 
   // ── Image support ───────────────────────────────────────────────────────
@@ -257,7 +261,7 @@ describe("fetchAIResponse", () => {
     await collectChunks(
       fetchAIResponse({ provider: openAiProvider, selectedProvider, userMessage: "follow up", history })
     );
-    const body = JSON.parse(mockFetch.mock.calls[0][1].body);
+    const body = JSON.parse(mockTauriFetch.mock.calls[0][1].body);
     const roles = body.messages.map((m: any) => m.role);
     expect(roles).toContain("user");
     expect(roles).toContain("assistant");

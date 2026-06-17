@@ -4,7 +4,10 @@ import type { TYPE_PROVIDER } from "@/types";
 
 // ── Mocks ────────────────────────────────────────────────────────────────────
 
-// curl2Json: parse a fake curl for all valid provider curls
+// Create the tauriFetch mock via vi.hoisted so it's available in vi.mock factories
+// and we never import the actual @tauri-apps/plugin-http (which loads native bindings).
+const mockTauriFetch = vi.hoisted(() => vi.fn());
+
 vi.mock("@bany/curl-to-json", () => ({
   default: (curl: string) => {
     if (curl.includes("bad-curl:::")) throw new Error("bad syntax");
@@ -17,9 +20,11 @@ vi.mock("@bany/curl-to-json", () => ({
   },
 }));
 
-// global fetch: return a successful transcription by default
-const mockFetch = vi.fn();
-vi.stubGlobal("fetch", mockFetch);
+vi.mock("@tauri-apps/plugin-http", () => ({
+  fetch: mockTauriFetch,
+}));
+
+vi.stubGlobal("fetch", vi.fn());
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -47,14 +52,14 @@ function makeAudioBlob(content = "fake-wav-bytes", type = "audio/wav"): Blob {
 
 function mockSuccessResponse(body: Record<string, any> | string) {
   const text = typeof body === "string" ? body : JSON.stringify(body);
-  mockFetch.mockResolvedValueOnce({
+  mockTauriFetch.mockResolvedValueOnce({
     ok: true,
     text: async () => text,
   } as unknown as Response);
 }
 
 function mockErrorResponse(status: number, body: string) {
-  mockFetch.mockResolvedValueOnce({
+  mockTauriFetch.mockResolvedValueOnce({
     ok: false,
     status,
     statusText: "Error",
@@ -67,6 +72,7 @@ function mockErrorResponse(status: number, body: string) {
 describe("fetchSTT", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockTauriFetch.mockReset();
   });
 
   it("returns transcription on a successful JSON response", async () => {
