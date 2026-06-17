@@ -151,7 +151,20 @@ export const KrishnaSettings = () => {
           >
             ElevenLabs
           </Button>
+          <Button
+            size="sm"
+            variant={ttsProvider === "piper" ? "default" : "outline"}
+            onClick={() => setTtsProvider("piper")}
+          >
+            Piper (Offline, Free)
+          </Button>
         </div>
+        {ttsProvider === "piper" && (
+          <p className="text-xs text-muted-foreground">
+            Fully offline neural voice — no API key, no internet needed. Runs locally
+            on your machine (Ryan, US English).
+          </p>
+        )}
       </div>
 
       {/* Browser voice picker */}

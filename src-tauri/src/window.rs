@@ -73,11 +73,11 @@ pub fn create_dashboard_window<R: Runtime>(
     app: &AppHandle<R>,
 ) -> Result<WebviewWindow<R>, tauri::Error> {
     let base_builder =
-        WebviewWindowBuilder::new(app, "dashboard", tauri::WebviewUrl::App("/chats".into()));
+        WebviewWindowBuilder::new(app, "dashboard", tauri::WebviewUrl::App("/dashboard".into()));
 
     #[cfg(target_os = "macos")]
     let base_builder = base_builder
-        .title("Naukri Lelo - Dashboard")
+        .title("Krishna - Dashboard")
         .center()
         .decorations(true)
         .inner_size(1200.0, 800.0)
@@ -90,7 +90,7 @@ pub fn create_dashboard_window<R: Runtime>(
 
     #[cfg(not(target_os = "macos"))]
     let base_builder = base_builder
-        .title("Naukri Lelo - Dashboard")
+        .title("Krishna - Dashboard")
         .center()
         .decorations(true)
         .inner_size(800.0, 600.0)

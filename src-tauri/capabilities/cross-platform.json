@@ -44,7 +44,22 @@
         { "url": "https://api.elevenlabs.io/**" },
         { "url": "https://www.googleapis.com/**" },
         { "url": "https://app.posthog.com/**" },
-        { "url": "https://api.github.com/**" }
+        { "url": "https://api.github.com/**" },
+        { "url": "https://openrouter.ai/**" },
+        { "url": "https://api.openai.com/**" },
+        { "url": "https://api.anthropic.com/**" },
+        { "url": "https://api.x.ai/**" },
+        { "url": "https://generativelanguage.googleapis.com/**" },
+        { "url": "https://api.mistral.ai/**" },
+        { "url": "https://api.cohere.ai/**" },
+        { "url": "https://api.perplexity.ai/**" },
+        { "url": "http://localhost:11434/**" },
+        { "url": "https://speech.googleapis.com/**" },
+        { "url": "https://api.deepgram.com/**" },
+        { "url": "https://*.stt.speech.microsoft.com/**" },
+        { "url": "https://asr.api.speechmatics.com/**" },
+        { "url": "https://api.rev.ai/**" },
+        { "url": "https://api.us-south.speech-to-text.watson.cloud.ibm.com/**" }
       ]
     }
   ]

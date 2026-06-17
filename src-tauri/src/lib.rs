@@ -6,6 +6,7 @@ mod db;
 mod resolver;
 mod secure;
 mod shortcuts;
+mod tts;
 mod window;
 use std::sync::{Arc, Mutex};
 use tauri::Manager;
@@ -132,6 +133,7 @@ pub fn run() {
             secure::secure_set,
             resolver::resolve_app,
             resolver::verify_target,
+            tts::synthesize_speech_piper,
         ])
         .setup(|app| {
             // Non-fatal: if window positioning fails, continue anyway

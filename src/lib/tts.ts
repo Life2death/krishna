@@ -187,10 +187,81 @@ export class ElevenLabsTTS implements TTSProvider {
 }
 
 // ---------------------------------------------------------------------------
+// Piper TTS — fully offline, free, local neural voice (no API key, no network)
+// ---------------------------------------------------------------------------
+export class PiperTTS implements TTSProvider {
+  private _speaking = false;
+  private audioCtx: AudioContext | null = null;
+  private sourceNode: AudioBufferSourceNode | null = null;
+
+  speak(text: string): Promise<void> {
+    return new Promise(async (resolve) => {
+      try {
+        this.stop();
+
+        const cleaned = stripMarkdown(text);
+        if (!cleaned.trim()) { resolve(); return; }
+
+        const { invoke } = await import("@tauri-apps/api/core");
+        const base64Wav = await invoke<string>("synthesize_speech_piper", { text: cleaned });
+
+        const binary = atob(base64Wav);
+        const bytes = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+
+        // Decode via Web Audio API rather than an <audio> element + blob URL —
+        // decodeAudioData parses the WAV's own sample rate/channel layout directly
+        // (Piper outputs 22050Hz mono), avoiding <audio> playback-engine quirks
+        // with non-standard sample rates that can render as garbled/scratchy audio.
+        if (!this.audioCtx) this.audioCtx = new AudioContext();
+        if (this.audioCtx.state === "suspended") await this.audioCtx.resume();
+
+        const audioBuffer = await this.audioCtx.decodeAudioData(bytes.buffer);
+
+        const source = this.audioCtx.createBufferSource();
+        source.buffer = audioBuffer;
+        source.connect(this.audioCtx.destination);
+        this.sourceNode = source;
+        this._speaking = true;
+
+        source.onended = () => {
+          this._speaking = false;
+          this.sourceNode = null;
+          resolve();
+        };
+
+        source.start();
+      } catch (err) {
+        this._speaking = false;
+        console.error("Piper TTS error:", err);
+        resolve();
+      }
+    });
+  }
+
+  stop(): void {
+    if (this.sourceNode) {
+      try { this.sourceNode.stop(); } catch {}
+      this.sourceNode = null;
+    }
+    this._speaking = false;
+  }
+
+  isSpeaking(): boolean { return this._speaking; }
+
+  // Voice is fixed (bundled en_US-ryan-medium model) — no per-call voice/rate/pitch control yet
+  setVoice(_voice: SpeechSynthesisVoice | null): void {}
+  setRate(_rate: number): void {}
+  setPitch(_pitch: number): void {}
+  getVoices(): SpeechSynthesisVoice[] { return []; }
+}
+
+// ---------------------------------------------------------------------------
 // Singletons
 // ---------------------------------------------------------------------------
 let browserTtsInstance: BrowserTTS | null = null;
 let elevenlabsTtsInstance: ElevenLabsTTS | null = null;
+let piperTtsInstance: PiperTTS | null = null;
 
 export function getTTS(): BrowserTTS {
   if (!browserTtsInstance) browserTtsInstance = new BrowserTTS();
@@ -200,4 +271,9 @@ export function getTTS(): BrowserTTS {
 export function getElevenLabsTTS(): ElevenLabsTTS {
   if (!elevenlabsTtsInstance) elevenlabsTtsInstance = new ElevenLabsTTS();
   return elevenlabsTtsInstance;
+}
+
+export function getPiperTTS(): PiperTTS {
+  if (!piperTtsInstance) piperTtsInstance = new PiperTTS();
+  return piperTtsInstance;
 }

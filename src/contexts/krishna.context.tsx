@@ -4,7 +4,7 @@ import { fetchAIResponse } from "@/lib/functions";
 import { parseActions, executeAction } from "@/lib/actions";
 import { executePlan, resolvePlaceholders } from "@/lib/executor";
 import { getToolDescriptions } from "@/lib/tools";
-import { getTTS, getElevenLabsTTS, type TTSProvider } from "@/lib/tts";
+import { getTTS, getElevenLabsTTS, getPiperTTS, type TTSProvider } from "@/lib/tts";
 import { safeLocalStorage } from "@/lib";
 import { secureStorage } from "@/lib/secure-storage";
 import { STORAGE_KEYS } from "@/config";
@@ -51,8 +51,8 @@ interface KrishnaContextType {
   setRate: (v: number) => void;
   llmFallbackEnabled: boolean;
   setLlmFallbackEnabled: (v: boolean) => void;
-  ttsProvider: "browser" | "elevenlabs";
-  setTtsProvider: (p: "browser" | "elevenlabs") => void;
+  ttsProvider: "browser" | "elevenlabs" | "piper";
+  setTtsProvider: (p: "browser" | "elevenlabs" | "piper") => void;
   elApiKey: string;
   setElApiKey: (k: string) => void;
   elVoiceId: string;
@@ -246,8 +246,8 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
   });
 
   // ElevenLabs TTS settings
-  const [ttsProvider, setTtsProviderState] = useState<"browser" | "elevenlabs">(() => {
-    return (safeLocalStorage.getItem(STORAGE_KEYS.KRISHNA_TTS_PROVIDER) as "browser" | "elevenlabs") || "browser";
+  const [ttsProvider, setTtsProviderState] = useState<"browser" | "elevenlabs" | "piper">(() => {
+    return (safeLocalStorage.getItem(STORAGE_KEYS.KRISHNA_TTS_PROVIDER) as "browser" | "elevenlabs" | "piper") || "browser";
   });
   const [elApiKey, setElApiKeyState] = useState<string>("");
   const elApiKeyLoadedRef = useRef(false);
@@ -282,12 +282,14 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
     if (ttsProvider === "elevenlabs") {
       elTtsRef.current.configure({ apiKey: elApiKey, voiceId: elVoiceId, modelId: elModelId });
       ttsRef.current = elTtsRef.current;
+    } else if (ttsProvider === "piper") {
+      ttsRef.current = getPiperTTS();
     } else {
       ttsRef.current = getTTS();
     }
   }, [ttsProvider, elApiKey, elVoiceId, elModelId]);
 
-  const setTtsProvider = useCallback((p: "browser" | "elevenlabs") => {
+  const setTtsProvider = useCallback((p: "browser" | "elevenlabs" | "piper") => {
     setTtsProviderState(p);
     safeLocalStorage.setItem(STORAGE_KEYS.KRISHNA_TTS_PROVIDER, p);
   }, []);

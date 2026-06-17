@@ -158,7 +158,11 @@ export async function* fetchAIResponse(params: {
       }
     }
 
-    const fetchFunction = url?.includes("http") ? fetch : tauriFetch;
+    // Real network requests must go through Tauri's HTTP plugin (tauriFetch) —
+    // it bypasses the browser's CORS policy, which most LLM provider APIs
+    // don't grant for a webview origin, causing a generic "Failed to fetch"
+    // from plain browser fetch().
+    const fetchFunction = url?.includes("http") ? tauriFetch : fetch;
 
     let response;
     try {

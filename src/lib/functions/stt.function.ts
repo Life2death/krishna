@@ -151,7 +151,11 @@ export async function fetchSTT(params: STTParams): Promise<string> {
       body = JSON.stringify(deepVariableReplacer(dataObj, allVariables));
     }
 
-    const fetchFunction = url?.includes("http") ? fetch : tauriFetch;
+    // Real network requests must go through Tauri's HTTP plugin (tauriFetch) —
+    // it bypasses the browser's CORS policy, which most STT provider APIs
+    // (Groq, etc.) don't grant for a webview origin, causing a generic
+    // "Failed to fetch" from plain browser fetch().
+    const fetchFunction = url?.includes("http") ? tauriFetch : fetch;
 
     // Send request
     let response: Response;
