@@ -12,7 +12,28 @@
 
 ---
 
-## v1.2.0 (2026-06-15) — UX Consolidation + Wake Word + Store Unification
+## v1.3.0 (2026-06-19) — Phase 0: Workspace Restructure + Pluggable SqlDriver
+
+**Monorepo workspace with `packages/core/` — framework-free business logic extracted as a reusable package:**
+
+- **`packages/core/`** — new npm workspace package containing all framework-free code:
+  - Types, database actions, tools, functions, and shared utilities
+  - Injectable `SqlDriver` interface (matches Tauri plugin-sql signatures exactly)
+  - Injectable `HttpFetchFn` for platform-agnostic HTTP
+  - Injectable `SettingsGetter` and `SecretGetter` for platform-agnostic config/secrets
+  - Dynamic config import support (`action-policy.ts`, `app-aliases.ts`)
+  - All imports use relative paths (no `@/` aliases)
+- **Client re-exports:** All `src/lib/` barrel files now re-export from `@krishna/core/*`
+- **`startup.ts` wiring** — `setDriver()`, `setHttpFetch()`, `setSettingsGetter()`, `setSecretGetter()` called before React render in `main.tsx`
+- **`vitest.config.ts` fix** — added `@` alias for test resolution; all 13 test suites import correctly
+- **npm workspaces** — `"workspaces": ["packages/core"]` in root `package.json`; workspace symlink at `node_modules/@krishna/core` → `packages/core`
+
+**Zero user-visible change** — old source files remain in place as re-export wrappers or original code for direct-import compatibility.
+
+**Verification:**
+- `npx tsc --noEmit` clean
+- `npx vite build` successful (6993 modules, 20s)
+- 192/192 tests pass across 13 test files
 
 **Phase 6 cleanup (UX_CONSOLIDATION_PLAN.md + PHASE_7_FIXES.md):**
 
