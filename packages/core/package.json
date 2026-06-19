@@ -1,0 +1,10 @@
+{
+  "name": "@krishna/core",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./index.ts",
+  "dependencies": {
+    "@bany/curl-to-json": "^1.2.8"
+  }
+}

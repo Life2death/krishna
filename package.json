@@ -1,6 +1,7 @@
 {
   "name": "krishna",
-  "private": false,
+  "private": true,
+  "workspaces": ["packages/core"],
   "version": "1.0.3",
   "description": "Krishna — a talking desktop AI assistant. Voice-in, voice-out, open apps/websites/files via voice command.",
   "author": {
