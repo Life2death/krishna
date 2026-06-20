@@ -24,7 +24,6 @@ dist-ssr
 *.sw?
 
 # Working plans and drafts
-KRISHNA_ECOSYSTEM_PLAN.md
 MEMORY_PARSER_FIX.md
 REMOTE_ACCESS_PLAN.md
 SECURITY_FIX_FOLLOWUP.md

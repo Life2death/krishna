@@ -1,0 +1,275 @@
+# Krishna Ecosystem — Implementation Plan & Coding Handoff
+
+> **Single source of truth.** Supersedes the earlier vision/implementation drafts.
+> **For the coding agent:** read this top-to-bottom once, then execute **phase by phase, in order**.
+> Do **not** skip Phase 0 — every later phase depends on its seams. After each phase, run its
+> **Verify** step and stop for human review before starting the next.
+
+---
+
+## Status (last updated 2026-06-20)
+
+| Phase | State | Notes |
+|---|---|---|
+| **Phase 0** — Workspace + pluggable driver | ✅ **Done & merged** | Plus follow-up cleanup ([PR #2](https://github.com/Life2death/krishna/pull/2)): all client DB access (incl. `krishna.context.tsx`) now routes through the `@krishna/core` barrel; 8 duplicate `src/lib/database/*.action.ts` files deleted; `audit.action` exported from the core barrel. Verified: `tsc` clean, client 192/192. |
+| **Phase 1** — Krishna Brain (Node) + Turso + encryption | ✅ **Done & merged** | [PR #1](https://github.com/Life2death/krishna/pull/1). `apps/brain/` (Fastify + `@libsql/client` + `@napi-rs/keyring`, run via `tsx`). Field encryption verified ciphertext-at-rest; CRUD/auth/WS/`/chat`-guard verified live; brain 7/7. **`/chat` live token streaming still needs a real `ANTHROPIC_API_KEY` in `apps/brain/.env` to verify end-to-end.** Adapter coerces `undefined`→`null` to match Tauri plugin-sql. |
+| **Phase 2** — Client remote-brain mode (cross-device sync) | 🔜 **Next** | `RemoteRepo` + `getRepo()` selector (`brainMode` flag) + WS live-sync + "Brain connection" settings panel. See §4 below. |
+| **Phase 3** — MCP tool hub (in the brain) | ⬜ Pending | |
+| **Phase 4** — Mobile clients + voice + handoff | ⬜ Pending | |
+| **Phase 5** — Runtime skills + personas | ⬜ Pending | |
+
+**Known parked item (low priority):** the legacy `interview_profiles` table is fully removed from
+all TS/client code; only 3 historical Rust migrations remain (`src-tauri/src/db/main.rs` versions
+3/4/5). They are intentionally **kept** — deleting applied migrations breaks existing installs via
+sqlx history validation. The brain already skips them. To physically retire the table, add an
+*additive* migration v12 `DROP TABLE IF EXISTS interview_profiles` (needs a Tauri build to verify).
+
+---
+
+## 0. What we're building & why
+
+Krishna today is a **single-machine Tauri 2 desktop assistant** (Rust + React, BYOK LLM/STT, local
+SQLite). The goal is to evolve it into a **personal-assistant ecosystem across Android phone, iPhone,
+and laptop** — one shared brain, thin clients on every device.
+
+**Why not clone an existing project:** the reference assistants (isair/jarvis, rezaulhreza/jarvis,
+Stanford OpenJarvis) are all single-device, local-first, heavy-model (8GB+ VRAM). That collides with
+reality — phones can't run those models and the dev box has no GPU. So they're a **feature menu to
+borrow from**, not a blueprint. Krishna's edge is the **cross-device layer none of them have**, on a
+Tauri codebase that already targets all three platforms from one source.
+
+### Locked decisions
+| Decision | Choice |
+|---|---|
+| Topology | **Brain + thin spokes.** One brain owns memory/skills/tools; thin Krishna clients per device. |
+| Brain location (v1) | **Laptop-as-hub**, reachable by phones over a Tailscale tunnel. Move to cloud VPS in Phase 5. |
+| Model strategy | **Cloud Claude everywhere** (no GPU). Key held server-side in the brain. |
+| Brain runtime | **Node** — reuses Krishna's existing TypeScript `src/lib` near-verbatim. |
+| Cloud DB | **Turso / libSQL** — SQLite-native, zero query rewrite. Supabase/Postgres is the fallback. |
+| Data security | **App-level field encryption in the brain** (zero-knowledge cloud) + creds/keys never on mobile. |
+| v1 capability scope | MCP tool hub · cross-device memory sync · voice everywhere + handoff · runtime skills + personas. |
+
+---
+
+## 1. Target architecture
+
+```
+        ┌──────────────────────────────────────────────┐
+        │   KRISHNA BRAIN  (headless Node, on the laptop)│
+        │   libSQL (Turso) embedded replica:             │
+        │     memory · skills · learned-actions ·        │
+        │     reminders · chat history                   │
+        │   + field encryption  + MCP client hub         │
+        │   + model router (Claude)  + auth WS/HTTP API  │
+        └───────────────┬──────────────┬─────────────────┘
+            Tailscale tunnel (secure, no port-forward)
+     ┌──────────────────┼──────────────┼──────────────────┐
+     ▼                  ▼              ▼                   ▼
+ Laptop client     Android client   iPhone client     [later: web/watch]
+ (Tauri desktop)   (Tauri mobile)   (Tauri mobile)
+ full perception   voice + camera   voice + Shortcuts
+```
+
+Krishna's logic already lives mostly in `src/lib/*` (TypeScript). The brain reuses it. The Tauri app
+gains a **remote-brain mode** where it calls the brain API instead of its own local SQLite. Same React
+UI, same one codebase, three OS targets.
+
+### The three seams we exploit (verified against the current code)
+| Seam | Today | Change |
+|---|---|---|
+| **Data** | `src/lib/database/*.action.ts` → `getDatabase()` in `database/config.ts` (Tauri `plugin-sql`) | Make `getDatabase()` **pluggable** (inject a `SqlDriver`). Same action files then run in Tauri *and* Node. |
+| **Completion** | `src/lib/functions/ai-response.function.ts` `fetchAIResponse()` uses `@tauri-apps/plugin-http` + BYOK curl | Inject the http shim. In the brain it's native `fetch` with the Claude key held server-side. |
+| **Consumption** | Hooks (`useMemories`, `useReminders`, …) call action fns directly | Add a `getRepo()` selector → Local (Tauri SQL) or Remote (HTTP→brain) by a `brainMode` flag. |
+
+The existing action-fn signatures (`getAllMemories()`, `createMemory()`, …) already *are* the repository
+interface — we formalize it, add a Remote implementation, and reuse the Local one inside the brain.
+
+---
+
+## 2. Storage backend & encryption (Turso / libSQL)
+
+Krishna speaks SQLite, so we pick a **SQLite-native** cloud DB to avoid rewriting every query.
+
+- **Engine: Turso (libSQL)** — wire-compatible with SQLite; drops into the `SqlDriver` seam with **zero
+  query rewrite**. Free tier (mid-2026): 5 GB, 100 DBs, 500M row-reads/mo, 10M writes/mo.
+- **One driver, both modes:** use `@libsql/client`. Local `file:` DB for dev; add `syncUrl` + `authToken`
+  to run as an **embedded replica** (local SQLite file syncing to Turso cloud) — fast local reads + cloud
+  durability + multi-device path + trivial Phase-5 cloud-brain move (point it at the same DB).
+- **Region:** nearest Turso APAC region (Singapore, or Mumbai if available) — **latency only**. DPDP Act
+  2023 does not force India localization for a personal project; the encryption (below) is the real control.
+- **Watch-out:** Turso meters *row-reads* (assistant volume is tiny → free tier comfortable). Backend stays
+  swappable via `SqlDriver`; **Supabase/Postgres is the fallback** (needs `?`→`$n` rewrite + free-tier idle-pause).
+
+**Security — app-level field encryption is the real protection (provider-independent):**
+- Provider AES-256-at-rest only defends against disk theft; the *provider holds the keys*. Wrong threat
+  model for personal memories/conversations.
+- The brain **encrypts sensitive columns before insert / decrypts after read** (e.g. `memories.value`, chat
+  content) with a key the brain holds and Turso never sees → cloud DB is **zero-knowledge** for sensitive
+  fields. Keep ids/timestamps plaintext so they stay queryable/sortable.
+- **Key custody:** DB creds + encryption key live **only in the brain**, never shipped to mobile (same rule
+  as the Claude key). Decide storage of the master key in Phase 1 (OS keychain preferred over plaintext env).
+- **Known caveat:** encrypted fields aren't searchable. If Phase 5 RAG/semantic-search over memories is
+  wanted, decrypt-in-brain to build the index (don't push plaintext to the cloud).
+- TLS in transit (libSQL default). RLS is irrelevant — clients never hit the DB directly; the brain mediates.
+
+---
+
+## 3. Repo restructure (one-time, in Phase 0)
+
+Convert to an **npm workspace** (moves + a driver injection point; no logic rewrite):
+
+```
+krishna/
+├─ package.json                 # workspaces: ["apps/*", "packages/*"]
+├─ packages/
+│  └─ core/                     # shared, framework-free (NO React, NO Tauri imports)
+│     ├─ types/                 # moved from src/types
+│     ├─ database/*.action.ts   # moved as-is
+│     ├─ database/driver.ts     # NEW: injectable SqlDriver { select, execute }
+│     ├─ tools/  executor.ts  resolver.ts  memory.ts
+│     └─ functions/             # prompt building, ai-response (http shim injected)
+├─ apps/
+│  ├─ client/                   # existing Tauri+React app (src/, src-tauri/)
+│  │                            # provides Tauri SqlDriver + plugin-http shim → @krishna/core
+│  └─ brain/                    # NEW Node service
+│                               # provides libSQL SqlDriver + fetch shim → @krishna/core
+```
+
+React hooks/components stay in `apps/client`. `@krishna/core` is import-able by both client and brain.
+
+---
+
+## 4. Phase-by-phase build
+
+> Conventions per phase: **Tasks** (do these), **Reuse** (existing code to lean on), **Verify** (must pass
+> before moving on), **Done when** (definition of done). Per the project's *unwired-unit* lesson: after each
+> phase, grep the live flow for real call-sites — don't ship modules that pass tests but are never invoked.
+
+### Phase 0 — Workspace + pluggable driver (foundation, zero behavior change)  ✅ DONE
+**Tasks**
+1. Add root `package.json` (npm workspaces). Create `packages/core`; move `src/types`, `src/lib/database`,
+   `src/lib/tools`, `src/lib/executor.ts`, `src/lib/resolver.ts`, `src/lib/memory.ts`, `src/lib/functions/*`
+   into it. Fix imports (`@/types` → `@krishna/core/types`, etc.).
+2. Add `packages/core/database/driver.ts`:
+   ```ts
+   export interface SqlDriver {
+     select<T>(sql: string, params?: unknown[]): Promise<T>;
+     execute(sql: string, params?: unknown[]): Promise<{ rowsAffected: number }>;
+   }
+   let driver: SqlDriver | null = null;
+   export const setDriver = (d: SqlDriver) => { driver = d; };
+   export const getDatabase = () => { if (!driver) throw new Error("driver not set"); return driver; };
+   ```
+   Rewire `database/config.ts`'s `getDatabase()` to return the injected driver. **No `*.action.ts` body
+   changes** — they already call `db.select` / `db.execute`.
+3. In `apps/client`, register a Tauri `SqlDriver` wrapping `@tauri-apps/plugin-sql` at startup (before any
+   DB call). Do the same injectable treatment for the http shim in `ai-response.function.ts` (`setHttpFetch()`),
+   defaulting to Tauri's `plugin-http` in the client.
+
+**Reuse:** all `*.action.ts` unchanged; existing Vitest suite as the safety net.
+**Verify:** `npm test` green; desktop app builds & runs; memories/skills/reminders work locally as before.
+**Done when:** user sees **no functional change**; core is shareable and the DB driver is injectable.
+
+### Phase 1 — Krishna Brain service (Node) + Turso + encryption  ✅ DONE
+**Tasks**
+1. `apps/brain`: Fastify (HTTP + WebSocket). Add `@libsql/client`.
+2. **libSQL `SqlDriver`**: start with a local `file:` DB; flip to **embedded replica** (`syncUrl` +
+   `authToken` → Turso, nearest APAC region) once verified. Run existing migrations from
+   `src-tauri/src/db/migrations/*.sql` on boot (**LF line-ending gotcha** applies). Call `setDriver()`.
+3. **Field-encryption module**: encrypt sensitive columns (`memories.value`, chat content) before insert /
+   decrypt after read, applied at the action-fn boundary so it's transparent. Master key from OS keychain
+   (fallback env). Ids/timestamps stay plaintext.
+4. **REST endpoints** mirroring repo methods per domain: `/memories`, `/skills`, `/learned-actions`,
+   `/reminders`, `/chat-history`, `/system-prompts` (GET/POST/DELETE). Handlers just call shared action fns.
+5. **Chat endpoint** `POST /chat` (SSE): runs `fetchAIResponse` server-side with the centralized Claude key
+   and the Node `fetch` shim; streams tokens back.
+6. **Auth** (shared bearer token, checked on every request + WS upgrade) + **WS push** broadcasting
+   `{domain, op, row}` on every mutation so clients live-update.
+7. Document **Tailscale** setup so phones hit `http://<laptop-tailscale-ip>:PORT` with no port-forward.
+
+**Reuse:** `packages/core` action fns + `fetchAIResponse`; the `.sql` migrations verbatim.
+**Verify:** `curl` to create a memory, list it back, stream a `/chat` reply; restart brain → data persisted;
+confirm sensitive columns are ciphertext in the raw DB file.
+**Done when:** brain serves CRUD + streaming chat over authenticated API, with encrypted sensitive fields.
+
+### Phase 2 — Client remote-brain mode (cross-device memory sync)  🔜 NEXT
+**Tasks**
+1. `apps/client` **RemoteRepo**: one module per domain, **same signatures** as the action fns, implemented as
+   `fetch` calls to the brain (bearer token from settings).
+2. **`getRepo()` selector**: returns Local (Phase 0 action fns) or Remote by settings `brainMode:
+   "local"|"remote"` + `brainUrl` + `brainToken`. Point hooks (`useMemories`, `useLearnedActions`,
+   `useReminders`, `useHistory`, `useSystemPrompts`) at `getRepo()`.
+3. **Chat routing**: in remote mode `useChatCompletion` calls brain `/chat` SSE; client needs no Claude key.
+4. **Live sync**: subscribe to brain WS; on push, call the hook's existing `fetch*` refresher.
+5. Settings UI: a "Brain connection" panel (URL, token, test-connection).
+
+**Reuse:** existing hooks & their `fetch*` refreshers; existing settings storage.
+**Verify:** laptop client (remote mode) writes a memory → second client/`curl` sees it instantly via WS;
+close laptop UI → brain keeps serving.
+**Done when:** memory/skills are shared across any client pointed at the brain.
+
+### Phase 3 — MCP tool hub (in the brain)  ⬜ PENDING
+**Tasks**
+1. Add `@modelcontextprotocol/sdk` (client) to the brain. Config lists MCP servers (Gmail, Calendar, GitHub,
+   Notion, Home Assistant, DBs). Connect on boot, keep sessions warm, idle-timeout unused ones.
+2. **Discovery → executor**: surface MCP tools through Krishna's existing tool/executor path
+   (`packages/core/tools`, `executor.ts`) so the LLM calls them like native tools.
+3. **Tool-subset selection** (borrow isair): keyword + embedding ranking to avoid context rot.
+4. **Safety**: extend `src/config/action-policy.ts` `classifyAction()` to tag MCP tools safe/sensitive;
+   sensitive calls round-trip a **confirmation request** to the originating client; log to existing `audit-log`.
+
+**Reuse:** `tools/`, `executor.ts`, `resolver.ts`, `action-policy.ts`, existing confirmation flow + audit log.
+**Verify:** connect one MCP server (GitHub or filesystem), ask a question needing it from a client → tool runs
+in the brain; a sensitive action prompts for confirmation and is audited.
+**Done when:** Krishna can use external MCP tools with safe/sensitive gating.
+
+### Phase 4 — Mobile clients + voice everywhere + handoff  ⬜ PENDING
+**Tasks**
+1. **Tauri mobile**: `npm run tauri android init` / `ios init`; reuse icon sets in `src-tauri/icons/android`
+   and `/ios`. Default mobile to `brainMode: "remote"`.
+2. **Voice**: Android — VAD + wake word (`KrishnaVAD.tsx`, `wake-word.ts`) where supported. **iOS** —
+   background mic is restricted → **push-to-talk** + a **Shortcuts/share-sheet** entry point (documented
+   limitation, not a blocker). TTS via existing per-OS speaker path; mobile falls back to `speechSynthesis`.
+3. **Device presence + handoff**: clients register (`POST /devices/heartbeat`); brain keeps a presence table.
+   On wake-word, clients report capture confidence; brain **arbitrates** (most-recent/loudest wins) and routes
+   the reply to the chosen device only.
+
+**Reuse:** `KrishnaVAD.tsx`, `wake-word.ts`, per-OS speaker path, existing Tauri mobile icon assets.
+**Verify:** wake word near two devices → exactly one answers and speaks there; start a task on phone, continue
+it on laptop (shared brain state makes this automatic).
+**Done when:** Android + iOS thin clients run against the brain with voice and clean handoff.
+
+### Phase 5 — Runtime skills + personas (+ post-v1 backlog)  ⬜ PENDING
+**Tasks**
+1. **Runtime skill creation**: `POST /skills/generate` — LLM emits a **declarative** skill recipe (ordered
+   tool calls + prompt template) as JSON validated against the existing `Skill` type, stored via
+   `skills.action.ts`. **No arbitrary code-gen** (safety). Instantly runnable on all devices via shared brain.
+2. **Personas**: promote `system-prompts` into named personas (default / coder / researcher / planner) with
+   tone + tool-bias; per-conversation selector; brain applies the persona's system prompt + tool filter.
+
+**Reuse:** `skills.action.ts` + `Skill` type; `useSystemPrompts` + `system-prompt.action.ts`.
+**Verify:** create a skill on the phone, invoke it from the laptop; switch persona → tone + available tools change.
+**Done when:** Krishna creates skills on request and switches personas, synced across devices.
+
+**Post-v1 backlog (later):** graduate the brain to an always-on cloud VPS (same Turso DB); RAG knowledge base
+(decrypt-in-brain to index); Telegram bot + daemon mode; dictation mode; secret redaction + auto fact-extraction.
+
+---
+
+## 5. Cross-cutting requirements
+- **Tests**: keep Vitest in `packages/core`; add brain integration tests (supertest vs Fastify). Each phase:
+  grep the live flow for real call-sites (unwired-unit guard).
+- **Security**: bearer token minimum; Claude key, DB creds, and encryption key live only in the brain — never
+  shipped to mobile. Sensitive MCP tools always confirm. Audit-log every tool execution.
+- **Migrations**: brain and Tauri share the same `.sql` files — keep them **LF** and idempotent.
+- **Backwards compat**: `brainMode: "local"` stays the default for solo desktop use; the ecosystem is opt-in.
+
+## 6. Open questions to settle during Phase 0/1 (don't block the start)
+- Workspace tool: plain **npm workspaces** (assumed) vs pnpm.
+- Master encryption-key storage: OS keychain (preferred) vs passphrase-unlock vs env.
+- Sync conflict policy: **last-write-wins** (fine for single user across devices) — confirm.
+- iPhone distribution: dev sideload (fast iteration) → TestFlight later.
+
+## 7. Suggested first PR
+Phase 0 only — it's pure refactor with the existing test suite as a safety net and **zero user-visible change**.
+Land it green before any brain code exists.
