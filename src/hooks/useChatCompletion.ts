@@ -1,10 +1,9 @@
 import { useState, useCallback, useRef, useEffect } from "react";
 import { useApp } from "@/contexts";
 import { MAX_FILES } from "@/config";
+import { getRepo } from "@/lib/repo-selector";
 import {
-  fetchAIResponse,
-  saveConversation,
-  getConversationById,
+  fetchAIResponse as localFetchAIResponse,
   generateConversationTitle,
   MESSAGE_ID_OFFSET,
   generateMessageId,
@@ -222,16 +221,19 @@ export const useChatCompletion = (
         let fullResponse = "";
 
         try {
-          // Use the fetchAIResponse function with signal
-          for await (const chunk of fetchAIResponse({
-            provider: provider,
-            selectedProvider: selectedAIProvider,
-            systemPrompt: systemPrompt || undefined,
-            history: messageHistory,
-            userMessage: input,
-            imagesBase64,
-            signal,
-          })) {
+          const repo = getRepo();
+          const aiIterable = repo.mode === "remote"
+            ? repo.chat.fetchAIResponse({ userMessage: input, history: messageHistory, systemPrompt, signal })
+            : localFetchAIResponse({
+                provider: provider!,
+                selectedProvider: selectedAIProvider,
+                systemPrompt: systemPrompt || undefined,
+                history: messageHistory,
+                userMessage: input,
+                imagesBase64,
+                signal,
+              });
+          for await (const chunk of aiIterable) {
             // Only update if this is still the current request
             if (currentRequestIdRef.current !== requestId) {
               return; // Request was superseded, stop processing
@@ -320,7 +322,7 @@ export const useChatCompletion = (
           let existingConversation = null;
           if (conversationId) {
             try {
-              existingConversation = await getConversationById(conversationId);
+              existingConversation = await getRepo().chatHistory.getConversationById(conversationId);
             } catch (error) {
               console.error("Failed to get existing conversation:", error);
             }
@@ -343,10 +345,10 @@ export const useChatCompletion = (
           };
 
           try {
-            await saveConversation(conversation);
+            await getRepo().chatHistory.saveConversation(conversation);
 
             // Reload conversation from database to ensure consistency
-            const updatedConversation = await getConversationById(
+            const updatedConversation = await getRepo().chatHistory.getConversationById(
               conversationId
             );
             if (updatedConversation) {

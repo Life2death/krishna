@@ -3,10 +3,9 @@ import { useWindowResize } from "./useWindow";
 import { useGlobalShortcuts } from "@/hooks";
 import { MAX_FILES } from "@/config";
 import { useApp } from "@/contexts";
+import { getRepo } from "@/lib/repo-selector";
 import {
-  fetchAIResponse,
-  saveConversation,
-  getConversationById,
+  fetchAIResponse as localFetchAIResponse,
   generateConversationTitle,
   MESSAGE_ID_OFFSET,
   generateConversationId,
@@ -211,16 +210,19 @@ export const useCompletion = () => {
         }));
 
         try {
-          // Use the fetchAIResponse function with signal
-          for await (const chunk of fetchAIResponse({
-            provider: provider,
-            selectedProvider: selectedAIProvider,
-            systemPrompt: buildEffectiveSystemPrompt(),
-            history: messageHistory,
-            userMessage: input,
-            imagesBase64,
-            signal,
-          })) {
+          const repo = getRepo();
+          const aiIterable = repo.mode === "remote"
+            ? repo.chat.fetchAIResponse({ userMessage: input, history: messageHistory, systemPrompt: buildEffectiveSystemPrompt(), signal })
+            : localFetchAIResponse({
+                provider: provider!,
+                selectedProvider: selectedAIProvider,
+                systemPrompt: buildEffectiveSystemPrompt(),
+                history: messageHistory,
+                userMessage: input,
+                imagesBase64,
+                signal,
+              });
+          for await (const chunk of aiIterable) {
             // Only update if this is still the current request
             if (currentRequestIdRef.current !== requestId) {
               return; // Request was superseded, stop processing
@@ -397,7 +399,7 @@ export const useCompletion = () => {
       let existingConversation = null;
       if (state.currentConversationId) {
         try {
-          existingConversation = await getConversationById(
+          existingConversation = await getRepo().chatHistory.getConversationById(
             state.currentConversationId
           );
         } catch (error) {
@@ -420,7 +422,7 @@ export const useCompletion = () => {
       };
 
       try {
-        await saveConversation(conversation);
+        await getRepo().chatHistory.saveConversation(conversation);
 
         setState((prev) => ({
           ...prev,
@@ -457,8 +459,8 @@ export const useCompletion = () => {
       console.log(id, "id");
       try {
         // Fetch the full conversation from SQLite
-        const conversation = await getConversationById(id);
-
+        const conversation = await getRepo().chatHistory.getConversationById(id);
+        
         if (conversation) {
           loadConversation(conversation);
         } else {
@@ -495,7 +497,7 @@ export const useCompletion = () => {
           const data = JSON.parse(e.newValue);
           const { id } = data;
           if (id && typeof id === "string") {
-            const conversation = await getConversationById(id);
+            const conversation = await getRepo().chatHistory.getConversationById(id);
             if (conversation) {
               loadConversation(conversation);
             }
@@ -614,15 +616,19 @@ export const useCompletion = () => {
             }));
 
             // Use the fetchAIResponse function with image and signal
-            for await (const chunk of fetchAIResponse({
-              provider: provider,
-              selectedProvider: selectedAIProvider,
-              systemPrompt: buildEffectiveSystemPrompt(),
-              history: messageHistory,
-              userMessage: prompt,
-              imagesBase64: [base64],
-              signal,
-            })) {
+            const repo = getRepo();
+            const aiIterable = repo.mode === "remote"
+              ? repo.chat.fetchAIResponse({ userMessage: prompt, history: messageHistory, systemPrompt: buildEffectiveSystemPrompt(), signal })
+              : localFetchAIResponse({
+                  provider: provider!,
+                  selectedProvider: selectedAIProvider,
+                  systemPrompt: buildEffectiveSystemPrompt(),
+                  history: messageHistory,
+                  userMessage: prompt,
+                  imagesBase64: [base64],
+                  signal,
+                });
+          for await (const chunk of aiIterable) {
               // Only update if this is still the current request
               if (currentRequestIdRef.current !== requestId || signal.aborted) {
                 return; // Request was superseded or cancelled

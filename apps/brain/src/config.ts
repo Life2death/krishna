@@ -26,6 +26,9 @@ export const config = {
 
   anthropicApiKey: optional("ANTHROPIC_API_KEY"),
   claudeModel: optional("KRISHNA_CLAUDE_MODEL", "claude-sonnet-4-6"),
+
+  mcpConfigPath: optional("KRISHNA_MCP_CONFIG_PATH"),
+  mcpServers: optional("KRISHNA_MCP_SERVERS"),
 };
 
 export type BrainConfig = typeof config;

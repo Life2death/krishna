@@ -1,5 +1,5 @@
 import type { StepAction } from "./types/assistant";
-import { getTool, type ToolContext, type ToolResult } from "./tools";
+import { getTool, getAllTools, type ToolContext, type ToolResult } from "./tools";
 
 export interface ExecutorResult {
   success: boolean;
@@ -38,7 +38,8 @@ export async function executePlan(
 
     const tool = getTool(step.tool);
     if (!tool) {
-      const errMsg = `Unknown tool: "${step.tool}". Available tools: open_target, youtube_search, web_search`;
+      const names = getAllTools().map((t) => t.name).join(", ");
+      const errMsg = `Unknown tool: "${step.tool}". Available: ${names}`;
       stepResults.push({
         step,
         result: { success: false, error: errMsg },

@@ -11,9 +11,10 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@krishna/core": "*",
     "@fastify/websocket": "^11.0.2",
+    "@krishna/core": "*",
     "@libsql/client": "^0.15.4",
+    "@modelcontextprotocol/sdk": "^1.29.0",
     "@napi-rs/keyring": "^1.1.7",
     "dotenv": "^16.4.7",
     "fastify": "^5.2.1"

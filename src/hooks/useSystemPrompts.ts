@@ -1,10 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
-import {
-  createSystemPrompt,
-  getAllSystemPrompts,
-  updateSystemPrompt,
-  deleteSystemPrompt,
-} from "@/lib/database";
+import { getRepo } from "@/lib/repo-selector";
+import { useBrainWs } from "./useBrainWs";
 import type {
   SystemPrompt,
   SystemPromptInput,
@@ -35,7 +31,7 @@ export const useSystemPrompts = () => {
     try {
       setIsLoading(true);
       setError(null);
-      const result = await getAllSystemPrompts();
+      const result = await getRepo().systemPrompts.getAllSystemPrompts();
       setPrompts(result);
     } catch (err) {
       const errorMessage =
@@ -54,7 +50,7 @@ export const useSystemPrompts = () => {
     async (input: SystemPromptInput): Promise<SystemPrompt> => {
       try {
         setError(null);
-        const result = await createSystemPrompt(input);
+        const result = await getRepo().systemPrompts.createSystemPrompt(input);
         await fetchPrompts(); // Refresh list
         return result;
       } catch (err) {
@@ -78,7 +74,7 @@ export const useSystemPrompts = () => {
     ): Promise<SystemPrompt> => {
       try {
         setError(null);
-        const result = await updateSystemPrompt(id, input);
+        const result = await getRepo().systemPrompts.updateSystemPrompt(id, input);
         await fetchPrompts(); // Refresh list
         return result;
       } catch (err) {
@@ -99,7 +95,7 @@ export const useSystemPrompts = () => {
     async (id: number): Promise<void> => {
       try {
         setError(null);
-        await deleteSystemPrompt(id);
+        await getRepo().systemPrompts.deleteSystemPrompt(id);
         await fetchPrompts(); // Refresh list
       } catch (err) {
         const errorMessage =
@@ -125,6 +121,8 @@ export const useSystemPrompts = () => {
   const clearError = useCallback(() => {
     setError(null);
   }, []);
+
+  useBrainWs("system-prompts", fetchPrompts);
 
   // Fetch prompts on mount
   useEffect(() => {

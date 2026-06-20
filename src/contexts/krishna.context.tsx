@@ -1,9 +1,11 @@
 import { createContext, useContext, useState, useCallback, useRef, useEffect, ReactNode } from "react";
 import { useApp } from "@/contexts";
+import { useMcpTools } from "@/hooks";
 import { fetchAIResponse } from "@/lib/functions";
 import { parseActions, executeAction } from "@/lib/actions";
 import { executePlan, resolvePlaceholders } from "@/lib/executor";
-import { getToolDescriptions } from "@/lib/tools";
+import { getAllTools } from "@/lib/tools";
+import { selectTools } from "@krishna/core/tool-selector";
 import { getTTS, getElevenLabsTTS, getPiperTTS, type TTSProvider } from "@/lib/tts";
 import { safeLocalStorage } from "@/lib";
 import { secureStorage } from "@/lib/secure-storage";
@@ -78,9 +80,7 @@ interface KrishnaContextType {
 
 const KrishnaContext = createContext<KrishnaContextType | undefined>(undefined);
 
-const TOOL_DESCRIPTIONS = getToolDescriptions();
-
-const KRISHNA_SYSTEM_PROMPT = [
+const BASE_SYSTEM_PROMPT = [
   'You are Krishna, an AI desktop assistant. You help users by answering questions and performing actions on their computer.',
   '',
   'CRITICAL - Action Protocol:',
@@ -119,9 +119,12 @@ const KRISHNA_SYSTEM_PROMPT = [
   '  ]',
   '}',
   '```',
+].join("\n");
+
+const SYSTEM_PROMPT_RULES = [
   '',
   'Available tools:',
-].join("\n") + "\n" + TOOL_DESCRIPTIONS + "\n\n" + [
+  '',
   'Rules:',
   '1. PREFER deep-links (Tier 1) over multi-step plans when possible. A simple open_target with a composed URL is most reliable.',
   '2. Use multi-step plans only when you need intermediate data (e.g., a search result ID).',
@@ -133,6 +136,12 @@ const KRISHNA_SYSTEM_PROMPT = [
 '8. "Open VS Code at path X" or "open my repo in VS Code" → open_target with target "code" and args path (opens VS Code directly at that folder).',
 '9. "Open a terminal" or "open command prompt" → open_target with target "cmd". Krishna cannot type into it afterwards.',
 ].join("\n");
+
+function buildToolsSection(query?: string): string {
+  const allTools = getAllTools();
+  const selected = query ? selectTools(query, allTools, 10) : allTools;
+  return selected.map((t) => "- " + t.name + ": " + t.description).join("\n");
+}
 
 // ---- Skill pattern helpers ----
 
@@ -228,6 +237,8 @@ function matchSkillPattern(command: string, skill: Skill): Record<string, string
 export function KrishnaProvider({ children }: { children: ReactNode }) {
   const { selectedAIProvider, allAiProviders } = useApp();
   const ttsRef = useRef<TTSProvider>(getTTS());
+
+  useMcpTools();
 
   const [enabled, setEnabled] = useState<boolean>(true);
   const [status, setStatus] = useState<AssistantStatus>("idle");
@@ -1241,7 +1252,8 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
         const memories = await getAllMemories();
         const now = new Date();
         const timeContext = `\n\nCurrent date and time: ${now.toLocaleString("en-IN", { timeZone: "Asia/Kolkata", weekday: "long", year: "numeric", month: "long", day: "numeric", hour: "2-digit", minute: "2-digit" })} IST`;
-        const systemPrompt = buildMemoryPrompt(KRISHNA_SYSTEM_PROMPT + timeContext, memories);
+        const toolsSection = buildToolsSection(command);
+        const systemPrompt = buildMemoryPrompt(BASE_SYSTEM_PROMPT + "\n\n" + toolsSection + SYSTEM_PROMPT_RULES + timeContext, memories);
         let fullResponse = "";
         for await (const chunk of fetchAIResponse({
           provider,

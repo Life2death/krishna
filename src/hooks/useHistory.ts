@@ -1,9 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
-import {
-  getAllConversations,
-  deleteConversation,
-  DOWNLOAD_SUCCESS_DISPLAY_MS,
-} from "@/lib";
+import { getRepo } from "@/lib/repo-selector";
+import { useBrainWs } from "./useBrainWs";
+import { DOWNLOAD_SUCCESS_DISPLAY_MS } from "@/lib";
 import { ChatConversation } from "@/types/completion";
 
 export type UseHistoryType = ReturnType<typeof useHistory>;
@@ -61,7 +59,7 @@ export function useHistory(): UseHistoryReturn {
   const refreshConversations = useCallback(async () => {
     try {
       setIsLoading(true);
-      const loadedConversations = await getAllConversations();
+      const loadedConversations = await getRepo().chatHistory.getAllConversations();
       setConversations(loadedConversations);
     } catch (error) {
       console.error("Failed to load conversations:", error);
@@ -70,6 +68,8 @@ export function useHistory(): UseHistoryReturn {
       setIsLoading(false);
     }
   }, []);
+
+  useBrainWs("conversations", refreshConversations);
 
   // Load conversations when component mounts or popover opens
   useEffect(() => {
@@ -147,7 +147,7 @@ export function useHistory(): UseHistoryReturn {
     try {
       setSelectedConversationId(null);
       setViewingConversation(null);
-      await deleteConversation(deleteConfirm);
+      await getRepo().chatHistory.deleteConversation(deleteConfirm);
       setConversations((prev) => prev.filter((c) => c.id !== deleteConfirm));
 
       // Emit event to notify other components about deletion

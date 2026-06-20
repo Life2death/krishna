@@ -32,6 +32,12 @@ function register(tool: Tool): void {
   tools.set(tool.name, tool);
 }
 
+export function registerTools(newTools: Tool[]): void {
+  for (const tool of newTools) {
+    register(tool);
+  }
+}
+
 register(openTargetTool);
 register(youtubeSearchTool);
 register(webSearchTool);

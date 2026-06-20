@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
-import { getAllMemories, createMemory, deleteMemory, deleteAllMemories } from "@/lib/database";
+import { getRepo } from "@/lib/repo-selector";
+import { useBrainWs } from "./useBrainWs";
 import type { Memory } from "@/types";
 
 export const useMemories = () => {
@@ -11,7 +12,8 @@ export const useMemories = () => {
     try {
       setIsLoading(true);
       setError(null);
-      const result = await getAllMemories();
+      const repo = getRepo();
+      const result = await repo.memories.getAllMemories();
       setMemories(result);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Failed to fetch memories";
@@ -24,7 +26,7 @@ export const useMemories = () => {
   const addMemory = useCallback(async (memory: Memory): Promise<void> => {
     try {
       setError(null);
-      await createMemory(memory);
+      await getRepo().memories.createMemory(memory);
       await fetchMemories();
     } catch (err) {
       const message = err instanceof Error ? err.message : "Failed to create memory";
@@ -36,7 +38,7 @@ export const useMemories = () => {
   const removeMemory = useCallback(async (id: string): Promise<void> => {
     try {
       setError(null);
-      await deleteMemory(id);
+      await getRepo().memories.deleteMemory(id);
       await fetchMemories();
     } catch (err) {
       const message = err instanceof Error ? err.message : "Failed to delete memory";
@@ -48,7 +50,7 @@ export const useMemories = () => {
   const clearAll = useCallback(async (): Promise<void> => {
     try {
       setError(null);
-      await deleteAllMemories();
+      await getRepo().memories.deleteAllMemories();
       await fetchMemories();
     } catch (err) {
       const message = err instanceof Error ? err.message : "Failed to clear memories";
@@ -56,6 +58,8 @@ export const useMemories = () => {
       throw err;
     }
   }, [fetchMemories]);
+
+  useBrainWs("memories", fetchMemories);
 
   useEffect(() => {
     fetchMemories();

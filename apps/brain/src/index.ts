@@ -14,6 +14,8 @@ import { remindersRoutes } from "./routes/reminders.ts";
 import { systemPromptsRoutes } from "./routes/system-prompts.ts";
 import { chatHistoryRoutes } from "./routes/chat-history.ts";
 import { chatRoutes } from "./routes/chat.ts";
+import { McpHub, loadMcpConfig } from "./mcp/index.ts";
+import { mcpToolsRoutes } from "./routes/mcp-tools.ts";
 
 async function main(): Promise<void> {
   // 1. Boot shared core onto the Node runtime (libSQL driver + migrations + shims).
@@ -25,6 +27,15 @@ async function main(): Promise<void> {
   // 3. Live-sync hub + shared context.
   const hub = new Hub();
   const ctx: BrainContext = { crypto, hub };
+
+  // 3b. MCP tool hub — connect to configured MCP servers.
+  const mcpHub = new McpHub();
+  mcpHub.setWsHub(hub);
+  const mcpConfig = loadMcpConfig();
+  if (mcpConfig.servers.length > 0) {
+    await mcpHub.connectAll(mcpConfig.servers);
+    console.log(`[mcp] Connected to ${mcpConfig.servers.length} MCP server(s), ${mcpHub.getAllTools().length} tools total`);
+  }
 
   const app = Fastify({ logger: true });
   await app.register(websocket);
@@ -50,6 +61,7 @@ async function main(): Promise<void> {
   systemPromptsRoutes(app, ctx);
   chatHistoryRoutes(app, ctx);
   chatRoutes(app);
+  mcpToolsRoutes(app, mcpHub);
 
   await app.listen({ port: config.port, host: "0.0.0.0" });
   app.log.info(`Krishna Brain listening on :${config.port}`);

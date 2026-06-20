@@ -1,11 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
-import {
-  getAllLearnedActions,
-  getLearnedActionByInput,
-  createLearnedAction,
-  deleteLearnedAction,
-  deleteAllLearnedActions,
-} from "@/lib/database";
+import { getRepo } from "@/lib/repo-selector";
+import { useBrainWs } from "./useBrainWs";
 import type { LearnedAction } from "@/types";
 
 export const useLearnedActions = () => {
@@ -17,7 +12,7 @@ export const useLearnedActions = () => {
     try {
       setIsLoading(true);
       setError(null);
-      const result = await getAllLearnedActions();
+      const result = await getRepo().learnedActions.getAllLearnedActions();
       setActions(result);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Failed to fetch learned actions";
@@ -29,7 +24,7 @@ export const useLearnedActions = () => {
 
   const findByInput = useCallback(async (input: string): Promise<LearnedAction | null> => {
     try {
-      return await getLearnedActionByInput(input);
+      return await getRepo().learnedActions.getLearnedActionByInput(input);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Failed to look up learned action";
       setError(message);
@@ -40,7 +35,7 @@ export const useLearnedActions = () => {
   const addAction = useCallback(async (action: LearnedAction): Promise<void> => {
     try {
       setError(null);
-      await createLearnedAction(action);
+      await getRepo().learnedActions.createLearnedAction(action);
       await fetchActions();
     } catch (err) {
       const message = err instanceof Error ? err.message : "Failed to create learned action";
@@ -52,7 +47,7 @@ export const useLearnedActions = () => {
   const removeAction = useCallback(async (id: string): Promise<void> => {
     try {
       setError(null);
-      await deleteLearnedAction(id);
+      await getRepo().learnedActions.deleteLearnedAction(id);
       await fetchActions();
     } catch (err) {
       const message = err instanceof Error ? err.message : "Failed to delete learned action";
@@ -64,7 +59,7 @@ export const useLearnedActions = () => {
   const clearAll = useCallback(async (): Promise<void> => {
     try {
       setError(null);
-      await deleteAllLearnedActions();
+      await getRepo().learnedActions.deleteAllLearnedActions();
       await fetchActions();
     } catch (err) {
       const message = err instanceof Error ? err.message : "Failed to clear learned actions";
@@ -72,6 +67,8 @@ export const useLearnedActions = () => {
       throw err;
     }
   }, [fetchActions]);
+
+  useBrainWs("learned-actions", fetchActions);
 
   useEffect(() => {
     fetchActions();

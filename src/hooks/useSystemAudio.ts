@@ -3,7 +3,8 @@ import { useWindowResize, useGlobalShortcuts } from ".";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { useApp } from "@/contexts";
-import { fetchSTT, fetchAIResponse } from "@/lib/functions";
+import { getRepo } from "@/lib/repo-selector";
+import { fetchSTT, fetchAIResponse as localFetchAIResponse } from "@/lib/functions";
 import { isKrishnaSpeaking } from "@/lib/krishna-mutex";
 import {
   DEFAULT_QUICK_ACTIONS,
@@ -13,7 +14,6 @@ import {
 import {
   safeLocalStorage,
   generateConversationTitle,
-  saveConversation,
   CONVERSATION_SAVE_DEBOUNCE_MS,
   generateConversationId,
   generateMessageId,
@@ -514,14 +514,18 @@ export function useSystemAudio(options: UseSystemAudioOptions = {}) {
         }
 
         try {
-          for await (const chunk of fetchAIResponse({
-            provider: provider,
-            selectedProvider: selectedAIProvider,
-            systemPrompt: prompt,
-            history: previousMessages,
-            userMessage: transcription,
-            imagesBase64: [],
-          })) {
+          const repo = getRepo();
+          const aiIterable = repo.mode === "remote"
+            ? repo.chat.fetchAIResponse({ userMessage: transcription, history: previousMessages, systemPrompt: prompt })
+            : localFetchAIResponse({
+                provider: provider!,
+                selectedProvider: selectedAIProvider,
+                systemPrompt: prompt,
+                history: previousMessages,
+                userMessage: transcription,
+                imagesBase64: [],
+              });
+          for await (const chunk of aiIterable) {
             fullResponse += chunk;
             setLastAIResponse((prev) => prev + chunk);
           }
@@ -754,7 +758,7 @@ export function useSystemAudio(options: UseSystemAudioOptions = {}) {
 
       try {
         isSavingRef.current = true;
-        await saveConversation(conversation);
+        await getRepo().chatHistory.saveConversation(conversation);
       } catch (error) {
         console.error("Failed to save system audio conversation:", error);
       } finally {

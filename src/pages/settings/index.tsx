@@ -7,6 +7,7 @@ import {
   AutostartToggle,
   KrishnaSettings,
   Integrations,
+  BrainConnection,
 } from "./components";
 import {
   ResponseLength,
@@ -86,6 +87,9 @@ const Settings = () => {
 
       {/* Integrations (GitHub, etc.) */}
       <Integrations />
+
+      {/* Brain Connection */}
+      <BrainConnection />
 
       <div className="border-t pt-4">
         <Header

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
-import { getAllReminders, deleteReminder, updateReminder } from "@/lib/database";
+import { getRepo } from "@/lib/repo-selector";
+import { useBrainWs } from "./useBrainWs";
 import type { Reminder } from "@/types/reminder";
 
 export const useReminders = () => {
@@ -11,7 +12,7 @@ export const useReminders = () => {
     try {
       setIsLoading(true);
       setError(null);
-      const result = await getAllReminders();
+      const result = await getRepo().reminders.getAllReminders();
       setReminders(result);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Failed to fetch reminders";
@@ -26,7 +27,7 @@ export const useReminders = () => {
       setError(null);
       const reminder = reminders.find(r => r.id === id);
       if (!reminder) return;
-      await updateReminder({ ...reminder, enabled });
+      await getRepo().reminders.updateReminder({ ...reminder, enabled });
       await fetchReminders();
     } catch (err) {
       const message = err instanceof Error ? err.message : "Failed to toggle reminder";
@@ -38,7 +39,7 @@ export const useReminders = () => {
   const removeReminder = useCallback(async (id: string): Promise<void> => {
     try {
       setError(null);
-      await deleteReminder(id);
+      await getRepo().reminders.deleteReminder(id);
       await fetchReminders();
     } catch (err) {
       const message = err instanceof Error ? err.message : "Failed to delete reminder";
@@ -50,8 +51,9 @@ export const useReminders = () => {
   const clearAll = useCallback(async (): Promise<void> => {
     try {
       setError(null);
+      const repo = getRepo().reminders;
       for (const r of reminders) {
-        await deleteReminder(r.id);
+        await repo.deleteReminder(r.id);
       }
       await fetchReminders();
     } catch (err) {
@@ -60,6 +62,8 @@ export const useReminders = () => {
       throw err;
     }
   }, [reminders, fetchReminders]);
+
+  useBrainWs("reminders", fetchReminders);
 
   useEffect(() => {
     fetchReminders();
