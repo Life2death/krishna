@@ -13,9 +13,9 @@
 |---|---|---|
 | **Phase 0** — Workspace + pluggable driver | ✅ **Done & merged** | Plus follow-up cleanup ([PR #2](https://github.com/Life2death/krishna/pull/2)): all client DB access (incl. `krishna.context.tsx`) now routes through the `@krishna/core` barrel; 8 duplicate `src/lib/database/*.action.ts` files deleted; `audit.action` exported from the core barrel. Verified: `tsc` clean, client 192/192. |
 | **Phase 1** — Krishna Brain (Node) + Turso + encryption | ✅ **Done & merged** | [PR #1](https://github.com/Life2death/krishna/pull/1). `apps/brain/` (Fastify + `@libsql/client` + `@napi-rs/keyring`, run via `tsx`). Field encryption verified ciphertext-at-rest; CRUD/auth/WS/`/chat`-guard verified live; brain 7/7. **`/chat` live token streaming still needs a real `ANTHROPIC_API_KEY` in `apps/brain/.env` to verify end-to-end.** Adapter coerces `undefined`→`null` to match Tauri plugin-sql. |
-| **Phase 2** — Client remote-brain mode (cross-device sync) | 🔜 **Next** | `RemoteRepo` + `getRepo()` selector (`brainMode` flag) + WS live-sync + "Brain connection" settings panel. See §4 below. |
-| **Phase 3** — MCP tool hub (in the brain) | ⬜ Pending | |
-| **Phase 4** — Mobile clients + voice + handoff | ⬜ Pending | |
+| **Phase 2** — Client remote-brain mode (cross-device sync) | ✅ **Done** | repo-selector + `getRepo()` + RemoteRepo clients + 8 UI hooks + `useBrainWs` + Brain Connection panel. **Orchestrator split-brain FIXED** (commit `466abd7`): `krishna.context.tsx` now routes memory/skills/reminders/conversations/chat through `getRepo()` via `src/lib/repo-bound.ts`; remote `/chat` carries images. Verified: client `tsc` clean + 192/192. *Audit-log + learned-actions intentionally stay local (per-device).* |
+| **Phase 3** — MCP tool hub (in the brain) | ✅ **Done** | Brain `McpHub` (connect/list/execute) + `/mcp/tools`, `/mcp/execute`; client `useMcpTools` + `mcp-bridge` registration; `action-policy` `mcp_` safe/sensitive gating in `executor`; core `tool-selector`. *TODO: confirm `mcp_` executions write to audit-log.* |
+| **Phase 4** — Mobile clients + voice + handoff | 🔜 **Next** | **Prereq:** relax local-provider guards (`krishna.context` ~L658/987) so keyless mobile clients chat via the brain. Plus resume-summary compaction (§4 task 4). |
 | **Phase 5** — Runtime skills + personas | ⬜ Pending | |
 
 **Known parked item (low priority):** the legacy `interview_profiles` table is fully removed from
@@ -192,7 +192,7 @@ React hooks/components stay in `apps/client`. `@krishna/core` is import-able by 
 confirm sensitive columns are ciphertext in the raw DB file.
 **Done when:** brain serves CRUD + streaming chat over authenticated API, with encrypted sensitive fields.
 
-### Phase 2 — Client remote-brain mode (cross-device memory sync)  🔜 NEXT
+### Phase 2 — Client remote-brain mode (cross-device memory sync)  ✅ DONE
 **Tasks**
 1. `apps/client` **RemoteRepo**: one module per domain, **same signatures** as the action fns, implemented as
    `fetch` calls to the brain (bearer token from settings).
@@ -208,7 +208,7 @@ confirm sensitive columns are ciphertext in the raw DB file.
 close laptop UI → brain keeps serving.
 **Done when:** memory/skills are shared across any client pointed at the brain.
 
-### Phase 3 — MCP tool hub (in the brain)  ⬜ PENDING
+### Phase 3 — MCP tool hub (in the brain)  ✅ DONE
 **Tasks**
 1. Add `@modelcontextprotocol/sdk` (client) to the brain. Config lists MCP servers (Gmail, Calendar, GitHub,
    Notion, Home Assistant, DBs). Connect on boot, keep sessions warm, idle-timeout unused ones.
@@ -223,7 +223,7 @@ close laptop UI → brain keeps serving.
 in the brain; a sensitive action prompts for confirmation and is audited.
 **Done when:** Krishna can use external MCP tools with safe/sensitive gating.
 
-### Phase 4 — Mobile clients + voice everywhere + handoff  ⬜ PENDING
+### Phase 4 — Mobile clients + voice everywhere + handoff  🔜 NEXT
 **Tasks**
 1. **Tauri mobile**: `npm run tauri android init` / `ios init`; reuse icon sets in `src-tauri/icons/android`
    and `/ios`. Default mobile to `brainMode: "remote"`.
