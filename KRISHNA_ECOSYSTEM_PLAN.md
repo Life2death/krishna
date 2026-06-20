@@ -15,7 +15,7 @@
 | **Phase 1** — Krishna Brain (Node) + Turso + encryption | ✅ **Done & merged** | [PR #1](https://github.com/Life2death/krishna/pull/1). `apps/brain/` (Fastify + `@libsql/client` + `@napi-rs/keyring`, run via `tsx`). Field encryption verified ciphertext-at-rest; CRUD/auth/WS/`/chat`-guard verified live; brain 7/7. **`/chat` live token streaming still needs a real `ANTHROPIC_API_KEY` in `apps/brain/.env` to verify end-to-end.** Adapter coerces `undefined`→`null` to match Tauri plugin-sql. |
 | **Phase 2** — Client remote-brain mode (cross-device sync) | ✅ **Done** | repo-selector + `getRepo()` + RemoteRepo clients + 8 UI hooks + `useBrainWs` + Brain Connection panel. **Orchestrator split-brain FIXED** (commit `466abd7`): `krishna.context.tsx` now routes memory/skills/reminders/conversations/chat through `getRepo()` via `src/lib/repo-bound.ts`; remote `/chat` carries images. Verified: client `tsc` clean + 192/192. *Audit-log + learned-actions intentionally stay local (per-device).* |
 | **Phase 3** — MCP tool hub (in the brain) | ✅ **Done** | Brain `McpHub` (connect/list/execute) + `/mcp/tools`, `/mcp/execute`; client `useMcpTools` + `mcp-bridge` registration; `action-policy` `mcp_` safe/sensitive gating in `executor`; core `tool-selector`. *TODO: confirm `mcp_` executions write to audit-log.* |
-| **Phase 4** — Mobile clients + voice + handoff | 🚧 **In progress** | Agent started. **Prereq:** relax local-provider guards (`krishna.context` ~L658/987) so keyless mobile clients chat via the brain. Plus resume-summary compaction (§4 task 4). |
+| **Phase 4** — Mobile clients + voice + handoff | 🚧 **In progress** (Android-first) | Brain device-presence + resume-summary built. **Android `init` DONE** — toolchain wired (JAVA_HOME→Studio jbr, NDK_HOME, Rust targets), `gen/android` generated (untracked → commit it). **iOS deferred** (needs a Mac). Remaining: mobile voice/PTT + manifest `RECORD_AUDIO`; relax local-provider guards (`krishna.context` ~L658/987) for keyless mobile chat. |
 | **Phase 5** — Runtime skills + personas | ⬜ Pending | **Strict live-wiring DoD applies (§5).** |
 
 **Known parked item (low priority):** the legacy `interview_profiles` table is fully removed from
@@ -223,10 +223,22 @@ close laptop UI → brain keeps serving.
 in the brain; a sensitive action prompts for confirmation and is audited.
 **Done when:** Krishna can use external MCP tools with safe/sensitive gating.
 
-### Phase 4 — Mobile clients + voice everywhere + handoff  🔜 NEXT
+### Phase 4 — Mobile clients + voice everywhere + handoff  🚧 IN PROGRESS (Android-first)
+**Decision (2026-06-20): ship Android first; iOS deferred** — iOS needs macOS + Xcode (not buildable on
+this Windows box). Brain-side device presence + resume-summary already built; mobile target now scaffolded.
+
 **Tasks**
-1. **Tauri mobile**: `npm run tauri android init` / `ios init`; reuse icon sets in `src-tauri/icons/android`
-   and `/ios`. Default mobile to `brainMode: "remote"`.
+1. **Tauri mobile** — ✅ **Android `init` DONE.** Toolchain was already on the machine (Android Studio + SDK
+   + NDK `28.2.13676358`); only env wiring was missing. Set up 2026-06-20:
+   - Persisted (User env): `JAVA_HOME=C:\Program Files\Android\Android Studio\jbr`,
+     `NDK_HOME`/`ANDROID_NDK_HOME=...\Sdk\ndk\28.2.13676358` (`ANDROID_HOME` was already set).
+   - Added Rust targets: `aarch64`/`armv7`/`i686`/`x86_64-linux-android`.
+   - Ran `npx tauri android init` → `src-tauri/gen/android/` generated (identifier `com.krishna.assistant`).
+   - **`gen/android/` is untracked** — commit it (you'll hand-edit `AndroidManifest.xml` for `RECORD_AUDIO`).
+   - ⚠️ A shell/agent session started **before** the env vars were persisted won't see them — restart the
+     session, or `export JAVA_HOME`/`NDK_HOME` in-session, before running gradle/`tauri android dev`.
+   - iOS `init` deferred (needs a Mac). Reuse icon sets in `src-tauri/icons/android`. Mobile defaults to
+     `brainMode: "remote"`.
 2. **Voice**: Android — VAD + wake word (`KrishnaVAD.tsx`, `wake-word.ts`) where supported. **iOS** —
    background mic is restricted → **push-to-talk** + a **Shortcuts/share-sheet** entry point (documented
    limitation, not a blocker). TTS via existing per-OS speaker path; mobile falls back to `speechSynthesis`.
