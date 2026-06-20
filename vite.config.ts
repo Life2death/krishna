@@ -17,6 +17,7 @@ export default defineConfig(async () => ({
       "@krishna/core/http": path.resolve(__dirname, "node_modules/@krishna/core/http.ts"),
       "@krishna/core/settings": path.resolve(__dirname, "node_modules/@krishna/core/settings.ts"),
       "@krishna/core/secrets": path.resolve(__dirname, "node_modules/@krishna/core/secrets.ts"),
+      "@krishna/core/tools/mcp-bridge": path.resolve(__dirname, "node_modules/@krishna/core/tools/mcp-bridge.ts"),
       "@krishna/core/tools": path.resolve(__dirname, "node_modules/@krishna/core/tools/index.ts"),
       "@krishna/core/functions": path.resolve(__dirname, "node_modules/@krishna/core/functions/index.ts"),
       "@krishna/core/executor": path.resolve(__dirname, "node_modules/@krishna/core/executor.ts"),
