@@ -96,8 +96,11 @@ pub fn run() {
                 ..Default::default()
             }),
             ..Default::default()
-        }))
-        .plugin(tauri_plugin_machine_uid::init());
+        }));
+    #[cfg(desktop)]
+    {
+        builder = builder.plugin(tauri_plugin_machine_uid::init());
+    }
     #[cfg(target_os = "macos")]
     {
         builder = builder.plugin(tauri_nspanel::init());
