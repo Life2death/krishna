@@ -233,11 +233,26 @@ in the brain; a sensitive action prompts for confirmation and is audited.
 3. **Device presence + handoff**: clients register (`POST /devices/heartbeat`); brain keeps a presence table.
    On wake-word, clients report capture confidence; brain **arbitrates** (most-recent/loudest wins) and routes
    the reply to the chosen device only.
+4. **Resume-summary (cross-device compaction)** — *optimization, not the transport.* Mid-conversation
+   laptop↔phone switching is already **lossless by architecture**: the brain owns the conversation, so the
+   other device just reads the same chat history. This task adds an *optional* compaction layer for when the
+   full transcript is too big/expensive for a thin or token-limited mobile model:
+   - `POST /conversations/:id/resume-summary` → brain returns a compact "where we are" digest (recent turns +
+     a rolling summary of older ones + a **suggested next-actions/skills** line so the resuming device knows
+     *intent*, not just text). **Redact** secrets/PII before it leaves the brain.
+   - The mobile client requests this instead of the full history when a conversation exceeds a token budget;
+     otherwise it reads the conversation directly (default).
+   - Pattern reference (compaction prompt skeleton only, *not* the mechanism — Krishna has a shared brain, so
+     it doesn't pass documents between stateless sessions): mattpocock/skills `productivity/handoff`. Same
+     "memory digest for small models" idea isair/jarvis uses. Composes with the Phase 5 RAG/memory-hardening work.
 
-**Reuse:** `KrishnaVAD.tsx`, `wake-word.ts`, per-OS speaker path, existing Tauri mobile icon assets.
+**Reuse:** `KrishnaVAD.tsx`, `wake-word.ts`, per-OS speaker path, existing Tauri mobile icon assets; the
+chat-history store + `fetchAIResponse` for generating the digest.
 **Verify:** wake word near two devices → exactly one answers and speaks there; start a task on phone, continue
-it on laptop (shared brain state makes this automatic).
-**Done when:** Android + iOS thin clients run against the brain with voice and clean handoff.
+it on laptop (shared brain state makes this automatic); for a long conversation, the resume-summary returns a
+bounded digest with a redacted, intent-carrying next-step.
+**Done when:** Android + iOS thin clients run against the brain with voice and clean handoff; long
+conversations resume on mobile via a bounded, redacted summary.
 
 ### Phase 5 — Runtime skills + personas (+ post-v1 backlog)  ⬜ PENDING
 **Tasks**
