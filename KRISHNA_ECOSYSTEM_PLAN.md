@@ -15,8 +15,8 @@
 | **Phase 1** — Krishna Brain (Node) + Turso + encryption | ✅ **Done & merged** | [PR #1](https://github.com/Life2death/krishna/pull/1). `apps/brain/` (Fastify + `@libsql/client` + `@napi-rs/keyring`, run via `tsx`). Field encryption verified ciphertext-at-rest; CRUD/auth/WS/`/chat`-guard verified live; brain 7/7. **`/chat` live token streaming still needs a real `ANTHROPIC_API_KEY` in `apps/brain/.env` to verify end-to-end.** Adapter coerces `undefined`→`null` to match Tauri plugin-sql. |
 | **Phase 2** — Client remote-brain mode (cross-device sync) | ✅ **Done** | repo-selector + `getRepo()` + RemoteRepo clients + 8 UI hooks + `useBrainWs` + Brain Connection panel. **Orchestrator split-brain FIXED** (commit `466abd7`): `krishna.context.tsx` now routes memory/skills/reminders/conversations/chat through `getRepo()` via `src/lib/repo-bound.ts`; remote `/chat` carries images. Verified: client `tsc` clean + 192/192. *Audit-log + learned-actions intentionally stay local (per-device).* |
 | **Phase 3** — MCP tool hub (in the brain) | ✅ **Done** | Brain `McpHub` (connect/list/execute) + `/mcp/tools`, `/mcp/execute`; client `useMcpTools` + `mcp-bridge` registration; `action-policy` `mcp_` safe/sensitive gating in `executor`; core `tool-selector`. *TODO: confirm `mcp_` executions write to audit-log.* |
-| **Phase 4** — Mobile clients + voice + handoff | 🔜 **Next** | **Prereq:** relax local-provider guards (`krishna.context` ~L658/987) so keyless mobile clients chat via the brain. Plus resume-summary compaction (§4 task 4). |
-| **Phase 5** — Runtime skills + personas | ⬜ Pending | |
+| **Phase 4** — Mobile clients + voice + handoff | 🚧 **In progress** | Agent started. **Prereq:** relax local-provider guards (`krishna.context` ~L658/987) so keyless mobile clients chat via the brain. Plus resume-summary compaction (§4 task 4). |
+| **Phase 5** — Runtime skills + personas | ⬜ Pending | **Strict live-wiring DoD applies (§5).** |
 
 **Known parked item (low priority):** the legacy `interview_profiles` table is fully removed from
 all TS/client code; only 3 historical Rust migrations remain (`src-tauri/src/db/main.rs` versions
@@ -272,8 +272,27 @@ conversations resume on mobile via a bounded, redacted summary.
 ---
 
 ## 5. Cross-cutting requirements
+
+### ⛔ STRICT Definition of Done — live-wiring proof (MANDATORY Phase 5 onward)
+Phases 0, 2, and 3 each shipped code that passed typecheck/tests and demoed correctly but left the
+**live flow unwired** (Phase 0 duplicate action files; Phase 2 orchestrator bypassing `getRepo`). From
+**Phase 5 onward this is a hard gate** — a phase is NOT done until the agent proves the new code is on the
+real path, not just present in the repo. The DoD report for each phase MUST include:
+
+1. **Call-path trace**: name the entry point (`krishna.context.tsx` for the assistant flow, the relevant
+   route for the brain) and show the chain from there to the new code. "It's imported / a hook uses it" is
+   NOT sufficient — the *orchestrator* and the *brain route* are the live paths.
+2. **Grep evidence**: paste the `grep` showing the new module is invoked from the live flow, AND a grep
+   showing the **old path is gone** (no lingering direct calls / duplicate files bypassing the new seam).
+3. **Negative test**: disable the new code (or point it at a bad endpoint) and show the live feature
+   actually breaks — proving it was on the path, not dead code shadowed by an old route.
+4. **End-to-end run**, not just unit tests: exercise the feature through the real UI/voice/brain path and
+   report observed behavior (the unit suite passing is necessary, not sufficient).
+
+If any of the four is missing, the phase is **in progress**, not done. Reviewer rejects on a missing trace.
+
 - **Tests**: keep Vitest in `packages/core`; add brain integration tests (supertest vs Fastify). Each phase:
-  grep the live flow for real call-sites (unwired-unit guard).
+  grep the live flow for real call-sites (unwired-unit guard) — see the strict DoD above.
 - **Security**: bearer token minimum; Claude key, DB creds, and encryption key live only in the brain — never
   shipped to mobile. Sensitive MCP tools always confirm. Audit-log every tool execution.
 - **Migrations**: brain and Tauri share the same `.sql` files — keep them **LF** and idempotent.
