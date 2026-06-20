@@ -15,7 +15,7 @@
 | **Phase 1** — Krishna Brain (Node) + Turso + encryption | ✅ **Done & merged** | [PR #1](https://github.com/Life2death/krishna/pull/1). `apps/brain/` (Fastify + `@libsql/client` + `@napi-rs/keyring`, run via `tsx`). Field encryption verified ciphertext-at-rest; CRUD/auth/WS/`/chat`-guard verified live; brain 7/7. **`/chat` live token streaming still needs a real `ANTHROPIC_API_KEY` in `apps/brain/.env` to verify end-to-end.** Adapter coerces `undefined`→`null` to match Tauri plugin-sql. |
 | **Phase 2** — Client remote-brain mode (cross-device sync) | ✅ **Done** | repo-selector + `getRepo()` + RemoteRepo clients + 8 UI hooks + `useBrainWs` + Brain Connection panel. **Orchestrator split-brain FIXED** (commit `466abd7`): `krishna.context.tsx` now routes memory/skills/reminders/conversations/chat through `getRepo()` via `src/lib/repo-bound.ts`; remote `/chat` carries images. Verified: client `tsc` clean + 192/192. *Audit-log + learned-actions intentionally stay local (per-device).* |
 | **Phase 3** — MCP tool hub (in the brain) | ✅ **Done** | Brain `McpHub` (connect/list/execute) + `/mcp/tools`, `/mcp/execute`; client `useMcpTools` + `mcp-bridge` registration; `action-policy` `mcp_` safe/sensitive gating in `executor`; core `tool-selector`. *TODO: confirm `mcp_` executions write to audit-log.* |
-| **Phase 4** — Mobile clients + voice + handoff | 🚧 **In progress** (Android-first) | Brain device-presence + resume-summary built. **Android `init` DONE** — toolchain wired (JAVA_HOME→Studio jbr, NDK_HOME, Rust targets), `gen/android` generated (untracked → commit it). **iOS deferred** (needs a Mac). Remaining: mobile voice/PTT + manifest `RECORD_AUDIO`; relax local-provider guards (`krishna.context` ~L658/987) for keyless mobile chat. |
+| **Phase 4** — Mobile clients + voice + handoff | 🚧 **In review** on branch [`phase-4`](https://github.com/Life2death/krishna/tree/phase-4) (Android-first) | Built: device-presence (`devices.sql`/`useDevicePresence`, wired in provider), resume-summary, keyless-chat guard (remote→`provider=undefined`), mobile UA→`remote` default, `useMobileSpeech` PTT + `MobileVoiceButton`, `gen/android` + manifest perms. Toolchain wired (JAVA_HOME, NDK, Rust targets). **Reviewed & verified** live-wiring + tsc + 192/192 + 7/7. **Fixed a ship-blocker**: `npm run build` was broken (vite alias shadowing `mcp-bridge`, latent since Phase 3) — commit `14e83b4`, build now ✓. **Still pending: real `tauri android dev` boot on emulator** (the end-to-end proof). **iOS deferred** (needs a Mac). |
 | **Phase 5** — Runtime skills + personas | ⬜ Pending | **Strict live-wiring DoD applies (§5).** |
 
 **Known parked item (low priority):** the legacy `interview_profiles` table is fully removed from
@@ -300,8 +300,13 @@ real path, not just present in the repo. The DoD report for each phase MUST incl
    actually breaks — proving it was on the path, not dead code shadowed by an old route.
 4. **End-to-end run**, not just unit tests: exercise the feature through the real UI/voice/brain path and
    report observed behavior (the unit suite passing is necessary, not sufficient).
+5. **Production build passes**: run `npm run build` (client) **and** `npm run build`/`tauri build` for any
+   target you touched — **`tsc --noEmit` + `vitest` are NOT enough**. They use tsconfig paths and a lenient
+   resolver; only the real bundler catches alias/resolution breaks. (Phase 3 shipped a vite alias bug that
+   broke `npm run build` for ~2 phases, undetected by tsc+tests, because nobody ran the production build —
+   commit `14e83b4`.) For mobile: `tauri android build`/`dev` must reach a running app, not just compile.
 
-If any of the four is missing, the phase is **in progress**, not done. Reviewer rejects on a missing trace.
+If any of the five is missing, the phase is **in progress**, not done. Reviewer rejects on a missing trace.
 
 - **Tests**: keep Vitest in `packages/core`; add brain integration tests (supertest vs Fastify). Each phase:
   grep the live flow for real call-sites (unwired-unit guard) — see the strict DoD above.
