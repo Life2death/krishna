@@ -1,0 +1,27 @@
+{
+  "name": "@krishna/brain",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Krishna Brain — headless Node service: shared memory/skills store, encrypted at rest, REST + WS + SSE chat.",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "start": "tsx src/index.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@krishna/core": "*",
+    "@fastify/websocket": "^11.0.2",
+    "@libsql/client": "^0.15.4",
+    "@napi-rs/keyring": "^1.1.7",
+    "dotenv": "^16.4.7",
+    "fastify": "^5.2.1"
+  },
+  "devDependencies": {
+    "@types/node": "^24.3.0",
+    "tsx": "^4.22.4",
+    "typescript": "~5.8.3",
+    "vitest": "^4.1.4"
+  }
+}

@@ -11,6 +11,9 @@ export default defineConfig({
     environment: "jsdom",
     globals: true,
     setupFiles: ["./src/__tests__/setup.ts"],
+    // Client (Tauri app) tests only. The brain has its own runner (apps/brain).
+    include: ["src/**/*.{test,spec}.{ts,tsx}"],
+    exclude: ["node_modules/**", "apps/**", "packages/**"],
     coverage: {
       provider: "v8",
       reporter: ["text", "json", "html"],
