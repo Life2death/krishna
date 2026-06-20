@@ -1,7 +1,7 @@
 import { Badge, Input, Card, Empty, Button } from "@/components";
 import { useHistory, useKrishna } from "@/hooks";
 import { PageLayout } from "@/layouts";
-import { deleteAllConversations } from "@/lib/database/chat-history.action";
+import { deleteAllConversations } from "@/lib/database";
 import { MessageCircleIcon, Search, Trash2, XCircleIcon } from "lucide-react";
 import moment from "moment";
 import { useNavigate } from "react-router-dom";

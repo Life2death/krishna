@@ -334,7 +334,7 @@ export const useCompletion = () => {
   }, []);
 
   // Note: saveConversation, getConversationById, and generateConversationTitle
-  // are now imported from lib/database/chat-history.action.ts
+  // are imported from @/lib/database (re-exports @krishna/core).
 
   const loadConversation = useCallback((conversation: ChatConversation) => {
     setState((prev) => ({

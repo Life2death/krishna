@@ -13,16 +13,16 @@ import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import { parseYesNo } from "@/lib/parse-yes-no";
 import { saveAndConfirm } from "@/lib/resolver";
-import { getAllSkills, getSkillByName, createSkill, updateSkillUseCount } from "@/lib/database/skills.action";
-import { getAllMemories, createMemory } from "@/lib/database/memories.action";
+import { getAllSkills, getSkillByName, createSkill, updateSkillUseCount } from "@/lib/database";
+import { getAllMemories, createMemory } from "@/lib/database";
 import { parseRememberCommand, buildMemoryPrompt } from "@/lib/memory";
 import { detectWakeWord } from "@/lib/wake-word";
 import { parseReminderCommand } from "@/lib/reminders";
-import { createReminder, getDueReminders, updateReminder, cancelReminder } from "@/lib/database/reminders.action";
-import { createConversation, appendMessages, generateConversationTitle, getMostRecentConversation, deleteConversation } from "@/lib/database/chat-history.action";
+import { createReminder, getDueReminders, updateReminder, cancelReminder } from "@/lib/database";
+import { createConversation, appendMessages, generateConversationTitle, getMostRecentConversation, deleteConversation } from "@/lib/database";
 import { isLookCommand, isUndoCommand, isJobExtractionCommand } from "@/lib/perception";
 import { triggerJobExtractionWorkflow } from "@/lib/integrations/github-workflow";
-import { createAuditEntry, getLastReversible } from "@/lib/database/audit.action";
+import { createAuditEntry, getLastReversible } from "@/lib/database";
 import type { AssistantStatus, StepAction } from "@/types/assistant";
 import type { Skill } from "@/types/skill";
 import type { Message, AttachedFile } from "@/types";
@@ -1204,7 +1204,7 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
             const payload = last.undoPayload ? JSON.parse(last.undoPayload) : null;
             let undoSuccess = false;
             if (payload?.kind === "memory" && payload.id) {
-              const { deleteMemory } = await import("@/lib/database/memories.action");
+              const { deleteMemory } = await import("@/lib/database");
               await deleteMemory(payload.id);
               undoSuccess = true;
             }

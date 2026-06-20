@@ -1,4 +1,5 @@
 export * from "./driver";
+export * from "./audit.action";
 export * from "./system-prompt.action";
 export * from "./chat-history.action";
 export * from "./learned-actions.action";
