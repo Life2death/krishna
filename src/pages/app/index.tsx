@@ -1,4 +1,4 @@
-import { Card, Updater, DragButton, CustomCursor, Button, KrishnaVAD, KrishnaChat } from "@/components";
+import { Card, Updater, DragButton, CustomCursor, Button, KrishnaVAD, KrishnaChat, MobileVoiceButton } from "@/components";
 import { Completion, BrainSelector, SystemPromptSelector } from "./components";
 import { useApp, useKrishna } from "@/hooks";
 import { useApp as useAppContext } from "@/contexts";
@@ -38,6 +38,7 @@ const App = () => {
       >
         <Card className="w-full flex flex-row items-center gap-1 p-2">
           <KrishnaVAD />
+          <MobileVoiceButton />
 
           <div className="w-full flex flex-row gap-1 items-center">
             <Completion isHidden={isHidden} />
