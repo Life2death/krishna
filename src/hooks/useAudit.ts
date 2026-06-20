@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { getAllAuditEntries, deleteAllAuditEntries } from "@/lib/database/audit.action";
+import { getAllAuditEntries, deleteAllAuditEntries } from "@/lib/database";
 import type { AuditEntry } from "@/types/audit";
 
 export const useAudit = () => {
