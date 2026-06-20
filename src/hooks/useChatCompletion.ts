@@ -171,24 +171,28 @@ export const useChatCompletion = (
           });
         }
 
-        // Check if AI provider is configured
-        if (!selectedAIProvider.provider) {
-          setState((prev) => ({
-            ...prev,
-            error: "Please select an AI provider in settings",
-          }));
-          return;
-        }
-
-        const provider = allAiProviders.find(
-          (p) => p.id === selectedAIProvider.provider
-        );
-        if (!provider) {
-          setState((prev) => ({
-            ...prev,
-            error: "Invalid provider selected",
-          }));
-          return;
+        let provider;
+        if (getRepo().mode === "remote") {
+          provider = undefined;
+        } else {
+          // Check if AI provider is configured
+          if (!selectedAIProvider.provider) {
+            setState((prev) => ({
+              ...prev,
+              error: "Please select an AI provider in settings",
+            }));
+            return;
+          }
+          provider = allAiProviders.find(
+            (p) => p.id === selectedAIProvider.provider
+          );
+          if (!provider) {
+            setState((prev) => ({
+              ...prev,
+              error: "Invalid provider selected",
+            }));
+            return;
+          }
         }
 
         // Add user message to UI immediately

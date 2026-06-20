@@ -1,7 +1,8 @@
 import { createContext, useContext, useState, useCallback, useRef, useEffect, ReactNode } from "react";
 import { useApp } from "@/contexts";
-import { useMcpTools } from "@/hooks";
+import { useMcpTools, useDevicePresence } from "@/hooks";
 import { fetchAIResponse } from "@/lib/repo-bound";
+import { getRepo } from "@/lib/repo-selector";
 import { parseActions, executeAction } from "@/lib/actions";
 import { executePlan, resolvePlaceholders } from "@/lib/executor";
 import { getAllTools } from "@/lib/tools";
@@ -239,6 +240,7 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
   const ttsRef = useRef<TTSProvider>(getTTS());
 
   useMcpTools();
+  useDevicePresence();
 
   const [enabled, setEnabled] = useState<boolean>(true);
   const [status, setStatus] = useState<AssistantStatus>("idle");
@@ -655,8 +657,9 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
 
   const llmFallback = useCallback(
     async (input: string): Promise<string | null> => {
-      if (!selectedAIProvider.provider) return null;
       if (!llmFallbackEnabled) return null;
+      if (getRepo().mode === "remote") return null;
+      if (!selectedAIProvider.provider) return null;
       const provider = allAiProviders.find((p) => p.id === selectedAIProvider.provider);
       if (!provider) return null;
 
@@ -984,21 +987,25 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
       setPendingCommand(command);
       setStatus("thinking");
 
-      if (!selectedAIProvider.provider) {
-        const errMsg = "No AI provider configured — open Settings › Brain.";
-        setLastError(errMsg);
-        setStatus("idle");
-        return;
-      }
-
-      const provider = allAiProviders.find(
-        (p) => p.id === selectedAIProvider.provider
-      );
-      if (!provider) {
-        const errMsg = "AI provider not found — check Settings › Brain.";
-        setLastError(errMsg);
-        setStatus("idle");
-        return;
+      let provider;
+      if (getRepo().mode === "remote") {
+        provider = undefined;
+      } else {
+        if (!selectedAIProvider.provider) {
+          const errMsg = "No AI provider configured — open Settings › Brain.";
+          setLastError(errMsg);
+          setStatus("idle");
+          return;
+        }
+        provider = allAiProviders.find(
+          (p) => p.id === selectedAIProvider.provider
+        );
+        if (!provider) {
+          const errMsg = "AI provider not found — check Settings › Brain.";
+          setLastError(errMsg);
+          setStatus("idle");
+          return;
+        }
       }
 
       // Skill match: check if the command matches a learned skill (pattern-based)

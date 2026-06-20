@@ -8,19 +8,43 @@ export type PushOp = "create" | "save" | "delete" | "deleteAll" | "append";
 
 const STORAGE_KEY = "krishna_brain_config";
 
+function isMobilePlatform(): boolean {
+  try {
+    // Tauri mobile exposes a different __TAURI__ internals check
+    if (typeof navigator !== "undefined") {
+      const ua = navigator.userAgent || "";
+      if (/android|iphone|ipad|ipod/i.test(ua)) return true;
+    }
+    // Check Tauri platform API (mobile = not macos/windows/linux)
+    if (typeof window !== "undefined" && (window as any).__TAURI__) {
+      try {
+        const { type } = (window as any).__TAURI__.os?.platform() || {};
+        if (type === "android" || type === "ios") return true;
+      } catch {}
+    }
+  } catch {}
+  return false;
+}
+
+const DEFAULT_MODE: "local" | "remote" = isMobilePlatform() ? "remote" : "local";
+
 export function readBrainConfig(): BrainConfig {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
+      const mode =
+        parsed.brainMode === "local" || parsed.brainMode === "remote"
+          ? parsed.brainMode
+          : DEFAULT_MODE;
       return {
-        brainMode: parsed.brainMode === "remote" ? "remote" : "local",
+        brainMode: mode,
         brainUrl: parsed.brainUrl || "http://localhost:8787",
         brainToken: parsed.brainToken || "",
       };
     }
   } catch {}
-  return { brainMode: "local", brainUrl: "http://localhost:8787", brainToken: "" };
+  return { brainMode: DEFAULT_MODE, brainUrl: "http://localhost:8787", brainToken: "" };
 }
 
 export function saveBrainConfig(config: BrainConfig): void {

@@ -16,17 +16,19 @@ import { chatHistoryRoutes } from "./routes/chat-history.ts";
 import { chatRoutes } from "./routes/chat.ts";
 import { McpHub, loadMcpConfig } from "./mcp/index.ts";
 import { mcpToolsRoutes } from "./routes/mcp-tools.ts";
+import { devicesRoutes } from "./routes/devices.ts";
+import { resumeSummaryRoutes } from "./routes/resume-summary.ts";
 
 async function main(): Promise<void> {
   // 1. Boot shared core onto the Node runtime (libSQL driver + migrations + shims).
-  await initCore();
+  const db = await initCore();
 
   // 2. Field encryption key (OS keyring or env).
   const crypto = makeFieldCrypto(await loadMasterKey());
 
   // 3. Live-sync hub + shared context.
   const hub = new Hub();
-  const ctx: BrainContext = { crypto, hub };
+  const ctx: BrainContext = { crypto, hub, db };
 
   // 3b. MCP tool hub — connect to configured MCP servers.
   const mcpHub = new McpHub();
@@ -62,6 +64,8 @@ async function main(): Promise<void> {
   chatHistoryRoutes(app, ctx);
   chatRoutes(app);
   mcpToolsRoutes(app, mcpHub);
+  devicesRoutes(app, ctx);
+  resumeSummaryRoutes(app, ctx);
 
   await app.listen({ port: config.port, host: "0.0.0.0" });
   app.log.info(`Krishna Brain listening on :${config.port}`);

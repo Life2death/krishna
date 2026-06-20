@@ -64,7 +64,7 @@ describe("memories route (encryption boundary + auth)", () => {
     setDriver(inlineDriver(client) as never);
     app = Fastify();
     app.addHook("preHandler", authHook(TOKEN));
-    memoriesRoutes(app, { crypto: makeFieldCrypto(KEY), hub: new Hub() });
+    memoriesRoutes(app, { crypto: makeFieldCrypto(KEY), hub: new Hub(), db: client });
     await app.ready();
   });
 

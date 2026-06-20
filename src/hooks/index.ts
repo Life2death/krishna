@@ -16,3 +16,4 @@ export * from "./useMenuItems";
 export * from "./useOpenRouterModels";
 export * from "./useKrishna";
 export * from "./useMcpTools";
+export * from "./useDevicePresence";
