@@ -44,7 +44,6 @@ tauri-plugin-shell = "2.3.1"
 tauri-plugin-sql = { version = "2.4.0", features = ["sqlite"] }
 tauri-plugin-log = "2"
 log = "0.4"
-tauri-plugin-posthog = "0.2.4"
 chrono = "0.4"
 aes-gcm = "0.10"
 sha2 = "0.10"
@@ -65,7 +64,8 @@ libpulse-simple-binding = "2.29.0"
 
 [target.'cfg(any(target_os = "macos", windows, target_os = "linux"))'.dependencies]
 tauri-plugin-autostart = "2.5.0"
-# machine-uid has no Android/iOS support (its non-desktop path fails to compile),
-# so it's a desktop-only dep. Mobile derives the secure-storage key differently
-# (see src/secure.rs get_machine_id).
+# These pull in `machine-uid`, which has no Android/iOS support (its non-desktop
+# path fails to compile), so they're desktop-only. Mobile derives the secure-storage
+# key differently (see src/secure.rs get_machine_id) and skips PostHog analytics.
 tauri-plugin-machine-uid = "0.1.2"
+tauri-plugin-posthog = "0.2.4"
