@@ -9,6 +9,8 @@ import {
   deleteMemory as localDeleteMemory,
   deleteAllMemories as localDeleteAllMemories,
   getAllSkills as localGetAllSkills,
+  getSkillByName as localGetSkillByName,
+  updateSkillUseCount as localUpdateSkillUseCount,
   createSkill as localCreateSkill,
   deleteSkill as localDeleteSkill,
   deleteAllSkills as localDeleteAllSkills,
@@ -18,6 +20,8 @@ import {
   deleteLearnedAction as localDeleteLearnedAction,
   deleteAllLearnedActions as localDeleteAllLearnedActions,
   getAllReminders as localGetAllReminders,
+  getDueReminders as localGetDueReminders,
+  cancelReminder as localCancelReminder,
   createReminder as localCreateReminder,
   deleteReminder as localDeleteReminder,
   updateReminder as localUpdateReminder,
@@ -26,6 +30,8 @@ import {
   updateSystemPrompt as localUpdateSystemPrompt,
   deleteSystemPrompt as localDeleteSystemPrompt,
   getAllConversations as localGetAllConversations,
+  getMostRecentConversation as localGetMostRecentConversation,
+  appendMessages as localAppendMessages,
   saveConversation as localSaveConversation,
   deleteConversation as localDeleteConversation,
   deleteAllConversations as localDeleteAllConversations,
@@ -52,6 +58,8 @@ export interface MemoriesRepo {
 
 export interface SkillsRepo {
   getAllSkills(): Promise<Skill[]>;
+  getSkillByName(name: string): Promise<Skill | null>;
+  updateSkillUseCount(id: number): Promise<void>;
   createSkill(skill: Skill): Promise<Skill>;
   deleteSkill(id: number): Promise<boolean>;
   deleteAllSkills(): Promise<boolean>;
@@ -67,8 +75,10 @@ export interface LearnedActionsRepo {
 
 export interface RemindersRepo {
   getAllReminders(): Promise<Reminder[]>;
+  getDueReminders(): Promise<Reminder[]>;
   createReminder(reminder: Reminder): Promise<Reminder>;
   updateReminder(reminder: Reminder): Promise<void>;
+  cancelReminder(id: string): Promise<boolean>;
   deleteReminder(id: string): Promise<boolean>;
 }
 
@@ -82,6 +92,11 @@ export interface SystemPromptsRepo {
 export interface ChatHistoryRepo {
   getAllConversations(): Promise<ChatConversation[]>;
   getConversationById(id: string): Promise<ChatConversation | null>;
+  getMostRecentConversation(): Promise<ChatConversation | null>;
+  appendMessages(
+    conversationId: string,
+    messages: { role: "user" | "assistant"; content: string; timestamp: number }[],
+  ): Promise<void>;
   saveConversation(conversation: ChatConversation): Promise<ChatConversation>;
   deleteConversation(id: string): Promise<boolean>;
   deleteAllConversations(): Promise<void>;
@@ -89,9 +104,12 @@ export interface ChatHistoryRepo {
 
 export interface ChatRepo {
   fetchAIResponse(params: {
-    userMessage: string;
-    history?: Message[];
+    provider?: unknown;
+    selectedProvider?: unknown;
     systemPrompt?: string;
+    history?: Message[];
+    userMessage: string;
+    imagesBase64?: string[];
     signal?: AbortSignal;
   }): AsyncIterable<string>;
 }
@@ -117,6 +135,8 @@ const localRepo: Repo = {
   },
   skills: {
     getAllSkills: localGetAllSkills,
+    getSkillByName: localGetSkillByName,
+    updateSkillUseCount: localUpdateSkillUseCount,
     createSkill: localCreateSkill,
     deleteSkill: localDeleteSkill,
     deleteAllSkills: localDeleteAllSkills,
@@ -130,8 +150,10 @@ const localRepo: Repo = {
   },
   reminders: {
     getAllReminders: localGetAllReminders,
+    getDueReminders: localGetDueReminders,
     createReminder: localCreateReminder,
     updateReminder: localUpdateReminder,
+    cancelReminder: localCancelReminder,
     deleteReminder: localDeleteReminder,
   },
   systemPrompts: {
@@ -146,14 +168,16 @@ const localRepo: Repo = {
       const { getConversationById: fn } = await import("@/lib/database");
       return fn(id);
     },
+    getMostRecentConversation: localGetMostRecentConversation,
+    appendMessages: localAppendMessages,
     saveConversation: localSaveConversation,
     deleteConversation: localDeleteConversation,
     deleteAllConversations: localDeleteAllConversations,
   },
   chat: {
     async *fetchAIResponse(params: {
-      provider: any;
-      selectedProvider: any;
+      provider?: any;
+      selectedProvider?: any;
       systemPrompt?: string;
       history?: Message[];
       userMessage: string;
@@ -161,7 +185,7 @@ const localRepo: Repo = {
       signal?: AbortSignal;
     }): AsyncIterable<string> {
       const { fetchAIResponse: fn } = await import("@/lib/functions");
-      yield* fn(params);
+      yield* fn(params as Parameters<typeof fn>[0]);
     },
   },
 };

@@ -8,6 +8,7 @@ interface ChatBody {
   userMessage: string;
   history?: Message[];
   systemPrompt?: string;
+  imagesBase64?: string[];
 }
 
 /**
@@ -18,7 +19,7 @@ interface ChatBody {
  */
 export function chatRoutes(app: FastifyInstance): void {
   app.post("/chat", async (req, reply) => {
-    const { userMessage, history = [], systemPrompt } = req.body as ChatBody;
+    const { userMessage, history = [], systemPrompt, imagesBase64 = [] } = req.body as ChatBody;
 
     if (!config.anthropicApiKey) {
       return reply.code(503).send({ error: "ANTHROPIC_API_KEY not configured in the brain" });
@@ -42,6 +43,7 @@ export function chatRoutes(app: FastifyInstance): void {
         systemPrompt,
         history,
         userMessage,
+        imagesBase64,
       })) {
         res.write(`data: ${JSON.stringify({ delta: chunk })}\n\n`);
       }

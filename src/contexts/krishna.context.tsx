@@ -1,7 +1,7 @@
 import { createContext, useContext, useState, useCallback, useRef, useEffect, ReactNode } from "react";
 import { useApp } from "@/contexts";
 import { useMcpTools } from "@/hooks";
-import { fetchAIResponse } from "@/lib/functions";
+import { fetchAIResponse } from "@/lib/repo-bound";
 import { parseActions, executeAction } from "@/lib/actions";
 import { executePlan, resolvePlaceholders } from "@/lib/executor";
 import { getAllTools } from "@/lib/tools";
@@ -15,13 +15,13 @@ import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import { parseYesNo } from "@/lib/parse-yes-no";
 import { saveAndConfirm } from "@/lib/resolver";
-import { getAllSkills, getSkillByName, createSkill, updateSkillUseCount } from "@/lib/database";
-import { getAllMemories, createMemory } from "@/lib/database";
+import { getAllSkills, getSkillByName, createSkill, updateSkillUseCount } from "@/lib/repo-bound";
+import { getAllMemories, createMemory } from "@/lib/repo-bound";
 import { parseRememberCommand, buildMemoryPrompt } from "@/lib/memory";
 import { detectWakeWord } from "@/lib/wake-word";
 import { parseReminderCommand } from "@/lib/reminders";
-import { createReminder, getDueReminders, updateReminder, cancelReminder } from "@/lib/database";
-import { createConversation, appendMessages, generateConversationTitle, getMostRecentConversation, deleteConversation } from "@/lib/database";
+import { createReminder, getDueReminders, updateReminder, cancelReminder } from "@/lib/repo-bound";
+import { createConversation, appendMessages, generateConversationTitle, getMostRecentConversation, deleteConversation } from "@/lib/repo-bound";
 import { isLookCommand, isUndoCommand, isJobExtractionCommand } from "@/lib/perception";
 import { triggerJobExtractionWorkflow } from "@/lib/integrations/github-workflow";
 import { createAuditEntry, getLastReversible } from "@/lib/database";
@@ -1215,7 +1215,7 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
             const payload = last.undoPayload ? JSON.parse(last.undoPayload) : null;
             let undoSuccess = false;
             if (payload?.kind === "memory" && payload.id) {
-              const { deleteMemory } = await import("@/lib/database");
+              const { deleteMemory } = await import("@/lib/repo-bound");
               await deleteMemory(payload.id);
               undoSuccess = true;
             }

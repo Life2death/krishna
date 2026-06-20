@@ -5,6 +5,7 @@ interface ChatBody {
   userMessage: string;
   history?: Message[];
   systemPrompt?: string;
+  imagesBase64?: string[];
 }
 
 export function createRemoteChatRepo(config: BrainConfig) {
@@ -17,9 +18,14 @@ export function createRemoteChatRepo(config: BrainConfig) {
       userMessage: string;
       history?: Message[];
       systemPrompt?: string;
+      imagesBase64?: string[];
       signal?: AbortSignal;
+      // provider/selectedProvider are accepted for signature parity with the
+      // local repo but ignored — the brain holds the Claude key server-side.
+      provider?: unknown;
+      selectedProvider?: unknown;
     }): AsyncIterable<string> {
-      const { userMessage, history = [], systemPrompt, signal } = params;
+      const { userMessage, history = [], systemPrompt, imagesBase64 = [], signal } = params;
 
       const baseUrl = config.brainUrl.replace(/\/+$/, "");
       const response = await fetch(`${baseUrl}/chat`, {
@@ -28,7 +34,7 @@ export function createRemoteChatRepo(config: BrainConfig) {
           "Content-Type": "application/json",
           Authorization: `Bearer ${config.brainToken}`,
         },
-        body: JSON.stringify({ userMessage, history, systemPrompt } satisfies ChatBody),
+        body: JSON.stringify({ userMessage, history, systemPrompt, imagesBase64 } satisfies ChatBody),
         signal,
       });
 
