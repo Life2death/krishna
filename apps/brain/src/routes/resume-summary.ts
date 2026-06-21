@@ -63,6 +63,11 @@ export function resumeSummaryRoutes(app: FastifyInstance, ctx: BrainContext): vo
       '{ "summary": "...", "suggestedActions": ["..."] }',
     ].join("\n");
 
+    const abortController = new AbortController();
+    req.raw.on("close", () => {
+      if (req.raw.destroyed) abortController.abort();
+    });
+
     let fullResponse = "";
     try {
       for await (const chunk of fetchAIResponse({
@@ -72,10 +77,14 @@ export function resumeSummaryRoutes(app: FastifyInstance, ctx: BrainContext): vo
         history: [],
         userMessage: summaryPrompt,
         imagesBase64: [],
+        signal: abortController.signal,
       })) {
         fullResponse += chunk;
       }
     } catch (err) {
+      if (abortController.signal.aborted) {
+        return reply.code(499).send({ error: "Request cancelled" });
+      }
       return reply.code(502).send({
         error: `Summary generation failed: ${err instanceof Error ? err.message : String(err)}`,
       });
@@ -96,9 +105,14 @@ export function resumeSummaryRoutes(app: FastifyInstance, ctx: BrainContext): vo
     // Redact any PII that the LLM prompt didn't catch
     const redactedSummary = parsed.summary ? redactText(parsed.summary).text : (fullResponse.trim().split("\n")[0] || "No summary available.");
 
+    const redactedRecentTurns = recentTurns.map((t) => ({
+      ...t,
+      content: typeof t.content === "string" ? redactText(t.content).text : t.content,
+    }));
+
     const result: ResumeSummaryResult = {
       summary: redactedSummary,
-      recentTurns,
+      recentTurns: redactedRecentTurns,
       suggestedActions: (parsed.suggestedActions || []).map((a) => redactText(a).text),
       conversationId: id,
     };

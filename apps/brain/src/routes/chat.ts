@@ -50,6 +50,11 @@ export function chatRoutes(app: FastifyInstance): void {
 
     const augmentedPrompt = await augmentWithRag(userMessage, systemPrompt);
 
+    const abortController = new AbortController();
+    req.raw.on("close", () => {
+      if (req.raw.destroyed) abortController.abort();
+    });
+
     reply.hijack();
     const res = reply.raw;
     res.writeHead(200, {
@@ -66,11 +71,13 @@ export function chatRoutes(app: FastifyInstance): void {
         history,
         userMessage,
         imagesBase64,
+        signal: abortController.signal,
       })) {
         res.write(`data: ${JSON.stringify({ delta: chunk })}\n\n`);
       }
       res.write("data: [DONE]\n\n");
     } catch (err) {
+      if (abortController.signal.aborted) return;
       res.write(`data: ${JSON.stringify({ error: err instanceof Error ? err.message : String(err) })}\n\n`);
     } finally {
       res.end();

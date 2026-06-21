@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { classifyAction } from "@/config/action-policy";
+import { classifyAction } from "@krishna/core";
 import { isUndoCommand } from "@/lib/perception";
 
 describe("classifyAction", () => {

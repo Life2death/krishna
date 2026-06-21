@@ -1,3 +1,4 @@
+import { timingSafeEqual } from "node:crypto";
 import type { FastifyRequest, FastifyReply } from "fastify";
 
 /**
@@ -6,10 +7,25 @@ import type { FastifyRequest, FastifyReply } from "fastify";
  * validated in the socket handler instead.
  */
 export function authHook(token: string) {
+  const tokenBytes = Buffer.from(token);
+  const expected = `Bearer ${token}`;
+  const expectedBytes = Buffer.from(expected);
+
   return async (req: FastifyRequest, reply: FastifyReply) => {
     const path = req.url.split("?")[0];
     if (path === "/health" || path === "/ws") return;
-    if (req.headers["authorization"] !== `Bearer ${token}`) {
+
+    const header = req.headers["authorization"];
+    if (!header) {
+      return reply.code(401).send({ error: "unauthorized" });
+    }
+
+    const headerBytes = Buffer.from(header);
+    const ok =
+      headerBytes.length === expectedBytes.length &&
+      timingSafeEqual(headerBytes, expectedBytes);
+
+    if (!ok) {
       return reply.code(401).send({ error: "unauthorized" });
     }
   };

@@ -62,6 +62,17 @@ jobs:
             "platforms;android-36" \
             "build-tools;36.0.0"
 
+      # ── VersionCode (monotonic increment for Play Store) ─────────────────────
+      - name: Set Android versionCode from run_number
+        shell: bash
+        run: |
+          VERSION_NAME=$(node -p "require('./src-tauri/tauri.conf.json').version")
+          mkdir -p src-tauri/gen/android/app
+          cat > src-tauri/gen/android/app/tauri.properties <<EOF
+          tauri.android.versionCode=${{ github.run_number }}
+          tauri.android.versionName=${VERSION_NAME}
+          EOF
+
       # ── Debug build (PRs) ────────────────────────────────────────────────────
       - name: Build debug APK (PR smoke test)
         if: github.event_name == 'pull_request'
@@ -105,3 +116,13 @@ jobs:
           files: |
             src-tauri/gen/android/app/build/outputs/apk/universal/release/*.apk
             src-tauri/gen/android/app/build/outputs/bundle/universalRelease/*.aab
+
+      - name: Upload to Google Play (internal testing)
+        if: ${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON != '' }}
+        uses: r0adkll/upload-google-play@v1
+        with:
+          serviceAccountJsonPlainText: ${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON }}
+          packageName: com.krishna.assistant
+          releaseFile: src-tauri/gen/android/app/build/outputs/bundle/universalRelease/*.aab
+          track: internal
+          status: completed

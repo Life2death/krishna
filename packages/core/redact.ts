@@ -45,5 +45,8 @@ export function redactText(text: string): RedactResult {
 }
 
 export function containsSecrets(text: string): boolean {
-  return RULES.some((rule) => rule.pattern.test(text));
+  return RULES.some((rule) => {
+    rule.pattern.lastIndex = 0;
+    return rule.pattern.test(text);
+  });
 }

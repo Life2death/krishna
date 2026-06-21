@@ -11,7 +11,7 @@
 | Pipeline | Status | File |
 |---|---|---|
 | Desktop (Windows) | ✅ Exists — fires on `v*` tag | `.github/workflows/release.yml` |
-| Android APK/AAB | ✅ Exists — fires on `v*` tag + PRs | `.github/workflows/android.yml` |
+| Android APK/AAB + Play Store | ✅ Exists — fires on `v*` tag + PRs; auto-publishes AAB to Play internal track when `GOOGLE_PLAY_SERVICE_ACCOUNT_JSON` secret is set | `.github/workflows/android.yml` |
 | CI (typecheck + tests + Rust check) | ✅ Exists — fires on push/PR to main | `.github/workflows/ci.yml` |
 
 All three workflows are committed. **Nothing will work until the GitHub Secrets are set (Step 1 below).**
@@ -188,6 +188,6 @@ Builds Windows desktop app on `windows-latest` via `tauri-apps/tauri-action`. Pr
 ## Open Items (not blocking the pipeline)
 
 - [ ] **iOS pipeline**: deferred — requires macOS runner + Apple Developer account ($99/yr) + provisioning profile secrets. Template: use `macos-latest` runner, add `xcode-select` setup, run `npx tauri ios build`.
-- [ ] **Auto-publish to Play Store**: use `r0adkll/upload-google-play` action after the AAB build. Requires `GOOGLE_PLAY_SERVICE_ACCOUNT_JSON` secret.
-- [ ] **Auto-increment `versionCode`**: Android `versionCode` must increase monotonically for Play Store. Consider deriving it from `github.run_number` in the workflow.
+- [x] **Auto-increment `versionCode`**: derived from `github.run_number` + injected via `tauri.properties` before the Tauri build.
+- [x] **Auto-publish to Play Store**: `r0adkll/upload-google-play` step added after AAB build, gated on `GOOGLE_PLAY_SERVICE_ACCOUNT_JSON` secret.
 - [ ] **Updater**: `tauri.conf.json` has `createUpdaterArtifacts: false` — enable and add `TAURI_SIGNING_PRIVATE_KEY` secret to get auto-update support in the desktop app.

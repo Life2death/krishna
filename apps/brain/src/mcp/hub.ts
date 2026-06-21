@@ -107,13 +107,23 @@ export class McpHub {
     return all;
   }
 
-  /** Execute an MCP tool by server-qualified name or first match. */
+  /** Execute an MCP tool. Supports `server.tool` qualified names for disambiguation. */
   async callTool(
     toolName: string,
     args: Record<string, unknown>,
   ): Promise<ToolResult> {
+    const dotIdx = toolName.indexOf(".");
+    let serverName: string | null = null;
+    let bareName = toolName;
+
+    if (dotIdx > 0) {
+      serverName = toolName.slice(0, dotIdx);
+      bareName = toolName.slice(dotIdx + 1);
+    }
+
     for (const conn of this.connections.values()) {
-      const match = conn.tools.find((t) => t.name === toolName);
+      if (serverName && conn.serverName !== serverName) continue;
+      const match = conn.tools.find((t) => t.name === bareName);
       if (!match) continue;
 
       conn.lastUsed = Date.now();
@@ -121,7 +131,7 @@ export class McpHub {
 
       try {
         const result = await conn.client.callTool({
-          name: toolName,
+          name: bareName,
           arguments: args,
         });
         const content = (result as any)?.content ?? [];

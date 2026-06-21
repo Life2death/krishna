@@ -8,6 +8,7 @@ import {
   appendMessages,
   getAllConversations,
   fetchAIResponse,
+  redactText,
 } from "@krishna/core";
 import type { BrainContext } from "../context.ts";
 import { claudeProvider, claudeSelectedProvider } from "../provider.ts";
@@ -125,7 +126,7 @@ export function registerHandlers(bot: any, brainCtx: BrainContext): void {
     };
 
     await createMemory(memory as any);
-    await tgCtx.reply(`Saved: ${key} = ${value}`);
+    await tgCtx.reply(`Saved: ${key} = ${redactText(value).text}`);
   });
 
   bot.command("memories", async (tgCtx: Context) => {
@@ -140,7 +141,8 @@ export function registerHandlers(bot: any, brainCtx: BrainContext): void {
       .slice(0, 20)
       .map((m) => {
         const value = brainCtx.crypto.decrypt(m.value as string) ?? m.value;
-        return m.key ? `• ${m.key}: ${value}` : `• ${value}`;
+        const cleanValue = redactText(value).text;
+        return m.key ? `• ${m.key}: ${cleanValue}` : `• ${cleanValue}`;
       });
 
     const msg = `Memories (${memories.length} total):\n\n${lines.join("\n")}`;
@@ -223,6 +225,9 @@ async function handleMessage(
     content: m.content,
   }));
 
+  const abortController = new AbortController();
+  const tgAbort = setTimeout(() => abortController.abort(), 120_000);
+
   let fullReply = "";
   try {
     for await (const chunk of fetchAIResponse({
@@ -231,21 +236,27 @@ async function handleMessage(
       history: safeHistory,
       userMessage,
       imagesBase64: [],
+      signal: abortController.signal,
     })) {
       fullReply += chunk;
     }
   } catch (err) {
+    clearTimeout(tgAbort);
+    if (abortController.signal.aborted) return;
     const msg = err instanceof Error ? err.message : String(err);
     await tgCtx.reply(`Error: ${msg}`);
     return;
   }
+  clearTimeout(tgAbort);
 
   await appendToConversation(conv.id, "assistant", fullReply, brainCtx.crypto);
 
-  if (fullReply.length <= 4096) {
-    await tgCtx.reply(fullReply, { parse_mode: "Markdown" });
+  const redactedReply = redactText(fullReply).text;
+
+  if (redactedReply.length <= 4096) {
+    await tgCtx.reply(redactedReply, { parse_mode: "Markdown" });
   } else {
-    const parts = splitLongMessage(fullReply, 4096);
+    const parts = splitLongMessage(redactedReply, 4096);
     for (const part of parts) {
       await tgCtx.reply(part, { parse_mode: "Markdown" });
     }
