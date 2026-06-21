@@ -11,7 +11,11 @@ export function MobileVoiceButton() {
   const { isListening, isSupported, error, startListening, stopListening } =
     useMobileSpeech();
 
-  if (!isSupported) {
+  // Mobile-only push-to-talk. On desktop the always-on KrishnaVAD mic already
+  // covers voice, and webkitSpeechRecognition is also "supported" in the desktop
+  // WebView — so without this guard the bar showed two mic buttons.
+  const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+  if (!isMobile || !isSupported) {
     return null;
   }
 

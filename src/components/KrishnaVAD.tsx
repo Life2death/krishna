@@ -1,13 +1,8 @@
 import { useState, useEffect } from "react";
 import { useMicVAD } from "@ricky0123/vad-react";
-import {
-  MicIcon,
-  MicOffIcon,
-  LoaderCircleIcon,
-  BotIcon,
-  AlertCircleIcon,
-} from "lucide-react";
+import { AlertCircleIcon } from "lucide-react";
 import { Button } from "@/components";
+import { KrishnaChakra } from "./KrishnaChakra";
 import { fetchSTT } from "@/lib";
 import { floatArrayToWav } from "@/lib/utils";
 import { useApp } from "@/contexts";
@@ -84,22 +79,20 @@ export const KrishnaVAD = () => {
     }
   };
 
-  // Green = actively listening/working. Red = can't work / inactive.
-  // Spinner = transient (loading model, transcribing, thinking).
+  // The Sudarshan Chakra is the primary voice indicator. It spins/pulses by state;
+  // a red alert icon shows only when voice genuinely can't run (no provider / mic error).
   const getIcon = () => {
     if (missingProviders) return <AlertCircleIcon className="h-4 w-4 text-red-500" />;
     if (vad.errored) return <AlertCircleIcon className="h-4 w-4 text-red-500" />;
-    if (vad.loading) return <LoaderCircleIcon className="h-4 w-4 animate-spin text-muted-foreground" />;
-    if (muted) return <MicOffIcon className="h-4 w-4 text-red-500" />;
+    if (vad.loading) return <KrishnaChakra state="processing" size={18} />;
+    if (muted) return <KrishnaChakra state="idle" size={18} />;
     if (isTranscribing || krishna.status === "thinking")
-      return <LoaderCircleIcon className="h-4 w-4 animate-spin text-primary" />;
+      return <KrishnaChakra state="processing" size={18} />;
     if (krishna.status === "speaking")
-      return <BotIcon className="h-4 w-4 text-green-500 animate-pulse" />;
-    if (vad.userSpeaking)
-      return <MicIcon className="h-4 w-4 text-green-600 animate-pulse" />;
-    if (vad.listening)
-      return <MicIcon className="h-4 w-4 text-green-500 animate-pulse" />;
-    return <MicOffIcon className="h-4 w-4 text-red-500" />;
+      return <KrishnaChakra state="speaking" size={18} />;
+    if (vad.userSpeaking || vad.listening)
+      return <KrishnaChakra state="listening" size={18} />;
+    return <KrishnaChakra state="idle" size={18} />;
   };
 
   const getTitle = () => {

@@ -12,20 +12,25 @@ export default defineConfig(async () => ({
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
-      "@krishna/core/database/driver": path.resolve(__dirname, "node_modules/@krishna/core/database/driver.ts"),
-      "@krishna/core/database": path.resolve(__dirname, "node_modules/@krishna/core/database/index.ts"),
-      "@krishna/core/http": path.resolve(__dirname, "node_modules/@krishna/core/http.ts"),
-      "@krishna/core/settings": path.resolve(__dirname, "node_modules/@krishna/core/settings.ts"),
-      "@krishna/core/secrets": path.resolve(__dirname, "node_modules/@krishna/core/secrets.ts"),
-      "@krishna/core/tools/mcp-bridge": path.resolve(__dirname, "node_modules/@krishna/core/tools/mcp-bridge.ts"),
-      "@krishna/core/tools": path.resolve(__dirname, "node_modules/@krishna/core/tools/index.ts"),
-      "@krishna/core/functions": path.resolve(__dirname, "node_modules/@krishna/core/functions/index.ts"),
-      "@krishna/core/executor": path.resolve(__dirname, "node_modules/@krishna/core/executor.ts"),
-      "@krishna/core/resolver": path.resolve(__dirname, "node_modules/@krishna/core/resolver.ts"),
-      "@krishna/core/action-policy": path.resolve(__dirname, "node_modules/@krishna/core/action-policy.ts"),
-      "@krishna/core/config-constants": path.resolve(__dirname, "node_modules/@krishna/core/config-constants.ts"),
-      "@krishna/core/chat-constants": path.resolve(__dirname, "node_modules/@krishna/core/chat-constants.ts"),
-      "@krishna/core/safe-local-storage": path.resolve(__dirname, "node_modules/@krishna/core/safe-local-storage.ts"),
+      // Point every @krishna/core deep-path at the REAL packages/core file, not the
+      // node_modules/@krishna/core symlink. Vite serves the package's internal modules
+      // via their realpath (packages/core/...), so aliasing to the symlink path created
+      // a second module instance — startup.ts set the driver/http shims on one copy while
+      // the hooks read getDatabase()/getHttpFetch() from the other ("SqlDriver not set").
+      "@krishna/core/database/driver": path.resolve(__dirname, "packages/core/database/driver.ts"),
+      "@krishna/core/database": path.resolve(__dirname, "packages/core/database/index.ts"),
+      "@krishna/core/http": path.resolve(__dirname, "packages/core/http.ts"),
+      "@krishna/core/settings": path.resolve(__dirname, "packages/core/settings.ts"),
+      "@krishna/core/secrets": path.resolve(__dirname, "packages/core/secrets.ts"),
+      "@krishna/core/tools/mcp-bridge": path.resolve(__dirname, "packages/core/tools/mcp-bridge.ts"),
+      "@krishna/core/tools": path.resolve(__dirname, "packages/core/tools/index.ts"),
+      "@krishna/core/functions": path.resolve(__dirname, "packages/core/functions/index.ts"),
+      "@krishna/core/executor": path.resolve(__dirname, "packages/core/executor.ts"),
+      "@krishna/core/resolver": path.resolve(__dirname, "packages/core/resolver.ts"),
+      "@krishna/core/action-policy": path.resolve(__dirname, "packages/core/action-policy.ts"),
+      "@krishna/core/config-constants": path.resolve(__dirname, "packages/core/config-constants.ts"),
+      "@krishna/core/chat-constants": path.resolve(__dirname, "packages/core/chat-constants.ts"),
+      "@krishna/core/safe-local-storage": path.resolve(__dirname, "packages/core/safe-local-storage.ts"),
     },
   },
   test: {
