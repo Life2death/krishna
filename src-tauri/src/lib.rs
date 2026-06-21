@@ -1,6 +1,7 @@
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
 mod api;
 mod assistant;
+#[cfg(desktop)]
 mod automation;
 mod capture;
 mod db;
@@ -93,9 +94,6 @@ pub fn run() {
         )
         .manage(AudioState::default())
         .manage(CaptureState::default())
-        .manage(automation::ComputerControlState {
-            enabled: Mutex::new(false),
-        })
         .manage(shortcuts::WindowVisibility {
             is_hidden: Mutex::new(false),
         })
@@ -110,6 +108,9 @@ pub fn run() {
     // `machine-uid` crate, which doesn't compile for Android/iOS.
     #[cfg(desktop)]
     {
+        builder = builder.manage(automation::ComputerControlState {
+            enabled: Mutex::new(false),
+        });
         let posthog_api_key = option_env!("POSTHOG_API_KEY").unwrap_or("").to_string();
         builder = builder
             .plugin(posthog_init(PostHogConfig {
@@ -162,11 +163,17 @@ pub fn run() {
             resolver::resolve_app,
             resolver::verify_target,
             tts::synthesize_speech_piper,
+            #[cfg(desktop)]
             automation::set_computer_control_enabled,
+            #[cfg(desktop)]
             automation::computer_type,
+            #[cfg(desktop)]
             automation::computer_key,
+            #[cfg(desktop)]
             automation::computer_click,
+            #[cfg(desktop)]
             automation::computer_move,
+            #[cfg(desktop)]
             automation::computer_focus_window,
         ])
         .setup(|app| {
