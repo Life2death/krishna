@@ -38,6 +38,8 @@ function hasVerbInAnySegment(name: string, verbs: ReadonlySet<string>): boolean 
 export function classifyAction(actionType: string): ActionCategory {
   if (KNOWN_SAFE.has(actionType)) return "safe";
 
+  if (actionType.startsWith("computer_")) return "sensitive";
+
   if (actionType.startsWith("mcp_")) {
     const coreName = actionType.slice(4);
     if (hasVerbInAnySegment(coreName, DESTRUCTIVE_VERBS)) return "sensitive";

@@ -41,6 +41,7 @@ export type IContextType = {
   toggleAppIconVisibility: (isVisible: boolean) => Promise<void>;
   toggleAlwaysOnTop: (isEnabled: boolean) => Promise<void>;
   toggleAutostart: (isEnabled: boolean) => Promise<void>;
+  toggleComputerControlEnabled: (enabled: boolean) => Promise<void>;
   loadData: () => void;
   hasActiveLicense: boolean;
   setHasActiveLicense: Dispatch<SetStateAction<boolean>>;

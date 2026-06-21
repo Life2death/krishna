@@ -47,6 +47,7 @@ chrono = "0.4"
 aes-gcm = "0.10"
 sha2 = "0.10"
 rand = "0.8"
+enigo = "0.2"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 tauri-plugin-macos-permissions = "2"

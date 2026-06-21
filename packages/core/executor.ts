@@ -49,7 +49,8 @@ export async function executePlan(
 
     // Permission gate: reject sensitive native tools unless confirmed.
     // MCP tools handle their own confirmation through the bridge callback.
-    if (!step.tool.startsWith("mcp_")) {
+    // Computer tools also handle their own confirmation via getConfirmAction().
+    if (!step.tool.startsWith("mcp_") && !step.tool.startsWith("computer_")) {
       const { classifyAction } = await import("./action-policy");
       if (classifyAction(step.tool) === "sensitive") {
         const errMsg = `Action "${step.tool}" is sensitive and requires explicit confirmation before execution.`;

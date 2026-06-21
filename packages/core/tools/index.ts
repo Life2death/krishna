@@ -1,6 +1,13 @@
 import { openTargetTool } from "./open-target";
 import { youtubeSearchTool } from "./youtube-search";
 import { webSearchTool } from "./web-search";
+import {
+  computerTypeTool,
+  computerKeyTool,
+  computerClickTool,
+  computerMoveTool,
+  computerFocusWindowTool,
+} from "./computer";
 
 export interface Tool {
   name: string;
@@ -41,6 +48,11 @@ export function registerTools(newTools: Tool[]): void {
 register(openTargetTool);
 register(youtubeSearchTool);
 register(webSearchTool);
+register(computerTypeTool);
+register(computerKeyTool);
+register(computerClickTool);
+register(computerMoveTool);
+register(computerFocusWindowTool);
 
 export function getTool(name: string): Tool | undefined {
   return tools.get(name);

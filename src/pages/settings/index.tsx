@@ -5,6 +5,7 @@ import {
   AlwaysOnTopToggle,
   AppIconToggle,
   AutostartToggle,
+  ComputerControlToggle,
   KrishnaSettings,
   Integrations,
   BrainConnection,
@@ -82,6 +83,9 @@ const Settings = () => {
 
       {/* Always On Top Toggle */}
       <AlwaysOnTopToggle />
+
+      {/* Computer Control Toggle */}
+      <ComputerControlToggle />
 
       {/* Persona */}
       <PersonaSelector />

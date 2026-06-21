@@ -13,6 +13,7 @@ import {
   updateAppIconVisibility,
   updateAlwaysOnTop,
   updateAutostart,
+  updateComputerControl,
   CustomizableState,
   DEFAULT_CUSTOMIZABLE_STATE,
   CursorType,
@@ -455,6 +456,9 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
           invoke("set_always_on_top", {
             enabled: customizable.alwaysOnTop.isEnabled,
           }),
+          invoke("set_computer_control_enabled", {
+            enabled: customizable.computerControl.enabled,
+          }),
         ]);
       } catch (error) {
         console.error("Failed to apply customizable settings:", error);
@@ -760,6 +764,17 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
+  const toggleComputerControlEnabled = async (enabled: boolean) => {
+    const newState = updateComputerControl(enabled);
+    setCustomizable(newState);
+    try {
+      await invoke("set_computer_control_enabled", { enabled });
+      loadData();
+    } catch (error) {
+      console.error("Failed to toggle computer control:", error);
+    }
+  };
+
   const setCursorType = (type: CursorType) => {
     setCustomizable((prev) => ({ ...prev, cursor: { type } }));
     updateCursor(type);
@@ -787,6 +802,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     toggleAppIconVisibility,
     toggleAlwaysOnTop,
     toggleAutostart,
+    toggleComputerControlEnabled,
     loadData,
     hasActiveLicense,
     setHasActiveLicense,

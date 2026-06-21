@@ -7,3 +7,4 @@ export * from "./Integrations";
 export * from "./BrainConnection";
 export * from "./CreateSkillDialog";
 export * from "./PersonaSelector";
+export * from "./ComputerControlToggle";

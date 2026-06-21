@@ -1,6 +1,7 @@
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
 mod api;
 mod assistant;
+mod automation;
 mod capture;
 mod db;
 mod resolver;
@@ -91,6 +92,9 @@ pub fn run() {
         )
         .manage(AudioState::default())
         .manage(CaptureState::default())
+        .manage(automation::ComputerControlState {
+            enabled: Mutex::new(false),
+        })
         .manage(shortcuts::WindowVisibility {
             is_hidden: Mutex::new(false),
         })
@@ -157,6 +161,12 @@ pub fn run() {
             resolver::resolve_app,
             resolver::verify_target,
             tts::synthesize_speech_piper,
+            automation::set_computer_control_enabled,
+            automation::computer_type,
+            automation::computer_key,
+            automation::computer_click,
+            automation::computer_move,
+            automation::computer_focus_window,
         ])
         .setup(|app| {
             // Non-fatal: if window positioning fails, continue anyway
