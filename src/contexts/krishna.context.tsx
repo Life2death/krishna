@@ -361,6 +361,7 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const abortRef = useRef<AbortController | null>(null);
+  const planAbortRef = useRef<AbortController | null>(null);
   const historyRef = useRef<Message[]>([]);
   const activeConversationRef = useRef<string | null>(null);
   const lastTurnTimeRef = useRef<number>(0);
@@ -659,6 +660,27 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
     };
   }, [clearConfirmTimeout]);
 
+  // Esc key kill-switch: abort any in-progress AI fetch or plan execution
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        ttsRef.current.stop();
+        if (abortRef.current) {
+          abortRef.current.abort();
+          abortRef.current = null;
+        }
+        if (planAbortRef.current) {
+          planAbortRef.current.abort();
+          planAbortRef.current = null;
+        }
+        setStatus("idle");
+        setKrishnaSpeaking(false);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
+
   const promptMemoryConfirmation = useCallback(async (key: string | null, value: string, inputText: string) => {
     pendingConfirmationRef.current = {
       type: "memory",
@@ -765,7 +787,9 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
           if (pending.type === "plan" && pending.steps) {
             setStatus("thinking");
             try {
-              const result = await executePlan(pending.steps);
+              planAbortRef.current = new AbortController();
+              const result = await executePlan(pending.steps, { signal: planAbortRef.current.signal });
+              planAbortRef.current = null;
               if (result.success) {
                 const successMsg = result.finalOutput || "Plan completed successfully.";
                 // Learn as a skill for future use (parametrized pattern)
@@ -1133,7 +1157,9 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
 
             setStatus("thinking");
             try {
-              const result = await executePlan(steps);
+              planAbortRef.current = new AbortController();
+              const result = await executePlan(steps, { signal: planAbortRef.current.signal });
+              planAbortRef.current = null;
               await updateSkillUseCount(skill.id);
               if (result.success) {
                 const msg = result.finalOutput || "Done!";

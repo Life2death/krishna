@@ -5,6 +5,8 @@ import { setHttpFetch } from "@krishna/core/http";
 import { setSettingsGetter } from "@krishna/core/settings";
 import { setSecretGetter } from "@krishna/core/secrets";
 import { safeLocalStorage } from "@krishna/core/safe-local-storage";
+import { registerTools } from "@krishna/core/tools";
+import { COMPUTER_TOOLS } from "@krishna/core/tools/computer";
 
 export async function initializeCore(): Promise<void> {
   const db = await Database.load("sqlite:krishna.db");
@@ -37,4 +39,16 @@ export async function initializeCore(): Promise<void> {
       return null;
     }
   });
+
+  const customizableRaw = safeLocalStorage.getItem("customizable");
+  if (customizableRaw) {
+    try {
+      const config = JSON.parse(customizableRaw);
+      if (config?.computerControl?.enabled) {
+        registerTools(COMPUTER_TOOLS);
+      }
+    } catch {
+      /* ignore parse error */
+    }
+  }
 }

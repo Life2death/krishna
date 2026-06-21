@@ -1,12 +1,28 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { Tool } from "./index";
 import { getConfirmAction } from "./mcp-bridge";
+import { createAuditEntry } from "../database/audit.action";
+import { redactText } from "../redact";
 
 async function confirmOrAbort(description: string): Promise<boolean> {
   const fn = getConfirmAction();
   if (!fn) return false;
   return fn(description);
 }
+
+function audit(actionType: string, summary: string): void {
+  createAuditEntry({
+    id: crypto.randomUUID(),
+    actionType,
+    summary,
+    result: "ok",
+    reversible: 0,
+    undoPayload: null,
+    createdAt: Date.now(),
+  }).catch(() => {});
+}
+
+export const COMPUTER_TOOLS: Tool[] = [];
 
 export const computerTypeTool: Tool = {
   name: "computer_type",
@@ -18,6 +34,7 @@ export const computerTypeTool: Tool = {
       return { success: false, error: "User declined" };
     try {
       const result = await invoke<string>("computer_type", { text });
+      audit("computer_type", `Typed ${redactText(text).text.length} chars`);
       return { success: true, output: result };
     } catch (err) {
       return { success: false, error: String(err) };
@@ -35,6 +52,7 @@ export const computerKeyTool: Tool = {
       return { success: false, error: "User declined" };
     try {
       const result = await invoke<string>("computer_key", { keys });
+      audit("computer_key", `Pressed key combo`);
       return { success: true, output: result };
     } catch (err) {
       return { success: false, error: String(err) };
@@ -51,6 +69,7 @@ export const computerClickTool: Tool = {
       return { success: false, error: "User declined" };
     try {
       const result = await invoke<string>("computer_click", { button });
+      audit("computer_click", `Clicked ${button} mouse button`);
       return { success: true, output: result };
     } catch (err) {
       return { success: false, error: String(err) };
@@ -69,6 +88,7 @@ export const computerMoveTool: Tool = {
       return { success: false, error: "User declined" };
     try {
       const result = await invoke<string>("computer_move", { x, y });
+      audit("computer_move", `Moved mouse to (${x}, ${y})`);
       return { success: true, output: result };
     } catch (err) {
       return { success: false, error: String(err) };
@@ -86,9 +106,18 @@ export const computerFocusWindowTool: Tool = {
       return { success: false, error: "User declined" };
     try {
       const result = await invoke<string>("computer_focus_window", { titleSubstring: title });
+      audit("computer_focus_window", `Focused window with title containing "${title}"`);
       return { success: true, output: result };
     } catch (err) {
       return { success: false, error: String(err) };
     }
   },
 };
+
+COMPUTER_TOOLS.push(
+  computerTypeTool,
+  computerKeyTool,
+  computerClickTool,
+  computerMoveTool,
+  computerFocusWindowTool,
+);
