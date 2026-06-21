@@ -1,13 +1,14 @@
 import { useEffect, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
-import { KrishnaOrb, type OrbState } from "@/components/KrishnaOrb";
+import { KrishnaChakraOrb, type ChakraOrbState } from "@/components/KrishnaChakraOrb";
+import "@/pages/presence/presence.css";
 
 export default function PresenceOverlay() {
-  const [state, setState] = useState<OrbState>("idle");
+  const [state, setState] = useState<ChakraOrbState>("idle");
   const [visible, setVisible] = useState(false);
 
   useEffect(() => {
-    const unlisten = listen<{ state: OrbState }>("presence-state", (event) => {
+    const unlisten = listen<{ state: ChakraOrbState }>("presence-state", (event) => {
       setState(event.payload.state);
       setVisible(true);
     });
@@ -16,19 +17,10 @@ export default function PresenceOverlay() {
 
   return (
     <div
-      style={{
-        width: "100vw",
-        height: "100vh",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        pointerEvents: "none",
-        opacity: visible ? 1 : 0,
-        transition: "opacity 0.4s ease, transform 0.4s ease",
-        transform: visible ? "scale(1)" : "scale(0.7)",
-      }}
+      className="presence-root"
+      data-visible={visible}
     >
-      <KrishnaOrb state={state} size={320} />
+      <KrishnaChakraOrb state={state} size={320} />
     </div>
   );
 }
