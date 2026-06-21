@@ -14,6 +14,7 @@ import {
   LanguageSelector,
   AutoScrollToggle,
 } from "@/pages/responses/components";
+import { CreateSkillDialog, PersonaSelector } from "./components";
 import { PageLayout } from "@/layouts";
 import { Button, Header } from "@/components";
 import { SaveIcon, CheckIcon } from "lucide-react";
@@ -82,6 +83,9 @@ const Settings = () => {
       {/* Always On Top Toggle */}
       <AlwaysOnTopToggle />
 
+      {/* Persona */}
+      <PersonaSelector />
+
       {/* Krishna Assistant */}
       <KrishnaSettings />
 
@@ -90,6 +94,16 @@ const Settings = () => {
 
       {/* Brain Connection */}
       <BrainConnection />
+
+      {/* Skill Generation */}
+      <div className="border-t pt-4">
+        <Header
+          title="Skills"
+          description="Create and manage reusable skill recipes"
+          isMainTitle
+        />
+        <CreateSkillDialog />
+      </div>
 
       <div className="border-t pt-4">
         <Header

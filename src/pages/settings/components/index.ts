@@ -5,3 +5,5 @@ export * from "./Theme";
 export * from "./KrishnaSettings";
 export * from "./Integrations";
 export * from "./BrainConnection";
+export * from "./CreateSkillDialog";
+export * from "./PersonaSelector";

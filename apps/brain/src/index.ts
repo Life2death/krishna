@@ -18,6 +18,7 @@ import { McpHub, loadMcpConfig } from "./mcp/index.ts";
 import { mcpToolsRoutes } from "./routes/mcp-tools.ts";
 import { devicesRoutes } from "./routes/devices.ts";
 import { resumeSummaryRoutes } from "./routes/resume-summary.ts";
+import { skillsGenerateRoutes } from "./routes/skills-generate.ts";
 
 async function main(): Promise<void> {
   // 1. Boot shared core onto the Node runtime (libSQL driver + migrations + shims).
@@ -66,6 +67,7 @@ async function main(): Promise<void> {
   mcpToolsRoutes(app, mcpHub);
   devicesRoutes(app, ctx);
   resumeSummaryRoutes(app, ctx);
+  skillsGenerateRoutes(app, ctx);
 
   await app.listen({ port: config.port, host: "0.0.0.0" });
   app.log.info(`Krishna Brain listening on :${config.port}`);

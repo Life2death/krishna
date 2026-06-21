@@ -10,7 +10,7 @@ import { selectTools } from "@krishna/core/tool-selector";
 import { getTTS, getElevenLabsTTS, getPiperTTS, type TTSProvider } from "@/lib/tts";
 import { safeLocalStorage } from "@/lib";
 import { secureStorage } from "@/lib/secure-storage";
-import { STORAGE_KEYS } from "@/config";
+import { STORAGE_KEYS, DEFAULT_SYSTEM_PROMPT } from "@/config";
 import { setKrishnaSpeaking } from "@/lib/krishna-mutex";
 import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
@@ -236,7 +236,7 @@ function matchSkillPattern(command: string, skill: Skill): Record<string, string
 }
 
 export function KrishnaProvider({ children }: { children: ReactNode }) {
-  const { selectedAIProvider, allAiProviders } = useApp();
+  const { selectedAIProvider, allAiProviders, systemPrompt: selectedSystemPrompt } = useApp();
   const ttsRef = useRef<TTSProvider>(getTTS());
 
   useMcpTools();
@@ -1260,7 +1260,10 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
         const now = new Date();
         const timeContext = `\n\nCurrent date and time: ${now.toLocaleString("en-IN", { timeZone: "Asia/Kolkata", weekday: "long", year: "numeric", month: "long", day: "numeric", hour: "2-digit", minute: "2-digit" })} IST`;
         const toolsSection = buildToolsSection(command);
-        const systemPrompt = buildMemoryPrompt(BASE_SYSTEM_PROMPT + "\n\n" + toolsSection + SYSTEM_PROMPT_RULES + timeContext, memories);
+        const personaPrefix = selectedSystemPrompt && selectedSystemPrompt !== DEFAULT_SYSTEM_PROMPT
+          ? selectedSystemPrompt + "\n\n"
+          : "";
+        const systemPrompt = buildMemoryPrompt(personaPrefix + BASE_SYSTEM_PROMPT + "\n\n" + toolsSection + SYSTEM_PROMPT_RULES + timeContext, memories);
         let fullResponse = "";
         for await (const chunk of fetchAIResponse({
           provider,

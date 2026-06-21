@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { getRepo } from "@/lib/repo-selector";
 import { useBrainWs } from "./useBrainWs";
+import { seedDefaultPersonas } from "@/lib/seed-personas";
 import type {
   SystemPrompt,
   SystemPromptInput,
@@ -31,6 +32,7 @@ export const useSystemPrompts = () => {
     try {
       setIsLoading(true);
       setError(null);
+      await seedDefaultPersonas();
       const result = await getRepo().systemPrompts.getAllSystemPrompts();
       setPrompts(result);
     } catch (err) {
