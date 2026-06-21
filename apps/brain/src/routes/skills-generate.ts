@@ -1,7 +1,5 @@
 import type { FastifyInstance } from "fastify";
-import { createSkill, fetchAIResponse } from "@krishna/core";
-import type { Skill } from "@krishna/core/types";
-import type { BrainContext } from "../context.ts";
+import { fetchAIResponse } from "@krishna/core";
 import { claudeProvider, claudeSelectedProvider } from "../provider.ts";
 import { config } from "../config.ts";
 
@@ -11,12 +9,12 @@ interface GenerateRequest {
 
 /**
  * POST /skills/generate — turn a natural-language description into a
- * declarative skill recipe using Claude, validate it, and persist it.
+ * declarative skill recipe using Claude and return it for client review.
  *
- * The LLM emits JSON matching the Skill type's planTemplate + triggerExamples
- * fields. No arbitrary code-gen — the recipe is validated before storage.
+ * Does NOT persist the skill — the client saves it after user confirmation
+ * via POST /skills. No arbitrary code-gen; recipe is validated before return.
  */
-export function skillsGenerateRoutes(app: FastifyInstance, ctx: BrainContext): void {
+export function skillsGenerateRoutes(app: FastifyInstance): void {
   app.post("/skills/generate", async (req, reply) => {
     const { description } = req.body as GenerateRequest;
 
@@ -81,7 +79,6 @@ export function skillsGenerateRoutes(app: FastifyInstance, ctx: BrainContext): v
       });
     }
 
-    // Parse JSON from Claude's response
     let recipe: { triggerExamples?: string; params?: string[]; planTemplate?: unknown[] };
     try {
       const jsonStart = fullResponse.indexOf("{");
@@ -94,7 +91,6 @@ export function skillsGenerateRoutes(app: FastifyInstance, ctx: BrainContext): v
       return reply.code(502).send({ error: "Failed to parse LLM response as JSON" });
     }
 
-    // Validate required fields
     if (!recipe.triggerExamples || !recipe.params || !recipe.planTemplate) {
       return reply.code(422).send({
         error: "Generated skill is missing required fields",
@@ -108,33 +104,11 @@ export function skillsGenerateRoutes(app: FastifyInstance, ctx: BrainContext): v
       return reply.code(422).send({ error: "planTemplate must be a non-empty array", recipe });
     }
 
-    const paramStr = JSON.stringify(recipe.params);
-    const planStr = JSON.stringify(recipe.planTemplate);
-
-    // Derive a name from triggerExamples
-    const name = recipe.triggerExamples
-      .toLowerCase()
-      .replace(/[^a-z0-9 ]/g, "")
-      .trim()
-      .split(/\s+/)
-      .slice(0, 5)
-      .join("-");
-
-    const now = Date.now();
-    const skill: Skill = {
-      id: now,
-      name,
+    // Return as JSON strings so the client can embed directly into the Skill row
+    return {
       triggerExamples: recipe.triggerExamples,
-      params: paramStr,
-      planTemplate: planStr,
-      confirmedByUser: 0,
-      useCount: 0,
-      createdAt: now,
+      params: JSON.stringify(recipe.params),
+      planTemplate: JSON.stringify(recipe.planTemplate),
     };
-
-    const saved = await createSkill(skill);
-    ctx.hub.broadcast("skills", "create", saved);
-
-    return saved;
   });
 }

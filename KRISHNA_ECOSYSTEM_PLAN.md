@@ -7,7 +7,7 @@
 
 ---
 
-## Status (last updated 2026-06-20)
+## Status (last updated 2026-06-21)
 
 | Phase | State | Notes |
 |---|---|---|
@@ -15,8 +15,9 @@
 | **Phase 1** — Krishna Brain (Node) + Turso + encryption | ✅ **Done & merged** | [PR #1](https://github.com/Life2death/krishna/pull/1). `apps/brain/` (Fastify + `@libsql/client` + `@napi-rs/keyring`, run via `tsx`). Field encryption verified ciphertext-at-rest; CRUD/auth/WS/`/chat`-guard verified live; brain 7/7. **`/chat` live token streaming still needs a real `ANTHROPIC_API_KEY` in `apps/brain/.env` to verify end-to-end.** Adapter coerces `undefined`→`null` to match Tauri plugin-sql. |
 | **Phase 2** — Client remote-brain mode (cross-device sync) | ✅ **Done** | repo-selector + `getRepo()` + RemoteRepo clients + 8 UI hooks + `useBrainWs` + Brain Connection panel. **Orchestrator split-brain FIXED** (commit `466abd7`): `krishna.context.tsx` now routes memory/skills/reminders/conversations/chat through `getRepo()` via `src/lib/repo-bound.ts`; remote `/chat` carries images. Verified: client `tsc` clean + 192/192. *Audit-log + learned-actions intentionally stay local (per-device).* |
 | **Phase 3** — MCP tool hub (in the brain) | ✅ **Done** | Brain `McpHub` (connect/list/execute) + `/mcp/tools`, `/mcp/execute`; client `useMcpTools` + `mcp-bridge` registration; `action-policy` `mcp_` safe/sensitive gating in `executor`; core `tool-selector`. *TODO: confirm `mcp_` executions write to audit-log.* |
-| **Phase 4** — Mobile clients + voice + handoff | 🚧 **In progress** (Android-first) | Brain device-presence + resume-summary built. **Android `init` DONE** — toolchain wired (JAVA_HOME→Studio jbr, NDK_HOME, Rust targets), `gen/android` generated (untracked → commit it). **iOS deferred** (needs a Mac). Remaining: mobile voice/PTT + manifest `RECORD_AUDIO`; relax local-provider guards (`krishna.context` ~L658/987) for keyless mobile chat. |
-| **Phase 5** — Runtime skills + personas | ⬜ Pending | **Strict live-wiring DoD applies (§5).** |
+| **Phase 4** — Mobile clients + voice + handoff | ✅ **Done** | Android `gen/android/` committed; RECORD_AUDIO + MODIFY_AUDIO_SETTINGS in manifest; `MobileVoiceButton` + `useMobileSpeech` (Web Speech API PTT) wired; `useDevicePresence` heartbeat in `KrishnaProvider`; brain `/devices/heartbeat` + `/conversations/:id/resume-summary`; local-provider guards relaxed for remote/keyless mobile mode. iOS deferred (needs Mac). |
+| **Phase 5** — Runtime skills + personas | ✅ **Done** | `POST /skills/generate` (brain, generate-only — no premature save); `CreateSkillDialog` (remote-mode UI, user confirms before save); `PersonaSelector` (4 built-in personas); `seedDefaultPersonas` on first `useSystemPrompts` mount; persona prefix prepended to `BASE_SYSTEM_PROMPT` in `KrishnaProvider`. Both client + brain `tsc` clean. Double-save bug fixed (brain no longer persists on generate). |
+| **Phase 6** — Post-v1 backlog | ⬜ Pending | Graduate brain to cloud VPS; RAG knowledge base; Telegram bot + daemon mode; dictation mode; secret redaction + auto fact-extraction. |
 
 **Known parked item (low priority):** the legacy `interview_profiles` table is fully removed from
 all TS/client code; only 3 historical Rust migrations remain (`src-tauri/src/db/main.rs` versions

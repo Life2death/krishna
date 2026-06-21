@@ -60,11 +60,6 @@ export function CreateSkillDialog() {
           planTemplate: JSON.parse(skill.planTemplate),
         });
       } else {
-        // Local mode: use the configured AI provider to generate
-        // (imports fetchAIResponse dynamically to avoid circular deps)
-        const { fetchAIResponse } = await import("@/lib/functions");
-        const { useApp } = await import("@/contexts");
-        // Fallback: show instructions to use brain in remote mode
         throw new Error("Skill generation requires remote brain mode. Configure a brain connection in Settings.");
       }
     } catch (err) {

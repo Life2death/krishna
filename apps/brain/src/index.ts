@@ -67,7 +67,7 @@ async function main(): Promise<void> {
   mcpToolsRoutes(app, mcpHub);
   devicesRoutes(app, ctx);
   resumeSummaryRoutes(app, ctx);
-  skillsGenerateRoutes(app, ctx);
+  skillsGenerateRoutes(app);
 
   await app.listen({ port: config.port, host: "0.0.0.0" });
   app.log.info(`Krishna Brain listening on :${config.port}`);
