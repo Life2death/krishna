@@ -24,7 +24,6 @@ dotenv = "0.15"
 tauri = { version = "2.11.2", features = ["macos-private-api", "tray-icon"] }
 tauri-plugin-opener = "2.5.4"
 tauri-plugin-http = "2.5.2"
-tauri-plugin-global-shortcut = "2"
 tauri-plugin-keychain = "2.0"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
@@ -64,6 +63,7 @@ libpulse-simple-binding = "2.29.0"
 [target.'cfg(not(target_os = "android"))'.dependencies]
 xcap = "0.0.12"
 enigo = "0.2"
+tauri-plugin-global-shortcut = "2"
 
 [target.'cfg(any(target_os = "macos", windows, target_os = "linux"))'.dependencies]
 tauri-plugin-autostart = "2.5.0"
