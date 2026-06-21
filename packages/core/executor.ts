@@ -47,15 +47,18 @@ export async function executePlan(
       return { success: false, stepResults, error: errMsg };
     }
 
-    // Permission gate: reject sensitive tools unless confirmed
-    const { classifyAction } = await import("./action-policy");
-    if (classifyAction(step.tool) === "sensitive") {
-      const errMsg = `Action "${step.tool}" is sensitive and requires explicit confirmation before execution.`;
-      stepResults.push({
-        step,
-        result: { success: false, error: errMsg },
-      });
-      return { success: false, stepResults, error: errMsg };
+    // Permission gate: reject sensitive native tools unless confirmed.
+    // MCP tools handle their own confirmation through the bridge callback.
+    if (!step.tool.startsWith("mcp_")) {
+      const { classifyAction } = await import("./action-policy");
+      if (classifyAction(step.tool) === "sensitive") {
+        const errMsg = `Action "${step.tool}" is sensitive and requires explicit confirmation before execution.`;
+        stepResults.push({
+          step,
+          result: { success: false, error: errMsg },
+        });
+        return { success: false, stepResults, error: errMsg };
+      }
     }
 
     const resolvedArgs: Record<string, string> = {};

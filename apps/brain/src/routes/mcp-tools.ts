@@ -1,5 +1,5 @@
 import type { FastifyInstance } from "fastify";
-import { classifyAction, createAuditEntry } from "@krishna/core";
+import { classifyAction, createAuditEntry, redactText } from "@krishna/core";
 import type { McpHub } from "../mcp";
 
 /**
@@ -50,10 +50,12 @@ export function mcpToolsRoutes(app: FastifyInstance, hub: McpHub): void {
     const result = await hub.callTool(tool, args ?? {});
 
     // Audit every execution
+    const redactedSummary = `MCP tool "${tool}" with args: ${JSON.stringify(args ?? {})}`;
+    const { text: safeSummary } = redactText(redactedSummary);
     createAuditEntry({
       id: crypto.randomUUID(),
       actionType: `mcp_${tool}`,
-      summary: `MCP tool "${tool}" with args: ${JSON.stringify(args ?? {})}`,
+      summary: safeSummary,
       result: result.success ? "ok" : `error: ${result.error ?? "unknown"}`,
       reversible: 0,
       undoPayload: null,

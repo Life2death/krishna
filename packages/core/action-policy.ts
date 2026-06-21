@@ -31,8 +31,8 @@ const DESTRUCTIVE_VERBS: ReadonlySet<string> = new Set([
   "clear", "purge", "wipe", "reset",
 ]);
 
-function firstVerb(name: string): string {
-  return name.split(/[_.\s-]/)[0].toLowerCase();
+function hasVerbInAnySegment(name: string, verbs: ReadonlySet<string>): boolean {
+  return name.split(/[_.\s-]/).some((segment) => verbs.has(segment.toLowerCase()));
 }
 
 export function classifyAction(actionType: string): ActionCategory {
@@ -40,9 +40,8 @@ export function classifyAction(actionType: string): ActionCategory {
 
   if (actionType.startsWith("mcp_")) {
     const coreName = actionType.slice(4);
-    const verb = firstVerb(coreName);
-    if (DESTRUCTIVE_VERBS.has(verb)) return "sensitive";
-    if (SAFE_VERBS.has(verb)) return "safe";
+    if (hasVerbInAnySegment(coreName, DESTRUCTIVE_VERBS)) return "sensitive";
+    if (hasVerbInAnySegment(coreName, SAFE_VERBS)) return "safe";
     return "sensitive";
   }
 

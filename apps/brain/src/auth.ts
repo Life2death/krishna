@@ -7,7 +7,6 @@ import type { FastifyRequest, FastifyReply } from "fastify";
  * validated in the socket handler instead.
  */
 export function authHook(token: string) {
-  const tokenBytes = Buffer.from(token);
   const expected = `Bearer ${token}`;
   const expectedBytes = Buffer.from(expected);
 

@@ -1,12 +1,14 @@
 import { describe, it, expect, beforeAll } from "vitest";
 import Fastify, { type FastifyInstance } from "fastify";
 import { createClient, type Client } from "@libsql/client";
-import { setDriver, getAllMemories } from "@krishna/core";
+import { setDriver, getAllMemories, createAuditEntry } from "@krishna/core";
 import { runMigrations } from "../src/db/migrations.ts";
 import { makeFieldCrypto } from "../src/crypto/field-crypto.ts";
 import { Hub } from "../src/ws.ts";
 import { authHook } from "../src/auth.ts";
 import { memoriesRoutes } from "../src/routes/memories.ts";
+import { mcpToolsRoutes } from "../src/routes/mcp-tools.ts";
+import type { ToolResult } from "../../../packages/core/tools/index";
 
 const TOKEN = "test-token";
 const KEY = Buffer.alloc(32, 7);
@@ -97,5 +99,52 @@ describe("memories route (encryption boundary + auth)", () => {
     expect(rows[0].value.startsWith("enc:v1:")).toBe(true);
     expect(rows[0].value).not.toContain("indigo");
     expect(rows[0].key).toBe("favorite_color"); // key not encrypted -> queryable
+  });
+});
+
+describe("MCP gate (server-side confirmation)", () => {
+  let app: FastifyInstance;
+
+  // Minimal mock McpHub that always returns a single tool and succeeds on call
+  const mockHub = {
+    getAllTools: () => [
+      { name: "delete_everything", description: "A destructive test tool", serverName: "test", inputSchema: {} },
+    ],
+    callTool: async (_name: string, _args: Record<string, unknown>): Promise<ToolResult> => {
+      return { success: true, output: "executed" };
+    },
+  };
+
+  beforeAll(async () => {
+    app = Fastify();
+    app.addHook("preHandler", authHook(TOKEN));
+    mcpToolsRoutes(app, mockHub as never);
+    await app.ready();
+  });
+
+  const auth = { authorization: `Bearer ${TOKEN}` };
+
+  it("rejects sensitive MCP tool without confirmed: true (403)", async () => {
+    const res = await app.inject({
+      method: "POST",
+      url: "/mcp/execute",
+      headers: auth,
+      payload: { tool: "delete_everything", args: {} },
+    });
+    expect(res.statusCode).toBe(403);
+    const body = res.json();
+    expect(body.category).toBe("sensitive");
+    expect(body.success).toBe(false);
+  });
+
+  it("executes sensitive MCP tool with confirmed: true (200)", async () => {
+    const res = await app.inject({
+      method: "POST",
+      url: "/mcp/execute",
+      headers: auth,
+      payload: { tool: "delete_everything", args: {}, confirmed: true },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().success).toBe(true);
   });
 });

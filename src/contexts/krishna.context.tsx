@@ -26,6 +26,7 @@ import { createConversation, appendMessages, generateConversationTitle, getMostR
 import { isLookCommand, isUndoCommand, isJobExtractionCommand } from "@/lib/perception";
 import { triggerJobExtractionWorkflow } from "@/lib/integrations/github-workflow";
 import { createAuditEntry, getLastReversible } from "@/lib/database";
+import { setConfirmAction } from "@krishna/core/tools/mcp-bridge";
 import type { AssistantStatus, StepAction } from "@/types/assistant";
 import type { Skill } from "@/types/skill";
 import type { Message, AttachedFile } from "@/types";
@@ -554,14 +555,44 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
+  // MCP tool confirmation: bridge calls this, orchestrator resolves via voice
+  useEffect(() => {
+    setConfirmAction((toolName: string) => {
+      return new Promise<boolean>((resolve) => {
+        const msg = `Should I run the tool "${toolName}"?`;
+        pendingConfirmationRef.current = {
+          type: "mcp_tool",
+          spokenResponse: msg,
+          resolve,
+        };
+        reAskRef.current = false;
+        clearConfirmTimeout();
+        confirmTimeoutRef.current = setTimeout(() => {
+          if (pendingConfirmationRef.current?.type === "mcp_tool") {
+            pendingConfirmationRef.current.resolve?.(false);
+            pendingConfirmationRef.current = null;
+            setStatus("idle");
+            ttsRef.current.speak("I'll take that as a no.");
+          }
+        }, 15000);
+        setKrishnaSpeaking(true);
+        setStatus("confirming");
+        setLastSpoken(msg);
+        ttsRef.current.speak(msg).finally(() => setKrishnaSpeaking(false));
+      });
+    });
+    return () => setConfirmAction(null);
+  }, []);
+
   const pendingConfirmationRef = useRef<{
-    type: "action" | "plan" | "memory" | "reminder" | "job_extraction";
+    type: "action" | "plan" | "memory" | "reminder" | "job_extraction" | "mcp_tool";
     spokenResponse: string;
     pendingResult?: { found: boolean; target?: string; displayName?: string; [key: string]: any };
     input?: string;
     steps?: StepAction[];
     memoryData?: { key: string | null; value: string };
     reminderData?: { text: string; dueAt: number; recurrence: string | null };
+    resolve?: (value: boolean) => void;
   } | null>(null);
   const reAskRef = useRef(false);
   const confirmTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -820,6 +851,10 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
             } finally {
               setStatus("idle");
             }
+          } else if (pending.type === "mcp_tool" && pending.resolve) {
+            pending.resolve(true);
+            setStatus("thinking");
+            return;
           } else if (pending.type === "job_extraction") {
             setStatus("thinking");
             try {
@@ -938,6 +973,9 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
           return;
         }
         if (answer === "no") {
+          if (pending.type === "mcp_tool" && pending.resolve) {
+            pending.resolve(false);
+          }
           pendingConfirmationRef.current = null;
           reAskRef.current = false;
           setStatus("speaking");
