@@ -18,6 +18,8 @@ const MIGRATIONS = [
   "memories.sql", // Tauri v9
   "audit-log.sql", // Tauri v10
   "reminders.sql", // Tauri v11
+  "devices.sql", // Tauri v12
+  "rag.sql", // brain-specific
 ];
 
 const migrationsDir = fileURLToPath(

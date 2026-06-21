@@ -6,7 +6,6 @@ use std::fs;
 use std::path::PathBuf;
 use tauri::AppHandle;
 use tauri::Manager;
-use tauri_plugin_machine_uid::MachineUidExt;
 
 fn derive_encryption_key(machine_id: &str, app_seed: &str) -> [u8; 32] {
     let mut hasher = Sha256::new();
@@ -47,7 +46,10 @@ fn decrypt_data(ciphertext: &[u8], key: &[u8; 32]) -> Result<Vec<u8>, String> {
 // undecryptable and silently blocked new writes (set merges into the old blob).
 const APP_SEED: &str = "krishna-secure-storage-v1";
 
-fn get_key(app: &AppHandle) -> Result<[u8; 32], String> {
+// Desktop: bind the key to the OS machine-uid (stable per machine).
+#[cfg(desktop)]
+fn get_machine_id(app: &AppHandle) -> Result<String, String> {
+    use tauri_plugin_machine_uid::MachineUidExt;
     let machine_id = app
         .machine_uid()
         .get_machine_uid()
@@ -57,6 +59,38 @@ fn get_key(app: &AppHandle) -> Result<[u8; 32], String> {
     if machine_id.is_empty() {
         return Err("Machine identifier unavailable".to_string());
     }
+    Ok(machine_id)
+}
+
+// Mobile (Android/iOS): `machine-uid` has no platform support, so derive the key
+// from a random per-install id persisted in the app-private data dir (OS-sandboxed
+// per app, generated once on first run).
+// TODO(phase4-followup): harden by storing this in the Android Keystore / iOS Keychain
+// instead of a plaintext file in app storage.
+#[cfg(not(desktop))]
+fn get_machine_id(app: &AppHandle) -> Result<String, String> {
+    use rand::RngCore;
+    let dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| format!("Failed to get app data directory: {}", e))?;
+    fs::create_dir_all(&dir).map_err(|e| format!("Failed to create app data directory: {}", e))?;
+    let id_path = dir.join("device_id");
+    if let Ok(existing) = fs::read_to_string(&id_path) {
+        let trimmed = existing.trim();
+        if !trimmed.is_empty() {
+            return Ok(trimmed.to_string());
+        }
+    }
+    let mut buf = [0u8; 32];
+    rand::thread_rng().fill_bytes(&mut buf);
+    let id: String = buf.iter().map(|b| format!("{:02x}", b)).collect();
+    fs::write(&id_path, &id).map_err(|e| format!("Failed to write device id: {}", e))?;
+    Ok(id)
+}
+
+fn get_key(app: &AppHandle) -> Result<[u8; 32], String> {
+    let machine_id = get_machine_id(app)?;
     Ok(derive_encryption_key(&machine_id, APP_SEED))
 }
 

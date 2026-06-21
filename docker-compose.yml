@@ -1,0 +1,21 @@
+version: "3.9"
+
+services:
+  brain:
+    build:
+      context: .
+      dockerfile: apps/brain/Dockerfile
+    container_name: krishna-brain
+    restart: unless-stopped
+    ports:
+      - "8787:8787"
+    env_file:
+      - apps/brain/.env
+    environment:
+      KRISHNA_DB_PATH: /data/krishna-brain.db
+      NODE_ENV: production
+    volumes:
+      - krishna-brain-data:/data
+
+volumes:
+  krishna-brain-data:

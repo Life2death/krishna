@@ -7,6 +7,8 @@
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "start": "tsx src/index.ts",
+    "start:pm2": "pm2 start ecosystem.config.cjs",
+    "stop:pm2": "pm2 stop krishna-brain",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },
@@ -17,7 +19,10 @@
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@napi-rs/keyring": "^1.1.7",
     "dotenv": "^16.4.7",
-    "fastify": "^5.2.1"
+    "fastify": "^5.2.1",
+    "pm2": "^6.0.5",
+    "telegraf": "^4.16.3",
+    "@xenova/transformers": "^2.17.2"
   },
   "devDependencies": {
     "@types/node": "^24.3.0",

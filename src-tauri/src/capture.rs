@@ -7,6 +7,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use tauri::Emitter;
 use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
+#[cfg(not(target_os = "android"))]
 use xcap::Monitor;
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -52,8 +53,8 @@ fn validate_capture_window(app: &tauri::AppHandle) -> Result<(), String> {
     }
 }
 
-#[tauri::command]
-pub async fn start_screen_capture(window: tauri::WebviewWindow, app: tauri::AppHandle) -> Result<(), String> {
+#[cfg(not(target_os = "android"))]
+async fn do_start_screen_capture(window: tauri::WebviewWindow, app: tauri::AppHandle) -> Result<(), String> {
     if window.label() != "main" {
         return Err("Capture not allowed from this window".to_string());
     }
@@ -191,6 +192,14 @@ pub async fn start_screen_capture(window: tauri::WebviewWindow, app: tauri::AppH
     Ok(())
 }
 
+#[tauri::command]
+pub async fn start_screen_capture(window: tauri::WebviewWindow, app: tauri::AppHandle) -> Result<(), String> {
+    #[cfg(not(target_os = "android"))]
+    return do_start_screen_capture(window, app).await;
+    #[allow(unreachable_code)]
+    Err("Screen capture is not available on Android".to_string())
+}
+
 // close overlay window
 #[tauri::command]
 pub fn close_overlay_window(app: tauri::AppHandle) -> Result<(), String> {
@@ -285,8 +294,8 @@ pub async fn capture_selected_area(
     Ok(base64_str)
 }
 
-#[tauri::command]
-pub async fn capture_to_base64(window: tauri::WebviewWindow) -> Result<String, String> {
+#[cfg(not(target_os = "android"))]
+async fn do_capture_to_base64(window: tauri::WebviewWindow) -> Result<String, String> {
     if window.label() != "main" {
         return Err("Capture not allowed from this window".to_string());
     }
@@ -415,4 +424,12 @@ pub async fn capture_to_base64(window: tauri::WebviewWindow) -> Result<String, S
     })
     .await
     .map_err(|e| format!("Task panicked: {}", e))?
+}
+
+#[tauri::command]
+pub async fn capture_to_base64(window: tauri::WebviewWindow) -> Result<String, String> {
+    #[cfg(not(target_os = "android"))]
+    return do_capture_to_base64(window).await;
+    #[allow(unreachable_code)]
+    Err("Screen capture is not available on Android".to_string())
 }

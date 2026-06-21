@@ -8,6 +8,7 @@ import {
 } from "@krishna/core";
 import type { Memory } from "@krishna/core/types";
 import type { BrainContext } from "../context.ts";
+import { isRagReady, getStore } from "../rag/index.ts";
 
 /**
  * Memories — `value` holds the sensitive personal fact, so it is encrypted at
@@ -30,13 +31,28 @@ export function memoriesRoutes(app: FastifyInstance, ctx: BrainContext): void {
     const saved = await createMemory(enc(req.body as Memory));
     const plain = dec(saved);
     ctx.hub.broadcast("memories", "create", plain);
+
+    // Index in RAG (non-blocking)
+    if (isRagReady() && plain.value) {
+      const content = plain.key
+        ? `${plain.key}: ${plain.value}`
+        : plain.value;
+      getStore().indexMemory(plain.id, content).catch(() => {});
+    }
+
     return plain;
   });
 
   app.delete("/memories/:id", async (req) => {
     const id = (req.params as { id: string }).id;
     const ok = await deleteMemory(id);
-    if (ok) ctx.hub.broadcast("memories", "delete", { id });
+    if (ok) {
+      ctx.hub.broadcast("memories", "delete", { id });
+      // Remove from RAG index (non-blocking)
+      if (isRagReady()) {
+        getStore().removeByMemoryId(id).catch(() => {});
+      }
+    }
     return { ok };
   });
 

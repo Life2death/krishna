@@ -3,12 +3,32 @@ import { fetchAIResponse } from "@krishna/core";
 import type { Message } from "@krishna/core/types";
 import { config } from "../config.ts";
 import { claudeProvider, claudeSelectedProvider } from "../provider.ts";
+import { isRagReady, getStore } from "../rag/index.ts";
 
 interface ChatBody {
   userMessage: string;
   history?: Message[];
   systemPrompt?: string;
   imagesBase64?: string[];
+}
+
+async function augmentWithRag(userMessage: string, basePrompt: string | undefined): Promise<string> {
+  if (!isRagReady()) return basePrompt ?? "";
+
+  try {
+    const store = getStore();
+    const results = await store.search(userMessage, 5, 0.3);
+    if (results.length === 0) return basePrompt ?? "";
+
+    const contextBlock = results
+      .map((r) => `- ${r.content}`)
+      .join("\n");
+
+    const ragPrompt = `\n\nRelevant context from memory:\n${contextBlock}\n\nUse this context when relevant to the user's request.`;
+    return (basePrompt ?? "") + ragPrompt;
+  } catch {
+    return basePrompt ?? "";
+  }
 }
 
 /**
@@ -28,6 +48,8 @@ export function chatRoutes(app: FastifyInstance): void {
       return reply.code(400).send({ error: "userMessage is required" });
     }
 
+    const augmentedPrompt = await augmentWithRag(userMessage, systemPrompt);
+
     reply.hijack();
     const res = reply.raw;
     res.writeHead(200, {
@@ -40,7 +62,7 @@ export function chatRoutes(app: FastifyInstance): void {
       for await (const chunk of fetchAIResponse({
         provider: claudeProvider,
         selectedProvider: claudeSelectedProvider(),
-        systemPrompt,
+        systemPrompt: augmentedPrompt || undefined,
         history,
         userMessage,
         imagesBase64,

@@ -12,6 +12,7 @@ use std::sync::{Arc, Mutex};
 use tauri::Manager;
 #[cfg(target_os = "macos")]
 use tauri::{AppHandle, WebviewWindow};
+#[cfg(desktop)]
 use tauri_plugin_posthog::{init as posthog_init, PostHogConfig, PostHogOptions};
 use tokio::task::JoinHandle;
 mod speaker;
@@ -55,8 +56,6 @@ pub fn run() {
         format!("step1: Krishna v{} binary started", env!("CARGO_PKG_VERSION")),
     );
 
-    // Get PostHog API key
-    let posthog_api_key = option_env!("POSTHOG_API_KEY").unwrap_or("").to_string();
     #[allow(unused_mut)]
     let mut builder = tauri::Builder::default()
         .plugin(
@@ -86,18 +85,25 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_http::init())
         .plugin(tauri_plugin_keychain::init())
-        .plugin(tauri_plugin_shell::init())
-        .plugin(posthog_init(PostHogConfig {
-            api_key: posthog_api_key,
-            options: Some(PostHogOptions {
-                disable_session_recording: Some(true),
-                capture_pageview: Some(false),
-                capture_pageleave: Some(false),
+        .plugin(tauri_plugin_shell::init());
+    // PostHog (analytics) + machine-uid are desktop-only — both pull in the
+    // `machine-uid` crate, which doesn't compile for Android/iOS.
+    #[cfg(desktop)]
+    {
+        let posthog_api_key = option_env!("POSTHOG_API_KEY").unwrap_or("").to_string();
+        builder = builder
+            .plugin(posthog_init(PostHogConfig {
+                api_key: posthog_api_key,
+                options: Some(PostHogOptions {
+                    disable_session_recording: Some(true),
+                    capture_pageview: Some(false),
+                    capture_pageleave: Some(false),
+                    ..Default::default()
+                }),
                 ..Default::default()
-            }),
-            ..Default::default()
-        }))
-        .plugin(tauri_plugin_machine_uid::init());
+            }))
+            .plugin(tauri_plugin_machine_uid::init());
+    }
     #[cfg(target_os = "macos")]
     {
         builder = builder.plugin(tauri_nspanel::init());
@@ -154,6 +160,7 @@ pub fn run() {
 
             // System tray: gives the user a reliable way to open the dashboard
             // and quit the app even when all windows are hidden
+            #[cfg(desktop)]
             {
                 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
 
@@ -219,6 +226,7 @@ pub fn run() {
             }
 
             // Non-fatal: if global shortcut plugin fails, app still works
+            #[cfg(desktop)]
             if let Err(e) = app.handle().plugin(
                 tauri_plugin_global_shortcut::Builder::new()
                     .with_handler(move |app, shortcut, event| {

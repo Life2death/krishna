@@ -62,6 +62,23 @@ Health check: `curl http://127.0.0.1:8787/health`
 - `POST /chat` → Server-Sent Events stream (`data: {"delta": "..."}` … `data: [DONE]`)
 - `GET /ws?token=…` → WebSocket push: `{domain, op, row}` on every mutation
 
+## Telegram bot
+
+When `TELEGRAM_BOT_TOKEN` is set in `.env`, the brain starts a Telegram bot
+that polls for messages. Each Telegram chat gets its own Krishna conversation
+(prefix `telegram_<chatId>`), with all content encrypted at rest.
+
+**Commands:**
+- `/remember <key> is <value>` — save a memory
+- `/memories` — list saved memories
+- `/forget <key>` — delete a memory
+- `/new` — start a fresh conversation
+- `/chat <message>` — explicit chat
+- Any text message — implicit chat via Krishna
+
+Bot setup: talk to [@BotFather](https://t.me/BotFather) on Telegram, create a
+new bot, paste the token into `TELEGRAM_BOT_TOKEN`.
+
 ## Reaching the brain from your phone (Tailscale)
 
 The brain binds `0.0.0.0`. To reach it from Android/iPhone without exposing a port:
@@ -71,6 +88,48 @@ The brain binds `0.0.0.0`. To reach it from Android/iPhone without exposing a po
 3. Point the mobile client at `http://100.x.y.z:8787` with the same bearer token.
 
 (Cloudflare Tunnel works too if you prefer a hostname.)
+
+## Docker (deploy to any VPS)
+
+```bash
+# Build & run locally
+docker compose up -d --build
+
+# Or use the VPS deployment profile:
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+```
+
+The Docker image runs as a non-root `krishna` user. Mount a volume at `/data/`
+for persistent SQLite storage. Configure Turso sync for cloud durability.
+
+### Production deployment (VPS)
+
+1. Provision a VM (minimum: 1 vCPU, 1 GB RAM, 10 GB disk).
+2. Install Docker + Docker Compose on the VM.
+3. Clone this repo on the VM (or use your CI to deploy the image).
+4. Create `apps/brain/.env` with production values:
+   ```bash
+   KRISHNA_BRAIN_TOKEN=<strong-random-token>
+   KRISHNA_MASTER_KEY=<32-byte-hex>
+   ANTHROPIC_API_KEY=<your-claude-key>
+   KRISHNA_SYNC_URL=libsql://<your-db>.turso.io
+   KRISHNA_SYNC_TOKEN=<turso-token>
+   ```
+5. Start: `docker compose up -d`
+6. Verify: `curl http://<vps-ip>:8787/health`
+
+Tailscale is optional for VPS (the service is headless and behind Docker), but
+highly recommended as an additional auth layer.
+
+### Daemon mode (PM2, no Docker)
+
+```bash
+npm install            # installs pm2
+npm run start:pm2      # starts via ecosystem.config.cjs
+npm run stop:pm2       # stops
+```
+
+PM2 keeps the brain alive across crashes and logs to `~/.pm2/logs/`.
 
 ## Tests
 

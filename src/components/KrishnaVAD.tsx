@@ -13,6 +13,7 @@ import { floatArrayToWav } from "@/lib/utils";
 import { useApp } from "@/contexts";
 import { useKrishna } from "@/hooks";
 import { isKrishnaSpeaking } from "@/lib/krishna-mutex";
+import { getRepo } from "@/lib/repo-selector";
 
 export const KrishnaVAD = () => {
   const [isTranscribing, setIsTranscribing] = useState(false);
@@ -20,7 +21,8 @@ export const KrishnaVAD = () => {
   const { selectedSttProvider, allSttProviders, selectedAIProvider } = useApp();
   const krishna = useKrishna();
 
-  const missingAI = !selectedAIProvider.provider;
+  const brainHandlesAI = getRepo().mode === "remote";
+  const missingAI = !selectedAIProvider.provider && !brainHandlesAI;
   const missingSTT = !selectedSttProvider.provider;
   const missingProviders = missingAI || missingSTT;
 
@@ -101,9 +103,9 @@ export const KrishnaVAD = () => {
   };
 
   const getTitle = () => {
-    if (missingSTT && missingAI) return "No speech or AI provider — open Settings";
+    if (missingSTT && missingAI && !brainHandlesAI) return "No speech or AI provider — open Settings";
     if (missingSTT) return "No speech provider — open Settings › Speech";
-    if (missingAI) return "No AI provider — open Settings › Brain";
+    if (missingAI && !brainHandlesAI) return "No AI provider — open Settings › Brain";
     if (vad.errored) return "Mic error — reload app to retry";
     if (vad.loading) return "Loading voice detection…";
     if (muted) return "Mic muted — click to unmute";

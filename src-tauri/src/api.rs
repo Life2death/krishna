@@ -1,7 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::env;
 use tauri::AppHandle;
-use tauri_plugin_machine_uid::MachineUidExt;
 
 fn get_app_endpoint() -> Result<String, String> {
     if let Ok(endpoint) = env::var("APP_ENDPOINT") {
@@ -70,7 +69,17 @@ pub async fn create_system_prompt(
     let app_endpoint = get_app_endpoint()?;
     let api_access_key = get_api_access_key()?;
     let (license_key, instance_id, _) = get_stored_credentials(&app)?;
-    let machine_id: String = app.machine_uid().get_machine_uid().unwrap().id.unwrap();
+    #[cfg(desktop)]
+    let machine_id: String = {
+        use tauri_plugin_machine_uid::MachineUidExt;
+        app.machine_uid()
+            .get_machine_uid()
+            .ok()
+            .and_then(|u| u.id)
+            .unwrap_or_default()
+    };
+    #[cfg(not(desktop))]
+    let machine_id: String = "mobile".to_string();
     let app_version: String = app.package_info().version.to_string();
     // Make HTTP request to models endpoint
     let client = reqwest::Client::new();

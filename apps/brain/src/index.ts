@@ -16,17 +16,25 @@ import { chatHistoryRoutes } from "./routes/chat-history.ts";
 import { chatRoutes } from "./routes/chat.ts";
 import { McpHub, loadMcpConfig } from "./mcp/index.ts";
 import { mcpToolsRoutes } from "./routes/mcp-tools.ts";
+import { devicesRoutes } from "./routes/devices.ts";
+import { resumeSummaryRoutes } from "./routes/resume-summary.ts";
+import { skillsGenerateRoutes } from "./routes/skills-generate.ts";
+import { dictateRoutes } from "./routes/dictate.ts";
+import { factExtractRoutes } from "./routes/fact-extract.ts";
+import { ragRoutes } from "./routes/rag.ts";
+import { initRag } from "./rag/index.ts";
+import { startBot, stopBot as stopTelegramBot } from "./telegram/bot.ts";
 
 async function main(): Promise<void> {
   // 1. Boot shared core onto the Node runtime (libSQL driver + migrations + shims).
-  await initCore();
+  const db = await initCore();
 
   // 2. Field encryption key (OS keyring or env).
   const crypto = makeFieldCrypto(await loadMasterKey());
 
   // 3. Live-sync hub + shared context.
   const hub = new Hub();
-  const ctx: BrainContext = { crypto, hub };
+  const ctx: BrainContext = { crypto, hub, db };
 
   // 3b. MCP tool hub — connect to configured MCP servers.
   const mcpHub = new McpHub();
@@ -53,6 +61,13 @@ async function main(): Promise<void> {
     hub.add(socket);
   });
 
+  // RAG knowledge base (async init — non-blocking).
+  if (!config.ragDisabled) {
+    initRag(ctx).catch((err) => console.error("[rag] Init failed:", err));
+  } else {
+    console.log("[rag] Disabled via config");
+  }
+
   // REST domains.
   memoriesRoutes(app, ctx);
   skillsRoutes(app, ctx);
@@ -62,9 +77,31 @@ async function main(): Promise<void> {
   chatHistoryRoutes(app, ctx);
   chatRoutes(app);
   mcpToolsRoutes(app, mcpHub);
+  devicesRoutes(app, ctx);
+  resumeSummaryRoutes(app, ctx);
+  factExtractRoutes(app, ctx);
+  skillsGenerateRoutes(app);
+  dictateRoutes(app);
+  ragRoutes(app, ctx);
+
+  // Telegram bot (optional — only polls when TELEGRAM_BOT_TOKEN is set).
+  const telegramBot = await startBot(ctx);
+  if (telegramBot) {
+    app.log.info("Telegram bot polling");
+  }
 
   await app.listen({ port: config.port, host: "0.0.0.0" });
   app.log.info(`Krishna Brain listening on :${config.port}`);
+
+  // Graceful shutdown — stop Telegram polling, then Fastify.
+  const shutdown = async () => {
+    app.log.info("Shutting down…");
+    await stopTelegramBot();
+    await app.close();
+    process.exit(0);
+  };
+  process.on("SIGINT", shutdown);
+  process.on("SIGTERM", shutdown);
 }
 
 main().catch((err) => {

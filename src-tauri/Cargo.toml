@@ -29,7 +29,6 @@ tauri-plugin-keychain = "2.0"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 image = "0.25.6"
-xcap = "0.0.12"
 base64 = "0.22"
 cpal = "0.15.3"
 hound = "3.5.1"
@@ -44,8 +43,6 @@ tauri-plugin-shell = "2.3.1"
 tauri-plugin-sql = { version = "2.4.0", features = ["sqlite"] }
 tauri-plugin-log = "2"
 log = "0.4"
-tauri-plugin-posthog = "0.2.4"
-tauri-plugin-machine-uid = "0.1.2"
 chrono = "0.4"
 aes-gcm = "0.10"
 sha2 = "0.10"
@@ -64,5 +61,13 @@ windows-registry = "0.5"
 libpulse-binding = "2.30.1"
 libpulse-simple-binding = "2.29.0"
 
+[target.'cfg(not(target_os = "android"))'.dependencies]
+xcap = "0.0.12"
+
 [target.'cfg(any(target_os = "macos", windows, target_os = "linux"))'.dependencies]
 tauri-plugin-autostart = "2.5.0"
+# These pull in `machine-uid`, which has no Android/iOS support (its non-desktop
+# path fails to compile), so they're desktop-only. Mobile derives the secure-storage
+# key differently (see src/secure.rs get_machine_id) and skips PostHog analytics.
+tauri-plugin-machine-uid = "0.1.2"
+tauri-plugin-posthog = "0.2.4"
