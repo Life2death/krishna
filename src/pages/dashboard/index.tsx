@@ -1,14 +1,36 @@
 import { Badge, Input, Card, Empty, Button } from "@/components";
-import { useHistory, useKrishna } from "@/hooks";
+import { useHistory, useCommandInsights } from "@/hooks";
 import { PageLayout } from "@/layouts";
 import { deleteAllConversations } from "@/lib/database";
-import { MessageCircleIcon, Search, Trash2, XCircleIcon } from "lucide-react";
+import { MessageCircleIcon, Search, Trash2, XCircleIcon, BarChart3Icon, LightbulbIcon } from "lucide-react";
 import moment from "moment";
 import { useNavigate } from "react-router-dom";
+import type { FailureReason } from "@/lib/database";
+
+const FAILURE_LABELS: Record<FailureReason, string> = {
+  stt_failed: "Speech recognition failed",
+  no_stt_provider: "No speech provider",
+  no_ai_provider: "No AI provider configured",
+  ai_error: "AI provider error",
+  plan_failed: "Plan execution failed",
+  tool_failed: "Tool execution failed",
+  wake_word_missed: "Wake word not detected",
+  user_declined: "User declined",
+  unknown: "Unknown error",
+};
+
+const FAILURE_HINTS: Partial<Record<FailureReason, string>> = {
+  no_ai_provider: "Open Settings → Brain to configure an AI provider.",
+  no_stt_provider: "Open Settings → Speech to configure a speech provider.",
+  stt_failed: "Check your microphone permissions and STT provider key.",
+  plan_failed: "Krishna keeps failing on this command. Try rephrasing it.",
+  tool_failed: "Krishna keeps failing on this command. Try rephrasing it.",
+  wake_word_missed: "Consider disabling the wake word or changing it in Settings.",
+};
 
 const Dashboard = () => {
   const conversations = useHistory();
-  const { lastError, clearLastError } = useKrishna();
+  const { stats, isLoading: statsLoading, clearAll: clearCommandLog } = useCommandInsights();
   const navigate = useNavigate();
 
   const groupedConversations = conversations.conversations.reduce(
@@ -32,18 +54,74 @@ const Dashboard = () => {
     conversations.refreshConversations();
   };
 
+  const topFailure = stats.byReason[0];
+
   return (
     <PageLayout
       title="Dashboard"
       description="Krishna — your AI voice assistant"
     >
       <>
-        {lastError && (
-          <div className="mb-4 flex items-center justify-between rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-800 dark:bg-red-950 dark:text-red-300">
-            <span>{lastError}</span>
-            <button onClick={clearLastError} className="ml-2 shrink-0">
-              <XCircleIcon className="h-4 w-4" />
-            </button>
+        {/* Insights section */}
+        {!statsLoading && stats.total > 0 && (
+          <div className="mb-6 rounded-lg border p-4">
+            <div className="mb-3 flex items-center justify-between">
+              <h2 className="flex items-center gap-1.5 text-sm font-semibold">
+                <BarChart3Icon className="h-4 w-4" />
+                Insights
+              </h2>
+              <Button variant="ghost" size="sm" onClick={clearCommandLog}>
+                Clear stats
+              </Button>
+            </div>
+
+            {/* Stat cards */}
+            <div className="mb-3 grid grid-cols-4 gap-2">
+              <Card className="p-3 text-center shadow-none">
+                <p className="text-lg font-bold">{stats.total}</p>
+                <p className="text-xs text-muted-foreground">Total</p>
+              </Card>
+              <Card className="p-3 text-center shadow-none">
+                <p className="text-lg font-bold text-green-600">{stats.answered}</p>
+                <p className="text-xs text-muted-foreground">Answered</p>
+              </Card>
+              <Card className="p-3 text-center shadow-none">
+                <p className="text-lg font-bold text-red-600">{stats.failed}</p>
+                <p className="text-xs text-muted-foreground">Failed</p>
+              </Card>
+              <Card className="p-3 text-center shadow-none">
+                <p className="text-lg font-bold text-orange-600">{stats.declined}</p>
+                <p className="text-xs text-muted-foreground">Declined</p>
+              </Card>
+            </div>
+
+            {/* Failures list */}
+            {stats.failed > 0 && (
+              <div className="mb-2 space-y-1.5">
+                <p className="text-xs font-medium text-muted-foreground">Recent failures</p>
+                {stats.byReason.slice(0, 5).map((r) => (
+                  <div
+                    key={r.reason}
+                    className="flex items-center justify-between rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs dark:border-red-800 dark:bg-red-950"
+                  >
+                    <span className="font-medium text-red-700 dark:text-red-300">
+                      {FAILURE_LABELS[r.reason]}
+                    </span>
+                    <Badge variant="outline" className="text-xs">
+                      {r.count}
+                    </Badge>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Actionable hint */}
+            {topFailure && FAILURE_HINTS[topFailure.reason] && (
+              <div className="flex items-start gap-1.5 rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:bg-amber-950 dark:text-amber-200">
+                <LightbulbIcon className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                <span>{FAILURE_HINTS[topFailure.reason]}</span>
+              </div>
+            )}
           </div>
         )}
 

@@ -11,6 +11,7 @@ import { isKrishnaSpeaking } from "@/lib/krishna-mutex";
 import { getRepo } from "@/lib/repo-selector";
 import { invoke } from "@tauri-apps/api/core";
 import { emit } from "@tauri-apps/api/event";
+import { logCommand } from "@/lib/database";
 
 export const KrishnaVAD = () => {
   const [isTranscribing, setIsTranscribing] = useState(false);
@@ -39,7 +40,17 @@ export const KrishnaVAD = () => {
           (p) => p.id === selectedSttProvider.provider
         );
 
-        if (!providerConfig) return;
+        if (!providerConfig) {
+          logCommand({
+            id: crypto.randomUUID(),
+            transcript: "",
+            outcome: "failed",
+            failureReason: "no_stt_provider",
+            source: "voice",
+            createdAt: Date.now(),
+          }).catch(() => {});
+          return;
+        }
 
         setIsTranscribing(true);
 
@@ -54,6 +65,15 @@ export const KrishnaVAD = () => {
         }
       } catch (error) {
         console.error("Krishna VAD transcription failed:", error);
+        logCommand({
+          id: crypto.randomUUID(),
+          transcript: "",
+          outcome: "failed",
+          failureReason: "stt_failed",
+          detail: error instanceof Error ? error.message : String(error),
+          source: "voice",
+          createdAt: Date.now(),
+        }).catch(() => {});
       } finally {
         setIsTranscribing(false);
       }

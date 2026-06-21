@@ -73,5 +73,12 @@ pub fn migrations() -> Vec<Migration> {
             sql: include_str!("migrations/reminders.sql"),
             kind: MigrationKind::Up,
         },
+        // Migration 12: Create command_log table for command insights
+        Migration {
+            version: 12,
+            description: "create_command_log_table",
+            sql: include_str!("migrations/command-log.sql"),
+            kind: MigrationKind::Up,
+        },
     ]
 }

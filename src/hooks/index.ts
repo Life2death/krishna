@@ -8,6 +8,7 @@ export * from "./useGlobalShortcuts";
 export * from "./useShortcuts";
 export * from "./useSystemAudio";
 export * from "./useHistory";
+export * from "./useCommandInsights";
 export * from "./useCopyToClipboard";
 export * from "./useTitles";
 export * from "./useSystemPrompts";
