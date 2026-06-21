@@ -84,10 +84,17 @@ jobs:
         run: npx tauri android build --debug --apk
 
       # ── Release build (tag push) ─────────────────────────────────────────────
-      - name: Decode keystore
+      - name: Decode keystore + write signing config
         if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
         run: |
           echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 --decode > $RUNNER_TEMP/release.keystore
+          mkdir -p src-tauri/gen/android
+          cat > src-tauri/gen/android/keystore.properties <<EOF
+          storeFile=$RUNNER_TEMP/release.keystore
+          keyAlias=${{ secrets.ANDROID_KEY_ALIAS }}
+          keyPassword=${{ secrets.ANDROID_KEY_PASSWORD }}
+          storePassword=${{ secrets.ANDROID_KEY_PASSWORD }}
+          EOF
 
       - name: Build release APK + AAB
         if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')

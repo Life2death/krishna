@@ -37,3 +37,4 @@ devlog*.txt
 # Android build artifacts (populated at build time, not source)
 src-tauri/gen/android/buildSrc/.kotlin/
 src-tauri/gen/android/app/src/main/assets/
+src-tauri/gen/android/keystore.properties
