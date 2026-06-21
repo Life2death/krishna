@@ -6,7 +6,7 @@ import type { Client } from "@libsql/client";
  * Migrations applied on boot, in the same order Tauri registers them
  * (src-tauri/src/db/main.rs). The legacy `interview-profiles*` migrations
  * (Tauri versions 3/4/5) are intentionally skipped — they are vestigial from
- * the Naukri Lelo lineage and the brain never touches that table.
+ * the Krishna lineage (forked from Naukri Lelo) and the brain never touches that table.
  *
  * All files use `CREATE TABLE IF NOT EXISTS`, so re-running every boot is safe.
  */

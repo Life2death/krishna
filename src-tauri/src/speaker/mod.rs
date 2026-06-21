@@ -64,7 +64,7 @@ pub(crate) fn list_output_devices() -> Result<Vec<AudioDevice>> {
     Ok(vec![])
 }
 
-// Naukri Lelo speaker input and stream
+// Krishna speaker input and stream
 pub struct SpeakerInput {
     #[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
     inner: PlatformSpeakerInput,

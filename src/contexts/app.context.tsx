@@ -142,7 +142,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   const [customizable, setCustomizable] = useState<CustomizableState>(
     DEFAULT_CUSTOMIZABLE_STATE
   );
-  // Naukri Lelo is fully free — license is always active
+  // Krishna is fully free — license is always active
   const [hasActiveLicense, setHasActiveLicense] = useState<boolean>(true);
   const [supportsImages, setSupportsImagesState] = useState<boolean>(() => {
     const stored = safeLocalStorage.getItem(STORAGE_KEYS.SUPPORTS_IMAGES);
@@ -155,9 +155,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     safeLocalStorage.setItem(STORAGE_KEYS.SUPPORTS_IMAGES, String(value));
   };
 
-  // Naukri Lelo is fully free — no license validation needed
-
-  // Naukri Lelo is fully free — no license validation needed
+  // Krishna is fully free — no license validation needed
   const getActiveLicenseStatus = async () => {
     setHasActiveLicense(true);
     // Auto-enable screenshot config on first launch
@@ -173,7 +171,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   };
 
   useEffect(() => {
-    // Always set license as active since Naukri Lelo is free
+    // Always set license as active since Krishna is free
     const syncLicenseState = async () => {
       try {
         await invoke("set_license_status", { hasLicense: true });

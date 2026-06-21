@@ -174,8 +174,8 @@ export const useSystemPrompts = () => {
           STORAGE_KEYS.SELECTED_SYSTEM_PROMPT_ID,
           promptId.toString()
         );
-        // Clear any selected Naukri Lelo prompt when user selects their own prompt
-        safeLocalStorage.removeItem("selected_naukri_lelo_prompt");
+        // Clear any selected legacy prompt when user selects their own prompt
+        safeLocalStorage.removeItem("selected_krishna_prompt");
       }
     },
     [prompts, setSystemPrompt]

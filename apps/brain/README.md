@@ -141,5 +141,5 @@ npm test   # field-crypto + memories encryption-boundary + auth
 
 On boot the brain applies the **same** `src-tauri/src/db/migrations/*.sql` files
 the Tauri app uses, in the same order — skipping the legacy `interview-profiles`
-migrations (vestigial from the Naukri Lelo lineage; the brain never touches that
+migrations (vestigial from the Naukri Lelo fork lineage; the brain never touches that
 table). All are `CREATE TABLE IF NOT EXISTS`, so boot is idempotent.

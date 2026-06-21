@@ -1,4 +1,4 @@
-// Naukri Lelo AI Speech Detection, and capture system audio (speaker output) as a stream of f32 samples.
+// Krishna AI Speech Detection, and capture system audio (speaker output) as a stream of f32 samples.
 use crate::speaker::{AudioDevice, SpeakerInput};
 use anyhow::Result;
 use base64::{engine::general_purpose::STANDARD as B64, Engine as _};

@@ -1,4 +1,4 @@
-// Naukri Lelo windows speaker input and stream
+// Krishna windows speaker input and stream
 use super::AudioDevice;
 use anyhow::Result;
 use futures_util::Stream;
@@ -136,18 +136,18 @@ impl SpeakerInput {
             if let Err(e) =
                 SpeakerStream::capture_audio_loop(queue_clone, waker_clone, init_tx, device_id)
             {
-                error!("Naukri Lelo Audio capture loop failed: {}", e);
+                error!("Krishna Audio capture loop failed: {}", e);
             }
         });
 
         let actual_sample_rate = match init_rx.recv_timeout(Duration::from_secs(5)) {
             Ok(Ok(rate)) => rate,
             Ok(Err(e)) => {
-                error!("Naukri Lelo Audio initialization failed: {}", e);
+                error!("Krishna Audio initialization failed: {}", e);
                 44100
             }
             Err(_) => {
-                error!("Naukri Lelo Audio initialization timeout");
+                error!("Krishna Audio initialization timeout");
                 44100
             }
         };
@@ -234,13 +234,13 @@ impl SpeakerStream {
                     }
 
                     if h_event.wait_for_event(3000).is_err() {
-                        error!("Naukri Lelo timeout error, stopping capture");
+                        error!("Krishna timeout error, stopping capture");
                         break;
                     }
 
                     let mut temp_queue = VecDeque::new();
                     if let Err(e) = render_client.read_from_device_to_deque(&mut temp_queue) {
-                        error!("Naukri Lelo Failed to read audio data: {}", e);
+                        error!("Krishna Failed to read audio data: {}", e);
                         continue;
                     }
 

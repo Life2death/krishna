@@ -492,7 +492,7 @@ export const useCompletion = () => {
     };
 
     const handleStorageChange = async (e: StorageEvent) => {
-      if (e.key === "naukri-lelo-conversation-selected" && e.newValue) {
+      if (e.key === "krishna-conversation-selected" && e.newValue) {
         try {
           const data = JSON.parse(e.newValue);
           const { id } = data;

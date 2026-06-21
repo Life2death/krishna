@@ -52,8 +52,8 @@ describe("getByPath", () => {
 describe("setByPath", () => {
   it("sets a top-level key", () => {
     const obj: any = {};
-    setByPath(obj, "name", "Naukri Lelo");
-    expect(obj.name).toBe("Naukri Lelo");
+    setByPath(obj, "name", "Krishna");
+    expect(obj.name).toBe("Krishna");
   });
 
   it("sets a nested key (auto-creates intermediate objects)", () => {

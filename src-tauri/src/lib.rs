@@ -45,7 +45,7 @@ pub fn run() {
             panic_info
         );
         let _ = std::fs::write(
-            std::env::temp_dir().join("naukri-lelo-crash.txt"),
+            std::env::temp_dir().join("krishna-crash.txt"),
             &msg,
         );
     }));
