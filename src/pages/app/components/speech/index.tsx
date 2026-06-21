@@ -5,12 +5,11 @@ import {
   PopoverTrigger,
   PopoverContent,
   ScrollArea,
+  KrishnaChakra,
 } from "@/components";
 import {
-  HeadphonesIcon,
   AlertCircleIcon,
   LoaderIcon,
-  AudioLinesIcon,
   CameraIcon,
   PlusIcon,
   XIcon,
@@ -156,10 +155,10 @@ export const SystemAudio = (props: useSystemAudioType) => {
     if (setupRequired) return <AlertCircleIcon className="text-orange-500" />;
     if (error && !setupRequired)
       return <AlertCircleIcon className="text-red-500" />;
-    if (isProcessing) return <LoaderIcon className="animate-spin" />;
-    if (capturing)
-      return <AudioLinesIcon className="text-green-500 animate-pulse" />;
-    return <HeadphonesIcon />;
+    if (isAIProcessing) return <KrishnaChakra state="speaking" size={22} />;
+    if (isProcessing) return <KrishnaChakra state="processing" size={22} />;
+    if (capturing) return <KrishnaChakra state="listening" size={22} />;
+    return <KrishnaChakra state="idle" size={22} />;
   };
 
   const getButtonTitle = () => {
