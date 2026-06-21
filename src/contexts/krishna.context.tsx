@@ -12,7 +12,7 @@ import { safeLocalStorage } from "@/lib";
 import { secureStorage } from "@/lib/secure-storage";
 import { STORAGE_KEYS, DEFAULT_SYSTEM_PROMPT } from "@/config";
 import { setKrishnaSpeaking } from "@/lib/krishna-mutex";
-import { listen } from "@tauri-apps/api/event";
+import { listen, emit } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import { parseYesNo } from "@/lib/parse-yes-no";
 import { saveAndConfirm } from "@/lib/resolver";
@@ -1437,6 +1437,30 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
     },
     [selectedAIProvider, allAiProviders, llmFallback, wakeWordEnabled, wakeWord, clearFiles, promptMemoryConfirmation]
   );
+
+  // Presence overlay: show large chakra when active, hide when idle
+  useEffect(() => {
+    if (status === "thinking" || status === "speaking") {
+      const chakraState: "speaking" | "processing" = status === "speaking" ? "speaking" : "processing";
+      invoke("show_presence");
+      emit("presence-state", { state: chakraState });
+    } else if (status === "idle" && !pendingConfirmationRef.current) {
+      invoke("hide_presence");
+    }
+  }, [status]);
+
+  // Presence overlay from VAD: show when user is speaking, hide when idle
+  useEffect(() => {
+    const unlisten = listen<{ speaking: boolean }>("vad-user-speaking", (event) => {
+      if (event.payload.speaking) {
+        invoke("show_presence");
+        emit("presence-state", { state: "listening" });
+      } else if (status === "idle") {
+        invoke("hide_presence");
+      }
+    });
+    return () => { unlisten.then((fn) => fn()); };
+  }, [status]);
 
   return (
       <KrishnaContext.Provider

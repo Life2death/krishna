@@ -1,0 +1,13 @@
+body { background: transparent; overflow: hidden; }
+.presence-root {
+  width: 100vw; height: 100vh;
+  display: flex; align-items: center; justify-content: center;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.4s ease, transform 0.4s ease;
+  transform: scale(0.7);
+}
+.presence-root[data-visible="true"] {
+  opacity: 1;
+  transform: scale(1);
+}

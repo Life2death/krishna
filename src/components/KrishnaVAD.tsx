@@ -9,6 +9,8 @@ import { useApp } from "@/contexts";
 import { useKrishna } from "@/hooks";
 import { isKrishnaSpeaking } from "@/lib/krishna-mutex";
 import { getRepo } from "@/lib/repo-selector";
+import { invoke } from "@tauri-apps/api/core";
+import { emit } from "@tauri-apps/api/event";
 
 export const KrishnaVAD = () => {
   const [isTranscribing, setIsTranscribing] = useState(false);
@@ -68,6 +70,16 @@ export const KrishnaVAD = () => {
       vad.start();
     }
   }, [missingProviders, muted, vad.loading, vad.errored, vad.listening]);
+
+  // Wire VAD userSpeaking to presence overlay
+  useEffect(() => {
+    if (vad.userSpeaking) {
+      invoke("show_presence");
+      emit("vad-user-speaking", { speaking: true });
+    } else {
+      emit("vad-user-speaking", { speaking: false });
+    }
+  }, [vad.userSpeaking]);
 
   const handleMuteToggle = () => {
     if (muted) {

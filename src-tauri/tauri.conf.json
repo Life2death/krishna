@@ -27,6 +27,20 @@
         "focus": false,
         "acceptFirstMouse": true,
         "shadow": false
+      },
+      {
+        "label": "presence",
+        "title": "",
+        "transparent": true,
+        "decorations": false,
+        "alwaysOnTop": true,
+        "visible": false,
+        "resizable": false,
+        "skipTaskbar": true,
+        "fullscreen": true,
+        "focus": false,
+        "width": 800,
+        "height": 600
       }
     ],
     "security": { "csp": "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' https://api.groq.com https://api.elevenlabs.io https://www.googleapis.com https://app.posthog.com https://cdn.jsdelivr.net https://api.github.com https://openrouter.ai https://api.openai.com https://api.anthropic.com https://api.x.ai https://generativelanguage.googleapis.com https://api.mistral.ai https://api.cohere.ai https://api.perplexity.ai http://localhost:11434 https://speech.googleapis.com https://api.deepgram.com https://*.stt.speech.microsoft.com https://asr.api.speechmatics.com https://api.rev.ai https://api.us-south.speech-to-text.watson.cloud.ibm.com; font-src 'self'; media-src 'self' blob:; object-src 'none'; frame-src 'none'; base-uri 'self'", "devCsp": "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' ws: http://localhost:* https://api.groq.com https://api.elevenlabs.io https://www.googleapis.com https://app.posthog.com https://cdn.jsdelivr.net https://api.github.com https://openrouter.ai https://api.openai.com https://api.anthropic.com https://api.x.ai https://generativelanguage.googleapis.com https://api.mistral.ai https://api.cohere.ai https://api.perplexity.ai https://speech.googleapis.com https://api.deepgram.com https://*.stt.speech.microsoft.com https://asr.api.speechmatics.com https://api.rev.ai https://api.us-south.speech-to-text.watson.cloud.ibm.com; font-src 'self'; media-src 'self' blob:; object-src 'none'; base-uri 'self'" }

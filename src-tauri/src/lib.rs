@@ -35,6 +35,21 @@ fn get_app_version() -> String {
     env!("CARGO_PKG_VERSION").to_string()
 }
 
+#[tauri::command]
+fn show_presence(app: tauri::AppHandle) {
+    if let Some(w) = app.get_webview_window("presence") {
+        let _ = w.set_ignore_cursor_events(true);
+        let _ = w.show();
+    }
+}
+
+#[tauri::command]
+fn hide_presence(app: tauri::AppHandle) {
+    if let Some(w) = app.get_webview_window("presence") {
+        let _ = w.hide();
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     // Panic hook: if the app crashes, write the reason to a file before exiting
@@ -111,6 +126,8 @@ pub fn run() {
     let builder = builder
         .invoke_handler(tauri::generate_handler![
             get_app_version,
+            show_presence,
+            hide_presence,
             window::set_window_height,
             window::open_dashboard,
             capture::capture_to_base64,

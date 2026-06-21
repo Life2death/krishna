@@ -9,6 +9,7 @@ import {
   Shortcuts,
   Audio,
   Screenshot,
+  Presence,
 } from "@/pages";
 import { DashboardLayout } from "@/layouts";
 
@@ -17,6 +18,7 @@ export default function AppRoutes() {
     <Router>
       <Routes>
         <Route path="/" element={<App />} />
+        <Route path="/presence" element={<Presence />} />
         <Route element={<DashboardLayout />}>
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/system-prompts" element={<SystemPrompts />} />
