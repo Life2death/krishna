@@ -5,7 +5,7 @@ import { deleteAllConversations } from "@/lib/database";
 import { MessageCircleIcon, Search, Trash2, XCircleIcon, BarChart3Icon, LightbulbIcon } from "lucide-react";
 import moment from "moment";
 import { useNavigate } from "react-router-dom";
-import type { FailureReason } from "@/lib/database";
+import type { FailureReason, CommandLogEntry } from "@/lib/database";
 
 const FAILURE_LABELS: Record<FailureReason, string> = {
   stt_failed: "Speech recognition failed",
@@ -30,7 +30,7 @@ const FAILURE_HINTS: Partial<Record<FailureReason, string>> = {
 
 const Dashboard = () => {
   const conversations = useHistory();
-  const { stats, isLoading: statsLoading, clearAll: clearCommandLog } = useCommandInsights();
+  const { stats, recent, isLoading: statsLoading, clearAll: clearCommandLog } = useCommandInsights();
   const navigate = useNavigate();
 
   const groupedConversations = conversations.conversations.reduce(
@@ -98,7 +98,7 @@ const Dashboard = () => {
             {/* Failures list */}
             {stats.failed > 0 && (
               <div className="mb-2 space-y-1.5">
-                <p className="text-xs font-medium text-muted-foreground">Recent failures</p>
+                <p className="text-xs font-medium text-muted-foreground">Failure breakdown</p>
                 {stats.byReason.slice(0, 5).map((r) => (
                   <div
                     key={r.reason}
@@ -112,6 +112,35 @@ const Dashboard = () => {
                     </Badge>
                   </div>
                 ))}
+              </div>
+            )}
+
+            {/* Failed transcripts */}
+            {recent.length > 0 && (
+              <div className="mb-2 space-y-1">
+                <p className="text-xs font-medium text-muted-foreground">
+                  Failed commands ({recent.length})
+                </p>
+                <div className="max-h-60 space-y-1 overflow-y-auto">
+                  {recent.map((entry) => (
+                    <div
+                      key={entry.id}
+                      className="flex items-start justify-between gap-2 rounded-md border border-red-100 bg-red-50/50 px-3 py-2 text-xs dark:border-red-900 dark:bg-red-950/30"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate font-medium text-red-800 dark:text-red-200">
+                          {entry.transcript}
+                        </p>
+                        <p className="mt-0.5 text-muted-foreground">
+                          {FAILURE_LABELS[entry.failureReason ?? "unknown"]}
+                        </p>
+                      </div>
+                      <span className="shrink-0 text-muted-foreground">
+                        {moment(entry.createdAt).format("MMM D, h:mm A")}
+                      </span>
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
 

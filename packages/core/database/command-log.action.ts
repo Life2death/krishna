@@ -64,7 +64,7 @@ export async function getCommandStats(): Promise<{
     "SELECT failure_reason, COUNT(*) as count FROM command_log WHERE outcome = 'failed' AND failure_reason IS NOT NULL GROUP BY failure_reason ORDER BY count DESC"
   );
 
-  const total = outcomeRows.reduce((sum, r) => sum + r.count, 0);
+  const total = outcomeRows.filter((r) => r.outcome !== "ignored").reduce((sum, r) => sum + r.count, 0);
   const answered = outcomeRows.find((r) => r.outcome === "answered")?.count ?? 0;
   const failed = outcomeRows.find((r) => r.outcome === "failed")?.count ?? 0;
   const declined = outcomeRows.find((r) => r.outcome === "declined")?.count ?? 0;

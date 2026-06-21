@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { getCommandStats, getRecentCommands, deleteAllCommandLog } from "@/lib/database";
-import type { FailureReason } from "@/lib/database";
+import type { FailureReason, CommandLogEntry } from "@/lib/database";
 
 export interface CommandStats {
   total: number;
@@ -20,18 +20,21 @@ const emptyStats: CommandStats = {
 
 export function useCommandInsights() {
   const [stats, setStats] = useState<CommandStats>(emptyStats);
+  const [recent, setRecent] = useState<CommandLogEntry[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   const refresh = useCallback(async () => {
     setIsLoading(true);
     try {
-      const [s, _recent] = await Promise.all([
+      const [s, r] = await Promise.all([
         getCommandStats(),
         getRecentCommands({ outcome: "failed", limit: 50 }),
       ]);
       setStats(s);
+      setRecent(r);
     } catch {
       setStats(emptyStats);
+      setRecent([]);
     } finally {
       setIsLoading(false);
     }
@@ -46,5 +49,5 @@ export function useCommandInsights() {
     await refresh();
   }, [refresh]);
 
-  return { stats, isLoading, refresh, clearAll };
+  return { stats, recent, isLoading, refresh, clearAll };
 }
