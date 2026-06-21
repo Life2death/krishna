@@ -82,7 +82,6 @@ export const KrishnaVAD = () => {
   // The Sudarshan Chakra is the primary voice indicator. It spins/pulses by state;
   // a red alert icon shows only when voice genuinely can't run (no provider / mic error).
   const getIcon = () => {
-    if (missingProviders) return <AlertCircleIcon className="h-4 w-4 text-red-500" />;
     if (vad.errored) return <AlertCircleIcon className="h-4 w-4 text-red-500" />;
     if (vad.loading) return <KrishnaChakra state="processing" size={18} />;
     if (muted) return <KrishnaChakra state="idle" size={18} />;

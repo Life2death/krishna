@@ -56,9 +56,9 @@ export const DEFAULT_SHORTCUT_ACTIONS: ShortcutAction[] = [
     name: "Voice Input",
     description: "Start voice recording",
     defaultKey: {
-      macos: "cmd+shift+a",
-      windows: "ctrl+shift+a",
-      linux: "ctrl+shift+a",
+      macos: "cmd+shift+r",
+      windows: "ctrl+shift+r",
+      linux: "ctrl+shift+r",
     },
   },
   {

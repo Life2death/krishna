@@ -264,7 +264,7 @@ body {
 }
 
 /* idle — calm slow spin, dimmed */
-.krishna-chakra[data-state="idle"] { opacity: 0.65; }
+.krishna-chakra[data-state="idle"] { opacity: 0.82; }
 
 /* listening — faster spin + counter-rotating dashed halo */
 .krishna-chakra[data-state="listening"] .krishna-chakra__disc { animation-duration: 6s; }
