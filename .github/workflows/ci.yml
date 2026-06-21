@@ -33,5 +33,27 @@ jobs:
       - name: Run Vitest tests
         run: npm test
 
-  # Rust cargo check (Linux) removed — Linux build not currently supported.
-  # Re-enable when Linux target is ready.
+  # ── Rust typecheck ────────────────────────────────────────────────────────
+  rust:
+    name: Rust cargo check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: "src-tauri -> target"
+
+      - name: Install system deps (Linux)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev libappindicator3-dev \
+            librsvg2-dev patchelf libx11-dev libxdo-dev libxcb-shape0-dev libxcb-xfixes0-dev
+
+      - name: cargo check (desktop, Linux)
+        working-directory: src-tauri
+        run: cargo check --workspace

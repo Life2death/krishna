@@ -1,0 +1,107 @@
+name: Android Build & Release
+
+# Runs on tag push (same pattern as desktop release) for release APKs.
+# Also runs on PRs touching Android/Rust/frontend code for CI smoke-test (debug build).
+on:
+  push:
+    tags: ["v*"]
+  pull_request:
+    paths:
+      - "src-tauri/**"
+      - "src/**"
+      - "packages/**"
+      - "apps/**"
+      - "package*.json"
+
+permissions:
+  contents: write
+
+jobs:
+  android:
+    name: Android APK
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # ── Node ─────────────────────────────────────────────────────────────────
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: "npm"
+
+      - name: Install frontend deps
+        run: npm ci
+
+      # ── Rust ─────────────────────────────────────────────────────────────────
+      - name: Setup Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android,armv7-linux-androideabi,i686-linux-android,x86_64-linux-android
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: "src-tauri -> target"
+
+      # ── Java / Android SDK ───────────────────────────────────────────────────
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Setup Android SDK + NDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android NDK 28
+        run: |
+          echo "y" | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager \
+            "ndk;28.2.13676358" \
+            "platforms;android-36" \
+            "build-tools;36.0.0"
+
+      # ── Debug build (PRs) ────────────────────────────────────────────────────
+      - name: Build debug APK (PR smoke test)
+        if: github.event_name == 'pull_request'
+        env:
+          NDK_HOME: ${{ env.ANDROID_HOME }}/ndk/28.2.13676358
+          ANDROID_NDK_HOME: ${{ env.ANDROID_HOME }}/ndk/28.2.13676358
+        run: npx tauri android build --debug --apk
+
+      # ── Release build (tag push) ─────────────────────────────────────────────
+      - name: Decode keystore
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
+        run: |
+          echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 --decode > $RUNNER_TEMP/release.keystore
+
+      - name: Build release APK + AAB
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
+        env:
+          NDK_HOME: ${{ env.ANDROID_HOME }}/ndk/28.2.13676358
+          ANDROID_NDK_HOME: ${{ env.ANDROID_HOME }}/ndk/28.2.13676358
+          TAURI_SIGNING_ANDROID_KEYSTORE: ${{ runner.temp }}/release.keystore
+          TAURI_SIGNING_ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          TAURI_SIGNING_ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          TAURI_SIGNING_ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: npx tauri android build --apk --aab
+
+      - name: Upload APK artifact (PR)
+        if: github.event_name == 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: krishna-debug-${{ github.sha }}
+          path: src-tauri/gen/android/app/build/outputs/apk/universal/debug/*.apk
+          retention-days: 7
+
+      - name: Upload to GitHub Release
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: "Krishna ${{ github.ref_name }}"
+          draft: true
+          files: |
+            src-tauri/gen/android/app/build/outputs/apk/universal/release/*.apk
+            src-tauri/gen/android/app/build/outputs/bundle/universalRelease/*.aab
