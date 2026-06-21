@@ -39,6 +39,7 @@ fn get_app_version() -> String {
 #[tauri::command]
 fn show_presence(app: tauri::AppHandle) {
     if let Some(w) = app.get_webview_window("presence") {
+        #[cfg(desktop)]
         let _ = w.set_ignore_cursor_events(true);
         let _ = w.show();
     }
