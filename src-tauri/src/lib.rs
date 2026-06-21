@@ -160,6 +160,7 @@ pub fn run() {
 
             // System tray: gives the user a reliable way to open the dashboard
             // and quit the app even when all windows are hidden
+            #[cfg(desktop)]
             {
                 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
 
@@ -225,6 +226,7 @@ pub fn run() {
             }
 
             // Non-fatal: if global shortcut plugin fails, app still works
+            #[cfg(desktop)]
             if let Err(e) = app.handle().plugin(
                 tauri_plugin_global_shortcut::Builder::new()
                     .with_handler(move |app, shortcut, event| {

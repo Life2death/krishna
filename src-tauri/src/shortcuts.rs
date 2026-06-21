@@ -4,6 +4,7 @@ use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use tauri::{AppHandle, Emitter, Manager, Runtime};
+#[cfg(desktop)]
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut};
 use tokio::time::{sleep, Duration};
 
@@ -294,17 +295,21 @@ pub fn update_shortcuts<R: Runtime>(
     app: AppHandle<R>,
     config: ShortcutsConfig,
 ) -> Result<(), String> {
+    update_shortcuts_impl(app, config)
+}
+
+#[cfg(desktop)]
+fn update_shortcuts_impl<R: Runtime>(
+    app: AppHandle<R>,
+    config: ShortcutsConfig,
+) -> Result<(), String> {
     eprintln!("Updating shortcuts with {} bindings", config.bindings.len());
 
     let mut shortcuts_to_register = Vec::new();
 
-    // License check removed - app is free, all features available
-
     for (action_id, binding) in &config.bindings {
         if binding.enabled && !binding.key.is_empty() {
             if action_id == "move_window" {
-                // Move window always available - app is free
-
                 let modifiers = binding.key.trim();
                 if modifiers.is_empty() {
                     continue;
@@ -349,15 +354,10 @@ pub fn update_shortcuts<R: Runtime>(
         }
     }
 
-    // First, stop any ongoing window movement
     stop_all_move_windows(&app);
-
-    // Then, unregister all existing shortcuts
     unregister_all_shortcuts(&app)?;
 
-    // Now register all new shortcuts
     let mut successfully_registered = HashMap::new();
-
     let mut registration_failures: Vec<(String, String, String)> = Vec::new();
 
     for (action_id, shortcut_str, shortcut) in shortcuts_to_register {
@@ -373,7 +373,6 @@ pub fn update_shortcuts<R: Runtime>(
         }
     }
 
-    // Update state with successfully registered shortcuts
     {
         let state = app.state::<RegisteredShortcuts>();
         let mut registered = match state.shortcuts.lock() {
@@ -383,7 +382,6 @@ pub fn update_shortcuts<R: Runtime>(
                 poisoned.into_inner()
             }
         };
-
         registered.clear();
         registered.extend(successfully_registered);
     }
@@ -409,7 +407,16 @@ pub fn update_shortcuts<R: Runtime>(
     Ok(())
 }
 
+#[cfg(not(desktop))]
+fn update_shortcuts_impl<R: Runtime>(
+    _app: AppHandle<R>,
+    _config: ShortcutsConfig,
+) -> Result<(), String> {
+    Ok(())
+}
+
 /// Unregister all currently registered shortcuts
+#[cfg(desktop)]
 fn unregister_all_shortcuts<R: Runtime>(app: &AppHandle<R>) -> Result<(), String> {
     let state = app.state::<RegisteredShortcuts>();
     let registered = match state.shortcuts.lock() {
@@ -453,13 +460,16 @@ pub fn check_shortcuts_registered<R: Runtime>(app: AppHandle<R>) -> Result<bool,
 /// Tauri command to validate shortcut key
 #[tauri::command]
 pub fn validate_shortcut_key(key: String) -> Result<bool, String> {
-    match key.parse::<Shortcut>() {
+    #[cfg(desktop)]
+    return match key.parse::<Shortcut>() {
         Ok(_) => Ok(true),
         Err(e) => {
             eprintln!("Invalid shortcut '{}': {}", key, e);
             Ok(false)
         }
-    }
+    };
+    #[allow(unreachable_code)]
+    { let _ = key; Ok(false) }
 }
 
 #[tauri::command]
@@ -512,14 +522,17 @@ pub fn set_app_icon_visibility<R: Runtime>(app: AppHandle<R>, visible: bool) -> 
 /// Tauri command to set always on top state
 #[tauri::command]
 pub fn set_always_on_top<R: Runtime>(app: AppHandle<R>, enabled: bool) -> Result<(), String> {
-    if let Some(window) = app.get_webview_window("main") {
-        window
-            .set_always_on_top(enabled)
-            .map_err(|e| format!("Failed to set always on top: {}", e))?;
-    } else {
-        return Err("Main window not found".to_string());
+    #[cfg(not(target_os = "android"))]
+    {
+        if let Some(window) = app.get_webview_window("main") {
+            window
+                .set_always_on_top(enabled)
+                .map_err(|e| format!("Failed to set always on top: {}", e))?;
+        } else {
+            return Err("Main window not found".to_string());
+        }
     }
-
+    let _ = (app, enabled);
     Ok(())
 }
 

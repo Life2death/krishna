@@ -30,3 +30,10 @@ SECURITY_FIX_FOLLOWUP.md
 SECURITY_REMEDIATION_PLAN.md
 SECURITY_REVIEW.md
 devlog*.txt
+
+# Claude agent context file
+.anchored
+
+# Android build artifacts (populated at build time, not source)
+src-tauri/gen/android/buildSrc/.kotlin/
+src-tauri/gen/android/app/src/main/assets/

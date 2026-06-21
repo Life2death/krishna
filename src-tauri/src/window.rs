@@ -88,13 +88,18 @@ pub fn create_dashboard_window<R: Runtime>(
         .visible(true)
         .traffic_light_position(LogicalPosition::new(14.0, 18.0));
 
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(all(not(target_os = "macos"), not(target_os = "android")))]
     let base_builder = base_builder
         .title("Krishna - Dashboard")
         .center()
         .decorations(true)
         .inner_size(800.0, 600.0)
         .min_inner_size(800.0, 600.0)
+        .visible(true);
+
+    #[cfg(target_os = "android")]
+    let base_builder = base_builder
+        .title("Krishna - Dashboard")
         .visible(true);
 
     let window = base_builder.build()?;

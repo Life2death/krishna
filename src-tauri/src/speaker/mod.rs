@@ -114,6 +114,7 @@ impl SpeakerInput {
 
 // Stream of f32 audio samples from the speaker.
 pub struct SpeakerStream {
+    #[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
     inner: PlatformSpeakerStream,
 }
 
