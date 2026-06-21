@@ -1,41 +1,66 @@
-# Naukri Lelo
+# Krishna
 
 <div align="center">
 
-<img src="/images/banner.svg" alt="Naukri Lelo — Free AI Interview Assistant" width="100%" />
-
-<br/>
-
 [![Open Source](https://img.shields.io/badge/Open%20Source-GPL%20v3-green?style=for-the-badge)](LICENSE)
-[![Built with Tauri](https://img.shields.io/badge/Built%20with-Tauri-orange?style=for-the-badge&logo=tauri)](https://tauri.app/)
-[![React](https://img.shields.io/badge/Frontend-React%20%2B%20TypeScript-blue?style=for-the-badge&logo=react)](https://reactjs.org/)
-[![Windows](https://img.shields.io/badge/Windows-10%2F11-0078D4?style=for-the-badge&logo=windows)](https://github.com/Life2death/naukri-lelo/releases)
-[![Free Forever](https://img.shields.io/badge/Price-Free%20Forever-brightgreen?style=for-the-badge)](https://github.com/Life2death/naukri-lelo)
+[![Built with Tauri](https://img.shields.io/badge/Built%20with-Tauri%202-orange?style=for-the-badge&logo=tauri)](https://tauri.app/)
+[![React](https://img.shields.io/badge/Client-React%20%2B%20TypeScript-blue?style=for-the-badge&logo=react)](https://reactjs.org/)
+[![Brain](https://img.shields.io/badge/Brain-Node%20%2B%20libSQL-339933?style=for-the-badge&logo=node.js)](apps/brain)
+[![Platforms](https://img.shields.io/badge/Platforms-Windows%20%C2%B7%20macOS%20%C2%B7%20Linux%20%C2%B7%20Android-D4AF37?style=for-the-badge)](#supported-platforms)
 
-> **नौकरी लेलो** — *Get the job.*
->
-> A free, open-source AI interview assistant that stays **completely invisible during screen sharing**.
-> No license. No subscription. No paywall. Ever.
+> **A voice-first AI assistant** — talk to it, it talks back, and it acts.
+> Growing from a single desktop app into a **cross-device personal-assistant ecosystem**:
+> one shared brain, thin Krishna clients on every device.
 
 </div>
 
 ---
 
-## What is Naukri Lelo?
+## What is Krishna?
 
-Naukri Lelo is a desktop app that sits as a transparent overlay on your screen during interviews, coding tests, and meetings — helping you with real-time AI answers, live transcription, and screenshot analysis — while remaining **completely invisible** to anyone watching your screen share on Zoom, Google Meet, Microsoft Teams, or any other platform.
+Krishna is a **talking desktop AI assistant**. It lives as a small always-on-top bar — speak to it
+and it answers out loud, opens apps / websites / files, transcribes audio, analyzes screenshots,
+remembers things across sessions, runs reusable skills, and calls external tools over MCP.
 
-It is fully free and open-source under GPL v3. All features are unlocked for everyone.
+It's built on **Tauri 2 (Rust + React)**, so one codebase targets desktop *and* mobile. Krishna is
+evolving from a single-machine app into an **ecosystem**: a headless **Krishna Brain** (Node) owns
+memory, skills, tools, and chat history, while thin Krishna clients on laptop and Android sync through
+it. Full design in [KRISHNA_ECOSYSTEM_PLAN.md](./KRISHNA_ECOSYSTEM_PLAN.md).
+
+Free and open source under **GPL v3**.
 
 ---
 
-## How Invisibility Works
+## Architecture
 
-On **Windows** the app uses `WDA_EXCLUDEFROMCAPTURE` via `SetWindowDisplayAffinity` — a native Windows API that removes the window from the DWM compositor pipeline before any screen capture tool can see it. No workaround exists from the capturing side.
+```
+        ┌──────────────────────────────────────────────┐
+        │   KRISHNA BRAIN  (headless Node, on a host)   │
+        │   libSQL (Turso) embedded replica:            │
+        │     memory · skills · reminders · chat        │
+        │   + field encryption  + MCP tool hub          │
+        │   + Claude model router  + auth WS/HTTP API   │
+        └───────────────┬──────────────┬────────────────┘
+            Tailscale tunnel (secure, no port-forward)
+     ┌──────────────────┼──────────────┼──────────────────┐
+     ▼                  ▼              ▼                   ▼
+ Laptop client     Android client   [iOS — later]    [web/watch — later]
+ (Tauri desktop)   (Tauri mobile)
+```
 
-On **macOS** it uses `NSWindowSharingNone` which tells the OS not to include the window in any screen share or recording stream.
+- **One shared brain** holds memory/skills/tools and the Claude key — never shipped to mobile.
+- **App-level field encryption** in the brain means the cloud DB is *zero-knowledge* for sensitive
+  fields (memory values, chat content). Ids/timestamps stay plaintext so they remain queryable.
+- The desktop client runs in **local mode** (BYOK, local SQLite — works solo, no brain needed) or
+  **remote mode** (calls the brain). The ecosystem is opt-in; solo desktop is the default.
 
-In Tauri this is configured via `contentProtected: true` in `tauri.conf.json`.
+### Repository layout
+
+| Path | What it is |
+|---|---|
+| `apps/client` (`src/`, `src-tauri/`) | The Tauri desktop/mobile app — React UI + Rust shell |
+| `apps/brain` | Headless Node service (Fastify + `@libsql/client`) |
+| `packages/core` | Shared, framework-free logic — DB actions, tools, AI, types, redaction |
 
 ---
 
@@ -43,220 +68,124 @@ In Tauri this is configured via `contentProtected: true` in `tauri.conf.json`.
 
 | Feature | Description |
 |---|---|
-| **Invisible Overlay** | Window excluded from all screen captures, recordings, and screen shares |
-| **Real-time Transcription** | Capture system audio or microphone, transcribe live via your STT provider |
-| **AI Answers** | Stream responses from any LLM — OpenAI, Claude, Gemini, Groq, Ollama, or custom |
-| **Screenshot Analysis** | Capture full screen or selected area, send to AI for instant analysis |
-| **BYOK** | Bring Your Own Key — connect any AI or STT provider via curl |
-| **Chat History** | All conversations stored locally in SQLite, never leaves your device |
-| **System Prompts** | Create unlimited custom prompts to control AI behavior |
-| **Hotkeys** | Fully customizable global keyboard shortcuts |
-| **Stealth Cursor** | Invisible cursor mode so mouse movement is hidden from screen share |
-| **~10MB Binary** | Built with Tauri + Rust — 27x smaller than Electron alternatives |
-| **Free Forever** | No license key, no subscription, no paywalls — all features unlocked |
+| **Voice everywhere** | Wake word, voice-activity detection, push-to-talk; speaks replies via the per-OS TTS path |
+| **Acts on your machine** | Opens apps, websites, and files by voice |
+| **Live transcription** | Capture mic or system audio, transcribe via your STT provider |
+| **AI answers** | Streams from Claude (brain) or any BYOK provider on desktop |
+| **Screenshot analysis** | Capture a region or full screen and send it to the model |
+| **Cross-device sync** | Memory, skills, and reminders shared across any client via the brain |
+| **MCP tool hub** | Connect external MCP servers; safe/sensitive gating with confirmation + audit log |
+| **Runtime skills** | Generate declarative skill recipes on request (no arbitrary code-gen) |
+| **Personas** | Switch tone + tool-bias (default / coder / researcher / planner) per conversation |
+| **RAG knowledge base** | Local embeddings for semantic memory search |
+| **Telegram bot + dictation** | Chat with Krishna from Telegram; dedicated dictation endpoint |
+| **Privacy by design** | Field encryption + pattern-based secret/PII redaction before content leaves the brain |
 
 ---
 
-## Supported Platforms
+## Supported platforms
 
 | Platform | Status |
 |---|---|
-| Windows 10 / 11 | Supported (primary target) |
+| Windows 10 / 11 | Supported (primary desktop target) |
 | macOS 12+ | Supported |
 | Linux | Supported |
+| Android | Supported (Tauri mobile; defaults to remote/brain mode) |
+| iOS | Deferred — needs macOS + Xcode to build |
 
 ---
 
-## Installation
+## Install
 
 ### Download
 
-Get the latest release from the [Releases page](https://github.com/Life2death/naukri-lelo/releases).
+Grab the latest build from the [Releases page](https://github.com/Life2death/krishna/releases)
+(`.msi` / `.exe` for Windows, `.apk` for Android).
 
-| Platform | Format |
-|---|---|
-| Windows | `.msi`, `.exe` |
-| macOS | `.dmg` |
-| Linux | `.deb`, `.rpm`, `.AppImage` |
+### Build from source
 
-### Build from Source
-
-**Prerequisites:**
-- [Node.js](https://nodejs.org/) v18+
-- [Rust](https://rustup.rs/) (latest stable)
-- [Tauri Prerequisites](https://v2.tauri.app/start/prerequisites/) for your OS
+**Prerequisites:** [Node.js](https://nodejs.org/) v20+, [Rust](https://rustup.rs/) (stable),
+and the [Tauri prerequisites](https://v2.tauri.app/start/prerequisites/) for your OS.
 
 ```bash
-# Clone the repository
-git clone https://github.com/Life2death/naukri-lelo.git
-cd naukri-lelo
-
-# Install dependencies
+git clone https://github.com/Life2death/krishna.git
+cd krishna
 npm install
 
-# Start development server
+# Desktop app (dev)
 npm run tauri dev
-```
 
-**Build for production:**
-```bash
+# Production build → src-tauri/target/release/bundle/
 npm run tauri build
 ```
 
-Output is in `src-tauri/target/release/bundle/`.
+### Run the Brain (optional — for cross-device sync)
+
+```bash
+cd apps/brain
+cp .env.example .env          # set ANTHROPIC_API_KEY, an auth TOKEN, and Turso creds
+npm run dev
+```
+
+Then point a client at it from the desktop app's **Brain Connection** settings panel (URL + token).
+For phones, expose the brain over a [Tailscale](https://tailscale.com/) tunnel — no port-forwarding.
 
 ---
 
-## Quick Setup
+## AI & STT providers
 
-1. Launch the app — the overlay appears at the top of your screen
-2. Open Dashboard (`Ctrl+Shift+D`) → go to **Dev Space**
-3. Add your AI provider (OpenAI, Anthropic, Gemini, Groq, Ollama, etc.) using a curl command
-4. Add your STT provider for live transcription
-5. Use `Ctrl+\` to toggle the overlay, `Ctrl+Shift+S` for screenshots
+The **brain** uses **Claude** (key held server-side). The **desktop client** is BYOK — bring your own
+key for any provider via the Dev Space:
 
----
-
-## Keyboard Shortcuts
-
-| Action | Windows / Linux | macOS |
-|---|---|---|
-| Toggle Overlay | `Ctrl+\` | `Cmd+\` |
-| Open Dashboard | `Ctrl+Shift+D` | `Cmd+Shift+D` |
-| Focus Input | `Ctrl+Shift+I` | `Cmd+Shift+I` |
-| System Audio | `Ctrl+Shift+M` | `Cmd+Shift+M` |
-| Voice Input | `Ctrl+Shift+A` | `Cmd+Shift+A` |
-| Screenshot | `Ctrl+Shift+S` | `Cmd+Shift+S` |
-| Move Window | `Ctrl+Arrow Keys` | `Cmd+Arrow Keys` |
-
-All shortcuts are fully customizable in the Shortcuts settings page.
-
----
-
-## Supported AI Providers
-
-Configure any of these via the Dev Space using curl commands:
-
-- OpenAI (GPT-4o, GPT-4, etc.)
-- Anthropic (Claude 3.5, Claude 4, etc.)
-- Google Gemini
-- xAI Grok
-- Mistral AI
-- Groq
-- Ollama (local models)
-- Perplexity
-- Cohere
-- Any OpenAI-compatible endpoint
-
-## Supported STT Providers
-
-- OpenAI Whisper
-- Groq Whisper
-- ElevenLabs
-- Deepgram
-- Azure Speech
-- Google Speech-to-Text
-- IBM Watson
-- Any REST-based STT API
+- **LLM:** Anthropic Claude, OpenAI, Google Gemini, xAI Grok, Mistral, Groq, Ollama, Perplexity,
+  Cohere, or any OpenAI-compatible endpoint.
+- **STT:** OpenAI/Groq Whisper, ElevenLabs, Deepgram, Azure Speech, Google STT, IBM Watson, or any
+  REST STT API.
 
 ---
 
 ## Privacy
 
-- All conversations stored **locally** in SQLite — never sent anywhere
-- API keys stored in localStorage — sent **only** to your chosen provider
-- No telemetry, no analytics, no tracking of any kind
-- Zero dependency on any external server
-- Full offline operation (except LLM API calls)
-
----
-
-## BYOK — Custom Provider Setup
-
-Add any AI provider using a curl command in Dev Space:
-
-```bash
-curl -X POST https://api.openai.com/v1/chat/completions \
-  -H "Authorization: Bearer {{API_KEY}}" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model": "{{MODEL}}",
-    "messages": [
-      {"role": "system", "content": "{{SYSTEM_PROMPT}}"},
-      {"role": "user", "content": "{{TEXT}}"}
-    ],
-    "stream": true
-  }'
-```
-
-**Dynamic variables automatically replaced:**
-
-| Variable | Description |
-|---|---|
-| `{{TEXT}}` | User's text input |
-| `{{IMAGE}}` | Base64 encoded image |
-| `{{SYSTEM_PROMPT}}` | System instructions |
-| `{{MODEL}}` | AI model name |
-| `{{API_KEY}}` | API key |
-| `{{AUDIO}}` | Audio data (for STT) |
-| `{{LANGUAGE}}` | Language setting |
-
----
-
-## Why Naukri Lelo?
-
-Existing tools like Cluely, Interview Coder, Final Round AI charge $20–$100/month for features that should be free. They lock basic functionality behind paywalls and subscriptions.
-
-Naukri Lelo gives everything for free:
-- No license activation
-- No monthly subscription
-- No feature gates
-- No data sent to any third party
-- Full source code available to audit
+- Sensitive fields are **encrypted in the brain** (AES-256-GCM) before they ever reach the cloud DB.
+- DB creds, the encryption key, and the Claude key live **only in the brain** — never on mobile.
+- Secret/PII **redaction** runs before content leaves the brain (resume summaries, Telegram, etc.).
+- Solo desktop mode keeps everything **local** in SQLite with no external server.
 
 ---
 
 ## Contributing
 
-All contributions welcome.
+Contributions welcome — bug fixes, provider presets, mobile/desktop polish, MCP integrations.
 
-1. Fork the repository
+1. Fork the repo
 2. Create a feature branch (`git checkout -b fix/your-fix`)
-3. Commit your changes (`git commit -m 'fix: description'`)
+3. Commit (`git commit -m "fix: description"`)
 4. Push and open a Pull Request
-
-Bug fixes, Windows compatibility improvements, new STT/AI provider presets, UI improvements — all welcome.
 
 ---
 
 ## License
 
-Licensed under the **GNU General Public License v3.0** — see [LICENSE](LICENSE) for details.
-
-
+Licensed under the **GNU General Public License v3.0** — see [LICENSE](LICENSE).
 
 ---
 
 ## Acknowledgments
 
-
-- **[Tauri](https://tauri.app/)** — desktop app framework
-- **[tauri-nspanel](https://github.com/ahkohd/tauri-nspanel)** — macOS native panel integration
+- **[Tauri](https://tauri.app/)** — desktop + mobile app framework
+- **[Turso / libSQL](https://turso.tech/)** — SQLite-native cloud database
+- **[Model Context Protocol](https://modelcontextprotocol.io/)** — external tool integration
 - **[shadcn/ui](https://ui.shadcn.com/)** — UI components
-- **[@ricky0123/vad-react](https://github.com/ricky0123/vad)** — Voice Activity Detection
+- **[@ricky0123/vad-react](https://github.com/ricky0123/vad)** — voice activity detection
 
 ---
 
 <div align="center">
 
-**Free. Open Source. For everyone.**
+**Free. Open Source. Voice-first.**
 
-[Issues](https://github.com/Life2death/naukri-lelo/issues) · [Discussions](https://github.com/Life2death/naukri-lelo/discussions) · [Releases](https://github.com/Life2death/naukri-lelo/releases)
+[Issues](https://github.com/Life2death/krishna/issues) · [Discussions](https://github.com/Life2death/krishna/discussions) · [Releases](https://github.com/Life2death/krishna/releases)
+
+For a file-by-file breakdown, see [PROJECT_STRUCTURE.md](./PROJECT_STRUCTURE.md).
 
 </div>
-
----
-
-### Developer Reference
-
-For a complete file-by-file breakdown of the codebase, see [PROJECT_STRUCTURE.md](./PROJECT_STRUCTURE.md).
