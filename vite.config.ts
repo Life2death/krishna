@@ -23,6 +23,7 @@ export default defineConfig(async () => ({
       "@krishna/core/settings": path.resolve(__dirname, "packages/core/settings.ts"),
       "@krishna/core/secrets": path.resolve(__dirname, "packages/core/secrets.ts"),
       "@krishna/core/tools/mcp-bridge": path.resolve(__dirname, "packages/core/tools/mcp-bridge.ts"),
+      "@krishna/core/tools/computer": path.resolve(__dirname, "packages/core/tools/computer.ts"),
       "@krishna/core/tools": path.resolve(__dirname, "packages/core/tools/index.ts"),
       "@krishna/core/functions": path.resolve(__dirname, "packages/core/functions/index.ts"),
       "@krishna/core/executor": path.resolve(__dirname, "packages/core/executor.ts"),

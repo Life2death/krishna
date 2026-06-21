@@ -61,7 +61,28 @@ pub struct ShortcutsConfig {
 pub fn setup_global_shortcuts<R: Runtime>(
     app: &AppHandle<R>,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    // Let the frontend initialize from localStorage
+    // Register the kill-switch shortcut (Ctrl+Shift+Escape) at boot so it works
+    // even when another app is focused during computer-control sequences.
+    let kill_switch_key = "Ctrl+Shift+Escape";
+    if let Ok(shortcut) = kill_switch_key.parse::<Shortcut>() {
+        if let Err(e) = app.global_shortcut().register(shortcut) {
+            eprintln!("Failed to register cancel_plan global shortcut: {}", e);
+        } else {
+            eprintln!("Registered cancel_plan global shortcut: {}", kill_switch_key);
+            let state = app.state::<RegisteredShortcuts>();
+            let _ = match state.shortcuts.lock() {
+                Ok(mut registered) => {
+                    registered.insert("cancel_plan".to_string(), kill_switch_key.to_string());
+                }
+                Err(poisoned) => {
+                    eprintln!("Mutex poisoned in setup, recovering...");
+                    poisoned.into_inner()
+                        .insert("cancel_plan".to_string(), kill_switch_key.to_string());
+                }
+            };
+        }
+    }
+
     let state = app.state::<RegisteredShortcuts>();
     let _registered = match state.shortcuts.lock() {
         Ok(guard) => guard,
@@ -88,6 +109,7 @@ pub fn handle_shortcut_action<R: Runtime>(app: &AppHandle<R>, action_id: &str) {
         "audio_recording" => handle_audio_shortcut(app),
         "screenshot" => handle_screenshot_shortcut(app),
         "system_audio" => handle_system_audio_shortcut(app),
+        "cancel_plan" => handle_cancel_plan(app),
         custom_action => {
             // Emit custom action event for frontend to handle
             if let Some(window) = app.get_webview_window("main") {
@@ -269,6 +291,15 @@ fn handle_system_audio_shortcut<R: Runtime>(app: &AppHandle<R>) {
         // Emit event to toggle system audio capture - frontend will determine current state
         if let Err(e) = window.emit("toggle-system-audio", json!({})) {
             eprintln!("Failed to emit system audio event: {}", e);
+        }
+    }
+}
+
+/// Handle abort-plan shortcut
+fn handle_cancel_plan<R: Runtime>(app: &AppHandle<R>) {
+    if let Some(window) = app.get_webview_window("main") {
+        if let Err(e) = window.emit("plan-abort", ()) {
+            eprintln!("Failed to emit plan-abort event: {}", e);
         }
     }
 }

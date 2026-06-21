@@ -660,10 +660,12 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
     };
   }, [clearConfirmTimeout]);
 
-  // Esc key kill-switch: abort any in-progress AI fetch or plan execution
+  // Esc kill-switch via global shortcut (Ctrl+Shift+Escape) — works even when
+  // another app is focused during computer-control sequences.
   useEffect(() => {
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
+    let unlisten: (() => void) | undefined;
+    const setup = async () => {
+      unlisten = await listen("plan-abort", () => {
         ttsRef.current.stop();
         if (abortRef.current) {
           abortRef.current.abort();
@@ -675,10 +677,12 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
         }
         setStatus("idle");
         setKrishnaSpeaking(false);
-      }
+      });
     };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
+    setup();
+    return () => {
+      unlisten?.();
+    };
   }, []);
 
   const promptMemoryConfirmation = useCallback(async (key: string | null, value: string, inputText: string) => {

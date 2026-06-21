@@ -23,6 +23,8 @@ import { IContextType, ScreenshotConfig, TYPE_PROVIDER } from "@/types";
 import curl2Json from "@bany/curl-to-json";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import { registerTools } from "@krishna/core/tools";
+import { COMPUTER_TOOLS } from "@krishna/core/tools/computer";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { enable, disable } from "@tauri-apps/plugin-autostart";
 import {
@@ -769,6 +771,9 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     setCustomizable(newState);
     try {
       await invoke("set_computer_control_enabled", { enabled });
+      if (enabled) {
+        registerTools(COMPUTER_TOOLS);
+      }
       loadData();
     } catch (error) {
       console.error("Failed to toggle computer control:", error);
