@@ -1,5 +1,5 @@
 import type { FastifyInstance } from "fastify";
-import { getConversationById, fetchAIResponse } from "@krishna/core";
+import { getConversationById, fetchAIResponse, redactText } from "@krishna/core";
 import type { Message } from "@krishna/core/types";
 import type { BrainContext } from "../context.ts";
 import { claudeProvider, claudeSelectedProvider } from "../provider.ts";
@@ -93,10 +93,13 @@ export function resumeSummaryRoutes(app: FastifyInstance, ctx: BrainContext): vo
       // If JSON parsing fails, use raw text as summary
     }
 
+    // Redact any PII that the LLM prompt didn't catch
+    const redactedSummary = parsed.summary ? redactText(parsed.summary).text : (fullResponse.trim().split("\n")[0] || "No summary available.");
+
     const result: ResumeSummaryResult = {
-      summary: parsed.summary || fullResponse.trim().split("\n")[0] || "No summary available.",
+      summary: redactedSummary,
       recentTurns,
-      suggestedActions: parsed.suggestedActions || [],
+      suggestedActions: (parsed.suggestedActions || []).map((a) => redactText(a).text),
       conversationId: id,
     };
 

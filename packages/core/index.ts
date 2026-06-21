@@ -18,3 +18,4 @@ export * from "./secrets";
 export * from "./safe-local-storage";
 export * from "./tool-selector";
 export * from "./action-policy";
+export * from "./redact";

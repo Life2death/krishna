@@ -27,6 +27,14 @@ export const config = {
   anthropicApiKey: optional("ANTHROPIC_API_KEY"),
   claudeModel: optional("KRISHNA_CLAUDE_MODEL", "claude-sonnet-4-6"),
 
+  sttUrl: optional("KRISHNA_STT_URL"),
+  sttApiKey: optional("KRISHNA_STT_API_KEY"),
+  sttModel: optional("KRISHNA_STT_MODEL"),
+
+  telegramToken: optional("TELEGRAM_BOT_TOKEN"),
+
+  ragDisabled: optional("KRISHNA_RAG_DISABLED") === "true",
+
   mcpConfigPath: optional("KRISHNA_MCP_CONFIG_PATH"),
   mcpServers: optional("KRISHNA_MCP_SERVERS"),
 };

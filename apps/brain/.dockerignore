@@ -1,0 +1,14 @@
+.env
+.git
+.gitattributes
+.gitignore
+node_modules
+dist
+.vite
+.vite-temp
+*.md
+*.log
+*.db
+*.db-wal
+*.db-shm
+test/
