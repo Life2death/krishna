@@ -63,23 +63,26 @@ pub fn setup_global_shortcuts<R: Runtime>(
 ) -> Result<(), Box<dyn std::error::Error>> {
     // Register the kill-switch shortcut (Ctrl+Shift+Escape) at boot so it works
     // even when another app is focused during computer-control sequences.
-    let kill_switch_key = "Ctrl+Shift+Escape";
-    if let Ok(shortcut) = kill_switch_key.parse::<Shortcut>() {
-        if let Err(e) = app.global_shortcut().register(shortcut) {
-            eprintln!("Failed to register cancel_plan global shortcut: {}", e);
-        } else {
-            eprintln!("Registered cancel_plan global shortcut: {}", kill_switch_key);
-            let state = app.state::<RegisteredShortcuts>();
-            let _ = match state.shortcuts.lock() {
-                Ok(mut registered) => {
-                    registered.insert("cancel_plan".to_string(), kill_switch_key.to_string());
-                }
-                Err(poisoned) => {
-                    eprintln!("Mutex poisoned in setup, recovering...");
-                    poisoned.into_inner()
-                        .insert("cancel_plan".to_string(), kill_switch_key.to_string());
-                }
-            };
+    #[cfg(desktop)]
+    {
+        let kill_switch_key = "Ctrl+Shift+Escape";
+        if let Ok(shortcut) = kill_switch_key.parse::<Shortcut>() {
+            if let Err(e) = app.global_shortcut().register(shortcut) {
+                eprintln!("Failed to register cancel_plan global shortcut: {}", e);
+            } else {
+                eprintln!("Registered cancel_plan global shortcut: {}", kill_switch_key);
+                let state = app.state::<RegisteredShortcuts>();
+                let _ = match state.shortcuts.lock() {
+                    Ok(mut registered) => {
+                        registered.insert("cancel_plan".to_string(), kill_switch_key.to_string());
+                    }
+                    Err(poisoned) => {
+                        eprintln!("Mutex poisoned in setup, recovering...");
+                        poisoned.into_inner()
+                            .insert("cancel_plan".to_string(), kill_switch_key.to_string());
+                    }
+                };
+            }
         }
     }
 
