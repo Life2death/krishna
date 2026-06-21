@@ -47,7 +47,6 @@ chrono = "0.4"
 aes-gcm = "0.10"
 sha2 = "0.10"
 rand = "0.8"
-enigo = "0.2"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 tauri-plugin-macos-permissions = "2"
@@ -64,6 +63,7 @@ libpulse-simple-binding = "2.29.0"
 
 [target.'cfg(not(target_os = "android"))'.dependencies]
 xcap = "0.0.12"
+enigo = "0.2"
 
 [target.'cfg(any(target_os = "macos", windows, target_os = "linux"))'.dependencies]
 tauri-plugin-autostart = "2.5.0"
