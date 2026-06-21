@@ -379,7 +379,7 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
     if (!userText && !assistantText) return;
     const now = Date.now();
     const turn: ConversationTurn = {
-      id: String(now),
+      id: crypto.randomUUID(),
       userText,
       assistantText,
       timestamp: now,
@@ -389,7 +389,7 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
       const idle = now - lastTurnTimeRef.current;
       if (!activeConversationRef.current || idle > IDLE_THRESHOLD) {
         const conv = await createConversation({
-          id: String(now),
+          id: crypto.randomUUID(),
           title: generateConversationTitle(userText),
           createdAt: now,
           updatedAt: now,
@@ -403,6 +403,28 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
       ]);
       lastTurnTimeRef.current = now;
     } catch (e) {
+      // Stale/missing conversation — recreate and retry once
+      const errMsg = e instanceof Error ? e.message : String(e);
+      if (errMsg.includes("FOREIGN KEY") || errMsg.includes("does not exist")) {
+        try {
+          const conv = await createConversation({
+            id: crypto.randomUUID(),
+            title: generateConversationTitle(userText),
+            createdAt: now,
+            updatedAt: now,
+            messages: [],
+          });
+          activeConversationRef.current = conv.id;
+          await appendMessages(activeConversationRef.current, [
+            { role: "user", content: userText, timestamp: now },
+            { role: "assistant", content: assistantText, timestamp: now + 1 },
+          ]);
+          lastTurnTimeRef.current = now;
+          return;
+        } catch {
+          // fall through to outer catch
+        }
+      }
       console.error("Failed to persist turn to SQLite:", e);
     }
   };
@@ -500,7 +522,7 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
           let currentTurn: ConversationTurn | null = null;
           for (const msg of recent.messages) {
             if (msg.role === "user") {
-              currentTurn = { id: String(Date.now()), userText: msg.content, assistantText: "", timestamp: msg.timestamp };
+              currentTurn = { id: crypto.randomUUID(), userText: msg.content, assistantText: "", timestamp: msg.timestamp };
             } else if (msg.role === "assistant" && currentTurn) {
               currentTurn.assistantText = msg.content;
               turns.push(currentTurn);

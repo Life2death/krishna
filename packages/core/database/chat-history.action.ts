@@ -418,6 +418,14 @@ export async function appendMessages(
 
   const db = await getDatabase();
 
+  const parent = await db.select<{ id: string }[]>(
+    "SELECT id FROM conversations WHERE id = ? LIMIT 1",
+    [conversationId]
+  );
+  if (parent.length === 0) {
+    throw new Error(`appendMessages: conversation "${conversationId}" does not exist — cannot append messages`);
+  }
+
   for (const msg of messages) {
     if (!msg.role || !msg.content) {
       console.warn("Skipping invalid message in appendMessages");
