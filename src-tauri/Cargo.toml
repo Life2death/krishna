@@ -1,6 +1,6 @@
 [package]
 name = "krishna"
-version = "2.0.6"
+version = "2.0.7"
 description = "Krishna - A talking desktop AI assistant. Voice-in, voice-out, open apps via voice."
 authors = ["life2death"]
 license = "GPL-3.0"

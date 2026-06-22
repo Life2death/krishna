@@ -30,7 +30,7 @@ export const KrishnaVAD = () => {
     userSpeakingThreshold: 0.4,
     startOnLoad: !missingProviders,
     baseAssetPath: "/",
-    onnxWASMBasePath: "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.26.0/dist/",
+    onnxWASMBasePath: "/",
     onSpeechEnd: async (audio) => {
       if (isKrishnaSpeaking()) return;
 
