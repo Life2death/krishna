@@ -1,5 +1,5 @@
-// Copies onnxruntime-web WASM files from node_modules to public/ so the
-// VAD worker can load them locally without hitting any CDN at runtime.
+// Copies onnxruntime-web WASM binaries + worker MJS scripts from node_modules
+// to public/ so the VAD worker can load them locally without hitting any CDN.
 // Runs automatically via the "prebuild" npm script before every build.
 import { copyFileSync, mkdirSync, existsSync } from "fs";
 import { resolve, dirname } from "path";
@@ -12,10 +12,16 @@ const dest = resolve(__dirname, "../public");
 mkdirSync(dest, { recursive: true });
 
 const files = [
+  // WASM binaries
   "ort-wasm-simd-threaded.wasm",
   "ort-wasm-simd-threaded.asyncify.wasm",
   "ort-wasm-simd-threaded.jsep.wasm",
   "ort-wasm-simd-threaded.jspi.wasm",
+  // Worker MJS scripts — required for threaded WASM execution
+  "ort-wasm-simd-threaded.mjs",
+  "ort-wasm-simd-threaded.asyncify.mjs",
+  "ort-wasm-simd-threaded.jsep.mjs",
+  "ort-wasm-simd-threaded.jspi.mjs",
 ];
 
 for (const file of files) {

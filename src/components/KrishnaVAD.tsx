@@ -1,5 +1,10 @@
 import { useState, useEffect } from "react";
 import { useMicVAD } from "@ricky0123/vad-react";
+import * as ort from "onnxruntime-web";
+
+// Disable ONNX threading — requires SharedArrayBuffer which WebView2 production
+// builds don't expose. Single-thread mode works fine for real-time VAD latency.
+ort.env.wasm.numThreads = 1;
 import { AlertCircleIcon } from "lucide-react";
 import { Button } from "@/components";
 import { KrishnaChakra } from "./KrishnaChakra";
@@ -91,6 +96,11 @@ export const KrishnaVAD = () => {
     }
   }, [missingProviders, muted, vad.loading, vad.errored, vad.listening]);
 
+  // Log the actual VAD error string so we can diagnose failures in production
+  useEffect(() => {
+    if (vad.errored) console.error("[KrishnaVAD] VAD error:", vad.errored);
+  }, [vad.errored]);
+
   // Wire VAD userSpeaking to presence overlay
   useEffect(() => {
     if (vad.userSpeaking) {
@@ -130,7 +140,7 @@ export const KrishnaVAD = () => {
     if (missingSTT && missingAI && !brainHandlesAI) return "No speech or AI provider — open Settings";
     if (missingSTT) return "No speech provider — open Settings › Speech";
     if (missingAI && !brainHandlesAI) return "No AI provider — open Settings › Brain";
-    if (vad.errored) return "Mic error — reload app to retry";
+    if (vad.errored) return typeof vad.errored === "string" ? `Mic error: ${vad.errored}` : "Mic error — reload app to retry";
     if (vad.loading) return "Loading voice detection…";
     if (muted) return "Mic muted — click to unmute";
     if (isTranscribing) return "Transcribing...";
