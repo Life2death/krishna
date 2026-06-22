@@ -1,10 +1,5 @@
 import { useState, useEffect } from "react";
 import { useMicVAD } from "@ricky0123/vad-react";
-import * as ort from "onnxruntime-web";
-
-// Disable ONNX threading — requires SharedArrayBuffer which WebView2 production
-// builds don't expose. Single-thread mode works fine for real-time VAD latency.
-ort.env.wasm.numThreads = 1;
 import { AlertCircleIcon } from "lucide-react";
 import { Button } from "@/components";
 import { KrishnaChakra } from "./KrishnaChakra";
@@ -35,7 +30,20 @@ export const KrishnaVAD = () => {
     userSpeakingThreshold: 0.4,
     startOnLoad: !missingProviders,
     baseAssetPath: "/",
-    onnxWASMBasePath: "/",
+    // ONNX loads its WASM runtime by dynamically import()-ing ort-wasm-*.mjs. Pointing
+    // this at a local path routes that import through Vite's dev transform, which 500s
+    // on the prebuilt module ("Failed to fetch dynamically imported module ...?import").
+    // The CDN serves the .mjs raw, so it loads in both dev and prod. The model files
+    // (.onnx) are still bundled locally via baseAssetPath. Requires cdn.jsdelivr.net in
+    // the prod CSP script-src (cross-origin module import) + connect-src (wasm fetch).
+    onnxWASMBasePath: "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.26.0/dist/",
+    // Disable ONNX threading on vad's own ort instance — threaded WASM needs
+    // SharedArrayBuffer, which Tauri's production WebView doesn't expose. Done via
+    // the ortConfig hook (not a direct onnxruntime-web import) so Vite never has to
+    // pre-bundle the 26MB package — a direct import stalls the dev server on startup.
+    ortConfig: (ort) => {
+      ort.env.wasm.numThreads = 1;
+    },
     onSpeechEnd: async (audio) => {
       if (isKrishnaSpeaking()) return;
 

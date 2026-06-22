@@ -2,7 +2,7 @@
   "name": "krishna",
   "private": true,
   "workspaces": ["packages/core", "apps/brain"],
-  "version": "2.0.8",
+  "version": "2.0.9",
   "description": "Krishna — a talking desktop AI assistant. Voice-in, voice-out, open apps/websites/files via voice command.",
   "author": {
     "name": "life2death",
@@ -33,7 +33,6 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "prebuild": "node scripts/copy-wasm.js",
     "build": "tsc && vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
