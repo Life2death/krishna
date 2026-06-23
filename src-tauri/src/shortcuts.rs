@@ -12,6 +12,13 @@ use tokio::time::{sleep, Duration};
 use tauri_nspanel::ManagerExt;
 
 use crate::window::show_dashboard_window;
+
+/// Global kill-switch / barge-in stop hotkey. Rust-managed (not in the frontend's
+/// shortcut config), so it must be (re-)registered at boot AND after every frontend
+/// shortcut sync. NOT Ctrl+Shift+Escape — Windows reserves that for Task Manager.
+#[cfg(desktop)]
+const CANCEL_PLAN_KEY: &str = "Ctrl+Shift+X";
+
 // State for window visibility
 pub struct WindowVisibility {
     #[allow(dead_code)]
@@ -61,11 +68,11 @@ pub struct ShortcutsConfig {
 pub fn setup_global_shortcuts<R: Runtime>(
     app: &AppHandle<R>,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    // Register the kill-switch shortcut (Ctrl+Shift+Escape) at boot so it works
-    // even when another app is focused during computer-control sequences.
+    // Register the kill-switch shortcut at boot so it works even when another app is
+    // focused during computer-control sequences.
     #[cfg(desktop)]
     {
-        let kill_switch_key = "Ctrl+Shift+Escape";
+        let kill_switch_key = CANCEL_PLAN_KEY;
         if let Ok(shortcut) = kill_switch_key.parse::<Shortcut>() {
             if let Err(e) = app.global_shortcut().register(shortcut) {
                 eprintln!("Failed to register cancel_plan global shortcut: {}", e);
@@ -404,6 +411,20 @@ fn update_shortcuts_impl<R: Runtime>(
                 eprintln!("Failed to register {} shortcut: {}", action_id, e);
                 registration_failures.push((action_id, shortcut_str, e.to_string()));
             }
+        }
+    }
+
+    // unregister_all_shortcuts above also wiped the Rust-managed cancel_plan kill-switch
+    // (it's not part of the frontend config). Re-register it so the stop/barge-in hotkey
+    // survives every frontend shortcut sync — otherwise it dies right after boot.
+    if let Ok(shortcut) = CANCEL_PLAN_KEY.parse::<Shortcut>() {
+        match app.global_shortcut().register(shortcut) {
+            Ok(_) => {
+                eprintln!("Re-registered cancel_plan global shortcut: {}", CANCEL_PLAN_KEY);
+                successfully_registered
+                    .insert("cancel_plan".to_string(), CANCEL_PLAN_KEY.to_string());
+            }
+            Err(e) => eprintln!("Failed to re-register cancel_plan shortcut: {}", e),
         }
     }
 

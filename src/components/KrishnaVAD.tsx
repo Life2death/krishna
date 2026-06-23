@@ -44,6 +44,15 @@ export const KrishnaVAD = () => {
     ortConfig: (ort) => {
       ort.env.wasm.numThreads = 1;
     },
+    // Barge-in: if the user starts talking while Krishna is speaking, stop him
+    // immediately. Reuses the wired "plan-abort" handler (stops TTS + aborts the
+    // in-flight AI stream). onSpeechEnd then transcribes the interrupting utterance
+    // as the next command, since plan-abort has cleared the speaking flag by then.
+    onSpeechStart: () => {
+      if (isKrishnaSpeaking()) {
+        emit("plan-abort");
+      }
+    },
     onSpeechEnd: async (audio) => {
       if (isKrishnaSpeaking()) return;
 
@@ -75,6 +84,17 @@ export const KrishnaVAD = () => {
 
         if (transcription) {
           await krishna.processCommand(transcription);
+        } else {
+          // STT ran but returned nothing — capture it so silent failures are visible.
+          logCommand({
+            id: crypto.randomUUID(),
+            transcript: "",
+            outcome: "failed",
+            failureReason: "stt_failed",
+            detail: "empty transcription",
+            source: "voice",
+            createdAt: Date.now(),
+          }).catch(() => {});
         }
       } catch (error) {
         console.error("Krishna VAD transcription failed:", error);

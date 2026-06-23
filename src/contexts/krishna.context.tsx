@@ -961,6 +961,7 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
               }
             } catch (err) {
               const msg = err instanceof Error ? err.message : "Failed to trigger job extraction";
+              logOutcome(pending.input ?? "", "failed", "tool_failed", msg);
               await recordTurn(pending.input || "", "I had trouble: " + msg);
               setStatus("speaking");
               setKrishnaSpeaking(true);
@@ -1008,6 +1009,7 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
               }
             } catch (err) {
               const msg = err instanceof Error ? err.message : "Failed to set reminder";
+              logOutcome(pending.input ?? "", "failed", "tool_failed", msg);
               await recordTurn(pending.input || "", "I had trouble: " + msg);
               setStatus("speaking");
               setKrishnaSpeaking(true);
@@ -1177,6 +1179,7 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
             }
 
             setStatus("thinking");
+            let skillHandled = true;
             try {
               planAbortRef.current = new AbortController();
               const result = await executePlan(steps, { signal: planAbortRef.current.signal });
@@ -1208,15 +1211,22 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
                 }
               }
             } catch (parseErr) {
-              // invalid plan template, fall through to LLM
+              // Invalid plan template — don't silently dead-end. Log for diagnostics
+              // and fall through to the LLM path (don't return). No command-outcome row
+              // here: the LLM path that follows decides the real outcome.
+              console.error("Skill plan template failed to parse, falling through to LLM:", parseErr);
+              skillHandled = false;
             } finally {
               setStatus("idle");
             }
-            return;
+            if (skillHandled) return;
+            break;
           }
         }
-      } catch {
-        // DB unavailable, fall through to LLM
+      } catch (skillsErr) {
+        // Skills lookup unavailable (e.g. DB) — fall through to LLM. Surface it instead
+        // of swallowing silently; the command still proceeds, so no failure row.
+        console.warn("Skill lookup failed, falling through to LLM:", skillsErr);
       }
 
       // Memory save: "remember that..."
@@ -1488,18 +1498,31 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
               const isStatus = result.spokenResponse.startsWith("Opening") || result.spokenResponse.startsWith("Failed");
               if (isStatus && !spokenTextRecorded) {
                 await recordTurn(pendingUserTextRef.current, result.spokenResponse);
-                logOutcome(command, "answered", undefined, undefined, result.spokenResponse);
+                // A "Failed…" status is a tool failure, not an answer — capture it as such
+                // so it shows up in command insights instead of inflating the success count.
+                const toolFailed = result.spokenResponse.startsWith("Failed");
+                logOutcome(
+                  command,
+                  toolFailed ? "failed" : "answered",
+                  toolFailed ? "tool_failed" : undefined,
+                  toolFailed ? result.spokenResponse : undefined,
+                  result.spokenResponse,
+                );
                 setStatus("speaking");
-              setLastSpoken(result.spokenResponse);
-              setKrishnaSpeaking(true);
-              try {
-                await ttsRef.current.speak(result.spokenResponse);
-              } finally {
-                setKrishnaSpeaking(false);
+                setLastSpoken(result.spokenResponse);
+                setKrishnaSpeaking(true);
+                try {
+                  await ttsRef.current.speak(result.spokenResponse);
+                } finally {
+                  setKrishnaSpeaking(false);
+                }
               }
+            } else {
+              // Action ran but produced no response and asked for no confirmation —
+              // treat as an uncaptured tool failure rather than letting it vanish.
+              logOutcome(command, "failed", "tool_failed", "action produced no response");
             }
           }
-        }
       } catch (err) {
         if (signal.aborted) {
           setStatus("idle");

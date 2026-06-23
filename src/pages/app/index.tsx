@@ -2,7 +2,7 @@ import { Card, Updater, DragButton, CustomCursor, Button, KrishnaVAD, KrishnaCha
 import { Completion, BrainSelector, SystemPromptSelector } from "./components";
 import { useApp, useKrishna } from "@/hooks";
 import { useApp as useAppContext } from "@/contexts";
-import { LayoutDashboardIcon } from "lucide-react";
+import { LayoutDashboardIcon, SquareIcon } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
 import { ErrorBoundary } from "react-error-boundary";
 import { ErrorLayout } from "@/layouts";
@@ -39,6 +39,16 @@ const App = () => {
         <Card className="w-full flex flex-row items-center gap-1 p-2">
           <KrishnaVAD />
           <MobileVoiceButton />
+          {(krishna.status === "speaking" || krishna.status === "thinking") && (
+            <Button
+              size="icon"
+              className="cursor-pointer bg-red-50 hover:bg-red-100"
+              title="Stop Krishna"
+              onClick={krishna.stopSpeaking}
+            >
+              <SquareIcon className="h-4 w-4 text-red-500" />
+            </Button>
+          )}
 
           <div className="w-full flex flex-row gap-1 items-center">
             <Completion isHidden={isHidden} />
