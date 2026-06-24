@@ -1,12 +1,14 @@
-import { useState, useEffect, useCallback } from "react";
-import { getCommandStats, getRecentCommands, deleteAllCommandLog } from "@/lib/database";
+import { useState, useEffect, useCallback, useRef } from "react";
+import { getCommandStats, getRecentActivity, deleteAllCommandLog } from "@/lib/database";
 import type { FailureReason, CommandLogEntry } from "@/lib/database";
+import { listen } from "@tauri-apps/api/event";
 
 export interface CommandStats {
   total: number;
   answered: number;
   failed: number;
   declined: number;
+  pending: number;
   byReason: { reason: FailureReason; count: number }[];
 }
 
@@ -15,6 +17,7 @@ const emptyStats: CommandStats = {
   answered: 0,
   failed: 0,
   declined: 0,
+  pending: 0,
   byReason: [],
 };
 
@@ -22,13 +25,14 @@ export function useCommandInsights() {
   const [stats, setStats] = useState<CommandStats>(emptyStats);
   const [recent, setRecent] = useState<CommandLogEntry[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const refresh = useCallback(async () => {
     setIsLoading(true);
     try {
       const [s, r] = await Promise.all([
         getCommandStats(),
-        getRecentCommands({ outcome: "failed", limit: 50 }),
+        getRecentActivity({ limit: 20 }),
       ]);
       setStats(s);
       setRecent(r);
@@ -39,6 +43,22 @@ export function useCommandInsights() {
       setIsLoading(false);
     }
   }, []);
+
+  // Live refresh via Tauri event — bar emits "command-log-updated" after every insert/update
+  useEffect(() => {
+    const setup = async () => {
+      const unlisten = await listen("command-log-updated", () => {
+        if (debounceRef.current) clearTimeout(debounceRef.current);
+        debounceRef.current = setTimeout(refresh, 150);
+      });
+      return unlisten;
+    };
+    const cleanup = setup();
+    return () => {
+      cleanup.then((fn) => fn());
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+  }, [refresh]);
 
   useEffect(() => {
     refresh();

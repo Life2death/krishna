@@ -2,7 +2,7 @@ import { Badge, Input, Card, Empty, Button } from "@/components";
 import { useHistory, useCommandInsights } from "@/hooks";
 import { PageLayout } from "@/layouts";
 import { deleteAllConversations } from "@/lib/database";
-import { MessageCircleIcon, Search, Trash2, XCircleIcon, BarChart3Icon, LightbulbIcon } from "lucide-react";
+import { MessageCircleIcon, Search, Trash2, XCircleIcon, BarChart3Icon, LightbulbIcon, RefreshCwIcon, ClockIcon } from "lucide-react";
 import moment from "moment";
 import { useNavigate } from "react-router-dom";
 import type { FailureReason, CommandLogEntry } from "@/lib/database";
@@ -17,6 +17,13 @@ const FAILURE_LABELS: Record<FailureReason, string> = {
   wake_word_missed: "Wake word not detected",
   user_declined: "User declined",
   unknown: "Unknown error",
+};
+
+const STATUS_BADGE: Record<string, { color: string; bg: string; label: string }> = {
+  pending: { color: "text-amber-600", bg: "bg-amber-50 dark:bg-amber-950/30", label: "In progress" },
+  answered: { color: "text-green-600", bg: "bg-green-50 dark:bg-green-950/30", label: "Answered" },
+  failed: { color: "text-red-600", bg: "bg-red-50 dark:bg-red-950/30", label: "Failed" },
+  declined: { color: "text-orange-600", bg: "bg-orange-50 dark:bg-orange-950/30", label: "Declined" },
 };
 
 const FAILURE_HINTS: Partial<Record<FailureReason, string>> = {
@@ -63,7 +70,7 @@ const Dashboard = () => {
     >
       <>
         {/* Insights section */}
-        {!statsLoading && stats.total > 0 && (
+        {!statsLoading && (stats.total > 0 || stats.pending > 0) && (
           <div className="mb-6 rounded-lg border p-4">
             <div className="mb-3 flex items-center justify-between">
               <h2 className="flex items-center gap-1.5 text-sm font-semibold">
@@ -76,7 +83,7 @@ const Dashboard = () => {
             </div>
 
             {/* Stat cards */}
-            <div className="mb-3 grid grid-cols-4 gap-2">
+            <div className="mb-3 grid grid-cols-5 gap-2">
               <Card className="p-3 text-center shadow-none">
                 <p className="text-lg font-bold">{stats.total}</p>
                 <p className="text-xs text-muted-foreground">Total</p>
@@ -93,6 +100,12 @@ const Dashboard = () => {
                 <p className="text-lg font-bold text-orange-600">{stats.declined}</p>
                 <p className="text-xs text-muted-foreground">Declined</p>
               </Card>
+              {stats.pending > 0 && (
+                <Card className="p-3 text-center shadow-none">
+                  <p className="text-lg font-bold text-amber-600">{stats.pending}</p>
+                  <p className="text-xs text-muted-foreground">In progress</p>
+                </Card>
+              )}
             </div>
 
             {/* Failures list */}
@@ -115,31 +128,46 @@ const Dashboard = () => {
               </div>
             )}
 
-            {/* Failed transcripts */}
+            {/* Recent activity — all outcomes, live */}
             {recent.length > 0 && (
               <div className="mb-2 space-y-1">
                 <p className="text-xs font-medium text-muted-foreground">
-                  Failed commands ({recent.length})
+                  Recent activity ({recent.length})
                 </p>
                 <div className="max-h-60 space-y-1 overflow-y-auto">
-                  {recent.map((entry) => (
-                    <div
-                      key={entry.id}
-                      className="flex items-start justify-between gap-2 rounded-md border border-red-100 bg-red-50/50 px-3 py-2 text-xs dark:border-red-900 dark:bg-red-950/30"
-                    >
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate font-medium text-red-800 dark:text-red-200">
-                          {entry.transcript}
-                        </p>
-                        <p className="mt-0.5 text-muted-foreground">
-                          {FAILURE_LABELS[entry.failureReason ?? "unknown"]}
-                        </p>
+                  {recent.map((entry) => {
+                    const badge = STATUS_BADGE[entry.outcome] ?? STATUS_BADGE.failed;
+                    return (
+                      <div
+                        key={entry.id}
+                        className={`flex items-start justify-between gap-2 rounded-md border px-3 py-2 text-xs ${badge.bg}`}
+                      >
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-1.5">
+                            {entry.outcome === "pending" ? (
+                              <RefreshCwIcon className="h-3 w-3 animate-spin text-amber-500" />
+                            ) : entry.outcome === "answered" ? (
+                              <span className="h-2 w-2 rounded-full bg-green-500" />
+                            ) : entry.outcome === "declined" ? (
+                              <span className="h-2 w-2 rounded-full bg-orange-500" />
+                            ) : (
+                              <XCircleIcon className="h-3 w-3 text-red-500" />
+                            )}
+                            <span className="truncate font-medium">
+                              {entry.transcript || "(empty)"}
+                            </span>
+                          </div>
+                          <p className="mt-0.5 text-muted-foreground">
+                            {badge.label}
+                            {entry.failureReason && ` — ${FAILURE_LABELS[entry.failureReason] ?? entry.failureReason}`}
+                          </p>
+                        </div>
+                        <span className="shrink-0 text-muted-foreground">
+                          {moment(entry.createdAt).format("MMM D, h:mm A")}
+                        </span>
                       </div>
-                      <span className="shrink-0 text-muted-foreground">
-                        {moment(entry.createdAt).format("MMM D, h:mm A")}
-                      </span>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             )}

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { isLookCommand, isJobExtractionCommand } from "@/lib/perception";
+import { isLookCommand, isJobExtractionCommand, isJobStatusCommand } from "@/lib/perception";
 
 describe("isLookCommand", () => {
   it('detects "what\'s on my screen"', () => {
@@ -60,6 +60,14 @@ describe("isJobExtractionCommand", () => {
     expect(isJobExtractionCommand("start job hunter")).toBe(true);
   });
 
+  it('detects "execute daily job pipeline"', () => {
+    expect(isJobExtractionCommand("execute daily job pipeline")).toBe(true);
+  });
+
+  it('detects "run the job pipeline"', () => {
+    expect(isJobExtractionCommand("run the job pipeline")).toBe(true);
+  });
+
   it('rejects "open Chrome"', () => {
     expect(isJobExtractionCommand("open Chrome")).toBe(false);
   });
@@ -70,5 +78,40 @@ describe("isJobExtractionCommand", () => {
 
   it("rejects empty string", () => {
     expect(isJobExtractionCommand("")).toBe(false);
+  });
+
+  it('does not treat a status query as a trigger', () => {
+    // "what's the job pipeline status" must NOT fire a run (status is handled separately).
+    expect(isJobStatusCommand("what's the job pipeline status")).toBe(true);
+  });
+});
+
+describe("isJobStatusCommand", () => {
+  it('detects "what\'s the pipeline status"', () => {
+    expect(isJobStatusCommand("what's the pipeline status")).toBe(true);
+  });
+
+  it('detects "did the job extraction finish"', () => {
+    expect(isJobStatusCommand("did the job extraction finish")).toBe(true);
+  });
+
+  it('detects "is the job hunter done"', () => {
+    expect(isJobStatusCommand("is the job hunter done")).toBe(true);
+  });
+
+  it('detects "how is the daily job pipeline"', () => {
+    expect(isJobStatusCommand("how is the daily job pipeline")).toBe(true);
+  });
+
+  it('rejects the plain trigger "execute daily job pipeline"', () => {
+    expect(isJobStatusCommand("execute daily job pipeline")).toBe(false);
+  });
+
+  it('rejects "open Chrome"', () => {
+    expect(isJobStatusCommand("open Chrome")).toBe(false);
+  });
+
+  it("rejects empty string", () => {
+    expect(isJobStatusCommand("")).toBe(false);
   });
 });
