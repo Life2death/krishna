@@ -1,6 +1,7 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
 import {
   Dashboard,
+  Status,
   App,
   SystemPrompts,
   ViewChat,
@@ -21,6 +22,7 @@ export default function AppRoutes() {
         <Route path="/presence" element={<Presence />} />
         <Route element={<DashboardLayout />}>
           <Route path="/dashboard" element={<Dashboard />} />
+          <Route path="/status" element={<Status />} />
           <Route path="/system-prompts" element={<SystemPrompts />} />
           <Route path="/chats/view/:conversationId" element={<ViewChat />} />
           <Route path="/shortcuts" element={<Shortcuts />} />

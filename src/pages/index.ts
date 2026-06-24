@@ -1,4 +1,5 @@
 export { default as Dashboard } from "./dashboard";
+export { default as Status } from "./status";
 export { default as ViewChat } from "./chats/components/View";
 export { default as App } from "./app";
 export { default as SystemPrompts } from "./system-prompts";

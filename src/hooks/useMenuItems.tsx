@@ -9,6 +9,7 @@ import {
   PowerIcon,
   MailIcon,
   BugIcon,
+  BarChart3Icon,
 } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
 import { useApp } from "@/contexts";
@@ -27,6 +28,11 @@ export const useMenuItems = () => {
       icon: HomeIcon,
       label: "Dashboard",
       href: "/dashboard",
+    },
+    {
+      icon: BarChart3Icon,
+      label: "Status",
+      href: "/status",
     },
     {
       icon: WandSparkles,
