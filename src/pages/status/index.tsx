@@ -153,7 +153,7 @@ const Status = () => {
                         className={`flex items-start justify-between gap-2 rounded-md border px-3 py-2 text-xs ${badge.bg}`}
                       >
                         <div className="min-w-0 flex-1">
-                          <div className="flex items-center gap-1.5">
+                          <div className="flex min-w-0 items-center gap-1.5">
                             {entry.outcome === "pending" ? (
                               <RefreshCwIcon className="h-3 w-3 animate-spin text-amber-500" />
                             ) : entry.outcome === "answered" ? (
@@ -163,7 +163,7 @@ const Status = () => {
                             ) : (
                               <XCircleIcon className="h-3 w-3 text-red-500" />
                             )}
-                            <span className="truncate font-medium">
+                            <span className="line-clamp-1 font-medium">
                               {entry.transcript || "(empty)"}
                             </span>
                           </div>
