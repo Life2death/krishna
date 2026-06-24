@@ -23,9 +23,9 @@ import { detectWakeWord } from "@/lib/wake-word";
 import { parseReminderCommand } from "@/lib/reminders";
 import { createReminder, getDueReminders, updateReminder, cancelReminder } from "@/lib/repo-bound";
 import { createConversation, appendMessages, generateConversationTitle, getMostRecentConversation, deleteConversation } from "@/lib/repo-bound";
-import { isLookCommand, isUndoCommand, isJobExtractionCommand } from "@/lib/perception";
-import { triggerJobExtractionWorkflow } from "@/lib/integrations/github-workflow";
-import { createAuditEntry, getLastReversible, logCommand } from "@/lib/database";
+import { isLookCommand, isUndoCommand, isJobExtractionCommand, isJobStatusCommand } from "@/lib/perception";
+import { triggerJobExtractionWorkflow, getJobExtractionStatus } from "@/lib/integrations/github-workflow";
+import { createAuditEntry, getLastReversible, logCommand, insertPendingCommand, updateCommandOutcome } from "@/lib/database";
 import type { CommandOutcome, FailureReason } from "@/lib/database";
 import { setConfirmAction } from "@krishna/core/tools/mcp-bridge";
 import type { AssistantStatus, StepAction } from "@/types/assistant";
@@ -271,6 +271,7 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
   const clearLastError = useCallback(() => setLastError(null), []);
   const [conversationHistory, setConversationHistory] = useState<ConversationTurn[]>([]);
   const pendingUserTextRef = useRef<string>("");
+  const currentCaptureIdRef = useRef<string | null>(null);
   const [voice, setVoiceState] = useState<string>(() => {
     return safeLocalStorage.getItem(STORAGE_KEYS.KRISHNA_VOICE) || "";
   });
@@ -383,15 +384,19 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
   }, [attachedFiles]);
 
   const logOutcome = (
-    transcript: string,
+    _transcript: string,
     outcome: CommandOutcome,
     failureReason?: FailureReason,
     detail?: string,
     response?: string,
-    source: "voice" | "text" | "mobile" = "voice",
+    _source: "voice" | "text" | "mobile" = "voice",
+    captureId?: string,
   ) => {
-    logCommand({ id: crypto.randomUUID(), transcript, outcome, failureReason, detail, response, source, createdAt: Date.now() })
-      .catch((err) => console.error("Failed to log command outcome:", err));
+    const id = captureId ?? currentCaptureIdRef.current ?? crypto.randomUUID();
+    updateCommandOutcome({ id, outcome, failureReason, detail, response }).catch((err) =>
+      console.error("Failed to update command outcome:", err)
+    );
+    emit("command-log-updated").catch(() => {});
   };
 
   const recordTurn = async (userText: string, assistantText: string) => {
@@ -619,6 +624,7 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
           type: "mcp_tool",
           spokenResponse: msg,
           resolve,
+          captureId: currentCaptureIdRef.current ?? undefined,
         };
         reAskRef.current = false;
         clearConfirmTimeout();
@@ -648,6 +654,7 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
     memoryData?: { key: string | null; value: string };
     reminderData?: { text: string; dueAt: number; recurrence: string | null };
     resolve?: (value: boolean) => void;
+    captureId?: string;
   } | null>(null);
   const reAskRef = useRef(false);
   const confirmTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -709,6 +716,7 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
       spokenResponse: "Should I remember that " + (key ? key + " is " : "") + value + "?",
       memoryData: { key, value },
       input: inputText,
+      captureId: currentCaptureIdRef.current ?? undefined,
     };
     reAskRef.current = false;
     clearConfirmTimeout();
@@ -852,6 +860,7 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
                   });
                 } catch { /* non-critical */ }
                 await recordTurn(pending.input || "", successMsg);
+                logOutcome(pending.input ?? "", "answered", undefined, undefined, successMsg, "voice", pending.captureId);
                 setLastSpoken(successMsg);
                 setKrishnaSpeaking(true);
                 setStatus("speaking");
@@ -862,6 +871,7 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
                 }
               } else {
                 const errorMsg = result.error || "Plan execution failed.";
+                logOutcome(pending.input ?? "", "failed", "plan_failed", errorMsg, errorMsg, "voice", pending.captureId);
                 await recordTurn(pending.input || "", errorMsg);
                 setLastSpoken(errorMsg);
                 setKrishnaSpeaking(true);
@@ -874,6 +884,7 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
               }
             } catch (err) {
               const msg = err instanceof Error ? err.message : "Plan execution failed";
+              logOutcome(pending.input ?? "", "failed", "plan_failed", msg, undefined, "voice", pending.captureId);
               await recordTurn(pending.input || "", "I had trouble: " + msg);
               setStatus("speaking");
               setKrishnaSpeaking(true);
@@ -911,6 +922,7 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
                 });
               } catch { /* non-critical */ }
               const speak = "Got it, I'll remember that " + pending.memoryData.value;
+              logOutcome(pending.input ?? "", "answered", undefined, undefined, speak, "voice", pending.captureId);
               await recordTurn(pending.input || "", speak);
               setLastSpoken(speak);
               setKrishnaSpeaking(true);
@@ -922,6 +934,7 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
               }
             } catch (err) {
               const msg = err instanceof Error ? err.message : "Failed to save memory";
+              logOutcome(pending.input ?? "", "failed", "tool_failed", msg, undefined, "voice", pending.captureId);
               await recordTurn(pending.input || "", "I had trouble: " + msg);
               setStatus("speaking");
               setKrishnaSpeaking(true);
@@ -944,6 +957,15 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
               const speak = result.success
                 ? "Started your daily job extraction. You'll get the email report shortly."
                 : "I couldn't start it: " + (result.error || "unknown error");
+              logOutcome(
+                pending.input ?? "",
+                result.success ? "answered" : "failed",
+                result.success ? undefined : "tool_failed",
+                result.success ? undefined : result.error,
+                speak,
+                "voice",
+                pending.captureId,
+              );
               try {
                 await createAuditEntry({
                   id: String(Date.now()),
@@ -966,7 +988,7 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
               }
             } catch (err) {
               const msg = err instanceof Error ? err.message : "Failed to trigger job extraction";
-              logOutcome(pending.input ?? "", "failed", "tool_failed", msg);
+              logOutcome(pending.input ?? "", "failed", "tool_failed", msg, undefined, "voice", pending.captureId);
               await recordTurn(pending.input || "", "I had trouble: " + msg);
               setStatus("speaking");
               setKrishnaSpeaking(true);
@@ -1003,6 +1025,7 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
                 });
               } catch { /* non-critical */ }
               const speak = "Got it, I'll remind you to " + pending.reminderData.text + ".";
+              logOutcome(pending.input ?? "", "answered", undefined, undefined, speak, "voice", pending.captureId);
               await recordTurn(pending.input || "", speak);
               setLastSpoken(speak);
               setKrishnaSpeaking(true);
@@ -1014,7 +1037,7 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
               }
             } catch (err) {
               const msg = err instanceof Error ? err.message : "Failed to set reminder";
-              logOutcome(pending.input ?? "", "failed", "tool_failed", msg);
+              logOutcome(pending.input ?? "", "failed", "tool_failed", msg, undefined, "voice", pending.captureId);
               await recordTurn(pending.input || "", "I had trouble: " + msg);
               setStatus("speaking");
               setKrishnaSpeaking(true);
@@ -1045,6 +1068,7 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
                 });
               } catch { /* non-critical */ }
               const speak = "Opening " + pending.pendingResult.displayName;
+              logOutcome(pending.input ?? "", "answered", undefined, undefined, speak, "voice", pending.captureId);
               await recordTurn(pending.input || "", speak);
               setLastSpoken(speak);
               setKrishnaSpeaking(true);
@@ -1060,7 +1084,7 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
           if (pending.type === "mcp_tool" && pending.resolve) {
             pending.resolve(false);
           }
-          logOutcome(pending.input ?? "", "declined", "user_declined");
+          logOutcome(pending.input ?? "", "declined", "user_declined", undefined, undefined, "voice", pending.captureId);
           pendingConfirmationRef.current = null;
           reAskRef.current = false;
           setStatus("speaking");
@@ -1100,7 +1124,6 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
         const { detected, remainder } = detectWakeWord(transcription, wakeWord);
         if (!detected) {
           setStatus("idle");
-          logOutcome(transcription, "ignored", "wake_word_missed");
           return;
         }
         command = remainder || command;
@@ -1110,6 +1133,14 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
       setLastError(null);
       setPendingCommand(command);
       setStatus("thinking");
+
+      // INSERT pending row immediately so it's visible in the Dashboard live view
+      const captureId = crypto.randomUUID();
+      currentCaptureIdRef.current = captureId;
+      insertPendingCommand({ id: captureId, transcript: command, source: "voice", createdAt: Date.now() }).catch((err) =>
+        console.error("Failed to insert pending command:", err)
+      );
+      emit("command-log-updated").catch(() => {});
 
       let provider;
       if (getRepo().mode === "remote") {
@@ -1163,6 +1194,7 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
                 spokenResponse: "Should I run the skill \"" + skill.name + "\"?",
                 steps,
                 input: command,
+                captureId: currentCaptureIdRef.current ?? undefined,
               };
               reAskRef.current = false;
               clearConfirmTimeout();
@@ -1242,12 +1274,41 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
         return;
       }
 
+      // Job pipeline status: "what's the pipeline status" — read-only, NO confirmation.
+      // Checked BEFORE the trigger so a status query never accidentally fires a run.
+      if (isJobStatusCommand(command)) {
+        setStatus("thinking");
+        const status = await getJobExtractionStatus();
+        const msg = status.success
+          ? (status.summary ?? "I checked, but couldn't read the run status.")
+          : `I couldn't check the pipeline status: ${status.error}`;
+        await recordTurn(pendingUserTextRef.current, msg);
+        logOutcome(
+          command,
+          status.success ? "answered" : "failed",
+          status.success ? undefined : "tool_failed",
+          status.success ? undefined : status.error,
+          msg,
+        );
+        setLastSpoken(msg);
+        setKrishnaSpeaking(true);
+        setStatus("speaking");
+        try {
+          await ttsRef.current.speak(msg);
+        } finally {
+          setKrishnaSpeaking(false);
+          setStatus("idle");
+        }
+        return;
+      }
+
       // Job extraction: "run my daily job extraction"
       if (isJobExtractionCommand(command)) {
         pendingConfirmationRef.current = {
           type: "job_extraction",
           spokenResponse: "Should I run your daily job extraction now?",
           input: command,
+          captureId: currentCaptureIdRef.current ?? undefined,
         };
         reAskRef.current = false;
         clearConfirmTimeout();
@@ -1276,6 +1337,7 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
           spokenResponse: "Should I remind you to " + reminderResult.text + "?",
           reminderData: reminderResult,
           input: command,
+          captureId: currentCaptureIdRef.current ?? undefined,
         };
         reAskRef.current = false;
         clearConfirmTimeout();
@@ -1446,6 +1508,7 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
             spokenResponse: plan.say,
             steps: plan.steps,
             input: command,
+            captureId: currentCaptureIdRef.current ?? undefined,
           };
           reAskRef.current = false;
           clearConfirmTimeout();
@@ -1480,6 +1543,7 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
               spokenResponse: result.spokenResponse,
               pendingResult: result.pendingResult as any,
               input: result.input,
+              captureId: currentCaptureIdRef.current ?? undefined,
             };
             reAskRef.current = false;
             clearConfirmTimeout();
