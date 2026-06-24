@@ -68,6 +68,14 @@ describe("isJobExtractionCommand", () => {
     expect(isJobExtractionCommand("run the job pipeline")).toBe(true);
   });
 
+  it('detects "can you execute my job extraction pipeline on github"', () => {
+    expect(isJobExtractionCommand("can you execute my job extraction pipeline on github")).toBe(true);
+  });
+
+  it('does not false-trigger on "do my job"', () => {
+    expect(isJobExtractionCommand("do my job")).toBe(false);
+  });
+
   it('rejects "open Chrome"', () => {
     expect(isJobExtractionCommand("open Chrome")).toBe(false);
   });

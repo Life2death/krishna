@@ -26,13 +26,12 @@ export function isUndoCommand(command: string): boolean {
 }
 
 const JOB_EXTRACTION_PATTERNS = [
-  /run.*(my )?(daily )?job (extraction|hunter)/i,
-  /kick ?off.*job.?hunter/i,
-  /fire.*(the )?job.?hunter/i,
-  /start.*job.?hunter/i,
-  /trigger.*(my )?(daily )?job (extraction|hunter)/i,
-  // "execute/run/start the daily job pipeline" — same workflow, "pipeline" phrasing.
-  /(run|execute|start|kick ?off|trigger|launch).*(daily )?job pipeline/i,
+  // One tolerant rule instead of many brittle ones: a run-verb, then "job", then any
+  // of extraction/hunter/pipeline — in that order with anything in between. Covers
+  // "run my daily job extraction", "execute my job extraction pipeline on github",
+  // "kick off the job hunter", "start the daily job pipeline", etc. Status queries are
+  // matched separately (and checked first in routing), so this never steals them.
+  /\b(run|execute|start|kick ?off|trigger|launch|fire|begin)\b.*\bjob\b.*\b(extraction|hunter|pipeline)\b/i,
 ];
 
 export function isJobExtractionCommand(command: string): boolean {
