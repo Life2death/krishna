@@ -11,8 +11,15 @@ mod secure;
 mod shortcuts;
 mod tts;
 mod window;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use tauri::Manager;
+
+/// Set to true only when the user explicitly chooses Quit (tray menu or the
+/// `exit_app` command). The `ExitRequested` handler prevents exit UNLESS this
+/// is set, so closing/hiding windows keeps the app alive in the tray while a
+/// real Quit actually exits. See shortcuts::exit_app and the tray "quit" item.
+pub static QUITTING: AtomicBool = AtomicBool::new(false);
 #[cfg(target_os = "macos")]
 use tauri::{AppHandle, WebviewWindow};
 #[cfg(desktop)]
@@ -251,7 +258,10 @@ pub fn run() {
                                 let _ = w.set_focus();
                             }
                         }
-                        "quit" => app.exit(0),
+                        "quit" => {
+                            QUITTING.store(true, Ordering::SeqCst);
+                            app.exit(0);
+                        }
                         _ => {}
                     })
                     .on_tray_icon_event(|tray, event| {
@@ -374,7 +384,12 @@ pub fn run() {
     app.run(|app_handle, event| {
         match event {
             tauri::RunEvent::ExitRequested { api, .. } => {
-                api.prevent_exit();
+                // Closing/hiding windows keeps the app alive in the tray.
+                // Only an explicit Quit (tray menu or exit_app) sets QUITTING,
+                // which lets the exit proceed to RunEvent::Exit (brain cleanup).
+                if !QUITTING.load(Ordering::SeqCst) {
+                    api.prevent_exit();
+                }
             }
             tauri::RunEvent::Exit => {
                 // Kill the brain process on app exit

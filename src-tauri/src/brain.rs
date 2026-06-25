@@ -37,6 +37,18 @@ impl BrainProcess {
             .canonicalize()
             .map_err(|e| format!("Brain directory not found: {}", e))?;
 
+        // canonicalize() returns a Windows verbatim path (\\?\D:\...), which
+        // cmd.exe cannot use as a working directory — it silently falls back to
+        // C:\Windows, so the relative `src/index.ts` is never found and the
+        // brain never boots. Strip the prefix so the cwd resolves correctly.
+        let brain_dir: std::path::PathBuf = {
+            let s = brain_dir.to_string_lossy();
+            match s.strip_prefix(r"\\?\") {
+                Some(stripped) => std::path::PathBuf::from(stripped),
+                None => brain_dir.clone(),
+            }
+        };
+
         if !brain_dir.join("package.json").exists() {
             return Err(format!(
                 "Brain package.json not found at {}",

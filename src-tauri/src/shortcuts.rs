@@ -673,5 +673,7 @@ fn handle_move_window<R: Runtime>(app: &AppHandle<R>, direction: &str) {
 /// Tauri command to exit the application
 #[tauri::command]
 pub fn exit_app(app_handle: tauri::AppHandle) {
+    // Mark an explicit quit so the ExitRequested handler doesn't veto it.
+    crate::QUITTING.store(true, std::sync::atomic::Ordering::SeqCst);
     app_handle.exit(0);
 }
