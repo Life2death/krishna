@@ -18,7 +18,11 @@ export async function loadToken(
     const decrypted = crypto.decrypt(raw);
     if (!decrypted) return null;
     return JSON.parse(decrypted) as GmailTokens;
-  } catch {
+  } catch (err) {
+    const isFileNotFound = (err as any)?.code === "ENOENT";
+    if (!isFileNotFound) {
+      console.warn("[gmail] Failed to load token file — decryption error or corrupt data:", (err as Error)?.message ?? err);
+    }
     return null;
   }
 }

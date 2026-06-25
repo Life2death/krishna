@@ -143,9 +143,13 @@ async function sendEmail(
     return { success: false, error: "Missing required args: to, subject, body" };
   }
 
+  const encodedSubject = /[^\x20-\x7E]/.test(subject)
+    ? "=?UTF-8?B?" + Buffer.from(subject, "utf8").toString("base64") + "?="
+    : subject;
+
   const headers: string[] = [
     `To: ${to}`,
-    `Subject: ${subject}`,
+    `Subject: ${encodedSubject}`,
     "MIME-Version: 1.0",
     "Content-Type: text/plain; charset=\"UTF-8\"",
     "Content-Transfer-Encoding: 7bit",

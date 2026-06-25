@@ -92,7 +92,7 @@ async function main() {
     crypto,
   );
 
-  console.log("\\nGmail authorized (read-only + send). Token saved encrypted to " + TOKEN_PATH);
+  console.log("\nGmail authorized (read-only + send). Token saved encrypted to " + TOKEN_PATH);
 }
 
 main().catch((err) => {
