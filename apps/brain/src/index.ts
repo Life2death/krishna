@@ -105,8 +105,7 @@ async function main(): Promise<void> {
     app.log.info("Shutting down…");
     clearInterval(syncTimer);
     await stopTelegramBot();
-    const { syncAndRecord: finalSync } = await import("./db/sync-status");
-    await finalSync(db);
+    await syncAndRecord(db);
     await app.close();
     process.exit(0);
   };
