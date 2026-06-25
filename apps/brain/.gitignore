@@ -4,3 +4,4 @@
 *.db-wal
 *.db-journal
 node_modules/
+.gmail-token.enc

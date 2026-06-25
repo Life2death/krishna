@@ -45,6 +45,32 @@ async function main(): Promise<void> {
     console.log(`[mcp] Connected to ${mcpConfig.servers.length} MCP server(s), ${mcpHub.getAllTools().length} tools total`);
   }
 
+  // 3c. Built-in Gmail provider (read-only + send) — register if token file exists.
+  const gmailTokenPath = config.gmailTokenPath;
+  const gmailKeysPath = config.gmailOAuthKeysPath;
+  if (gmailTokenPath && gmailKeysPath) {
+    try {
+      const { loadToken, saveToken } = await import("./gmail/token-store");
+      const { loadOAuthKeys, createGmailClient } = await import("./gmail/client");
+      const { createGmailProvider } = await import("./gmail/tools");
+
+      const tokens = await loadToken(gmailTokenPath, crypto);
+      if (tokens) {
+        const keys = await loadOAuthKeys(gmailKeysPath);
+        const gmail = await createGmailClient(tokens, keys, async (updated) => {
+          await saveToken(updated, gmailTokenPath, crypto);
+        });
+        const provider = createGmailProvider(gmail);
+        mcpHub.registerBuiltin(provider);
+        console.log(`[gmail] Read-only + send tools registered (${provider.tools.length} tools)`);
+      } else {
+        console.log("[gmail] No token found — skipping. Run `npm run gmail:auth` to authorize.");
+      }
+    } catch (err) {
+      console.error("[gmail] Failed to initialize:", err);
+    }
+  }
+
   const app = Fastify({ logger: true });
   await app.register(websocket);
   app.addHook("preHandler", authHook(config.token));

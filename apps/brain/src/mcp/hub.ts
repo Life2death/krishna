@@ -16,13 +16,26 @@ interface McpConnection {
   idleTimer?: ReturnType<typeof setTimeout>;
 }
 
+export interface BuiltinProvider {
+  tools: McpToolInfo[];
+  call(name: string, args: Record<string, unknown>): Promise<ToolResult>;
+}
+
 /**
  * Manages MCP client connections — connect on boot, discover tools,
  * keep-alive, idle-timeout disconnected ones, execute tool calls.
+ * Also supports "built-in" (first-party) providers registered at runtime.
  */
 export class McpHub {
   private connections = new Map<string, McpConnection>();
+  private builtinProviders: BuiltinProvider[] = [];
   private wsHub?: WsHub;
+
+  /** Register a built-in (first-party) tool provider whose tools are served
+   *  alongside external MCP server tools. Built-in tools never idle-timeout. */
+  registerBuiltin(provider: BuiltinProvider): void {
+    this.builtinProviders.push(provider);
+  }
 
   setWsHub(hub: WsHub): void {
     this.wsHub = hub;
@@ -96,7 +109,7 @@ export class McpHub {
     console.log(`[mcp] Disconnected idle server "${name}"`);
   }
 
-  /** Get all discovered MCP tools across all connected servers. */
+  /** Get all discovered MCP tools across all connected servers and built-in providers. */
   getAllTools(): McpToolInfo[] {
     const all: McpToolInfo[] = [];
     for (const conn of this.connections.values()) {
@@ -104,14 +117,26 @@ export class McpHub {
       this.resetIdleTimer(conn);
       all.push(...conn.tools);
     }
+    for (const bp of this.builtinProviders) {
+      all.push(...bp.tools);
+    }
     return all;
   }
 
-  /** Execute an MCP tool. Supports `server.tool` qualified names for disambiguation. */
+  /** Execute an MCP tool. Routes to built-in providers first, then remote MCP servers.
+   *  Supports `server.tool` qualified names for disambiguation. */
   async callTool(
     toolName: string,
     args: Record<string, unknown>,
   ): Promise<ToolResult> {
+    // Try built-in providers first (no idle-timeout concerns)
+    for (const bp of this.builtinProviders) {
+      const match = bp.tools.find((t) => t.name === toolName);
+      if (match) {
+        return bp.call(toolName, args);
+      }
+    }
+
     const dotIdx = toolName.indexOf(".");
     let serverName: string | null = null;
     let bareName = toolName;
@@ -146,7 +171,7 @@ export class McpHub {
       }
     }
 
-    return { success: false, error: `MCP tool "${toolName}" not found on any connected server` };
+    return { success: false, error: `MCP tool "${toolName}" not found on any connected server or built-in provider` };
   }
 
   /** Build Tool-compatible wrappers for all MCP tools. */

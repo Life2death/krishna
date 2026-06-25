@@ -37,6 +37,9 @@ export const config = {
 
   mcpConfigPath: optional("KRISHNA_MCP_CONFIG_PATH"),
   mcpServers: optional("KRISHNA_MCP_SERVERS"),
+
+  gmailOAuthKeysPath: optional("KRISHNA_GMAIL_OAUTH_KEYS_PATH"),
+  gmailTokenPath: optional("KRISHNA_GMAIL_TOKEN_PATH"),
 };
 
 export type BrainConfig = typeof config;
