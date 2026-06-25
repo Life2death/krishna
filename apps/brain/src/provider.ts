@@ -26,9 +26,12 @@ export const claudeProvider: TYPE_PROVIDER = {
 export function claudeSelectedProvider() {
   return {
     provider: "claude",
+    // Keys MUST be lowercase: extractVariables() lowercases the {{API_KEY}}/
+    // {{MODEL}} placeholders, and the desktop app keys them the same way. Using
+    // uppercase here makes the lookup miss → "Missing required variable: api_key".
     variables: {
-      API_KEY: config.anthropicApiKey,
-      MODEL: config.claudeModel,
+      api_key: config.anthropicApiKey,
+      model: config.claudeModel,
     },
   };
 }
