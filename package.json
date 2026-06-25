@@ -34,6 +34,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
+    "build:bundle": "npm run build:bundle -w apps/brain",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "tauri": "tauri",
