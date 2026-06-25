@@ -147,18 +147,22 @@ async function sendEmail(
     ? "=?UTF-8?B?" + Buffer.from(subject, "utf8").toString("base64") + "?="
     : subject;
 
+  const needsBase64 = /[^\x20-\x7E]/.test(body);
+  const contentEncoding = needsBase64 ? "base64" : "7bit";
+  const encodedBody = needsBase64 ? Buffer.from(body, "utf8").toString("base64") : body;
+
   const headers: string[] = [
     `To: ${to}`,
     `Subject: ${encodedSubject}`,
     "MIME-Version: 1.0",
     "Content-Type: text/plain; charset=\"UTF-8\"",
-    "Content-Transfer-Encoding: 7bit",
+    `Content-Transfer-Encoding: ${contentEncoding}`,
   ];
 
   if (cc) headers.push(`Cc: ${cc}`);
   if (bcc) headers.push(`Bcc: ${bcc}`);
 
-  const raw = headers.join("\r\n") + "\r\n\r\n" + body;
+  const raw = headers.join("\r\n") + "\r\n\r\n" + encodedBody;
   const encoded = Buffer.from(raw, "utf8").toString("base64url");
 
   await ctx.gmail.users.messages.send({
