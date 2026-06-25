@@ -56,7 +56,11 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
-    "resources": { "info.plist": "info.plist", "resources/piper": "piper" },
+    "resources": {
+      "info.plist": "info.plist",
+      "resources/piper": "piper",
+      "resources/brain": "brain"
+    },
     "macOS": { "minimumSystemVersion": "10.13" }
   },
   "plugins": {

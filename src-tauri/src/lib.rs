@@ -1,6 +1,7 @@
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
 mod api;
 mod assistant;
+mod brain;
 #[cfg(desktop)]
 mod automation;
 mod capture;
@@ -176,7 +177,34 @@ pub fn run() {
             #[cfg(desktop)]
             automation::computer_focus_window,
         ])
+        .manage(brain::BrainProcess::new())
         .setup(|app| {
+            // Auto-start the brain if not already running
+            {
+                let brain = app.state::<brain::BrainProcess>();
+                if !brain::BrainProcess::is_already_running() {
+                    // Try dev mode first (source checkout); fall back to bundled.
+                    let spawn_result = brain
+                        .spawn_dev(app.handle())
+                        .or_else(|_| brain.spawn_bundled(app.handle()));
+
+                    match spawn_result {
+                        Ok(()) => {
+                            if let Err(e) = brain.wait_for_ready() {
+                                eprintln!("Warning: Brain failed to start: {}", e);
+                            } else {
+                                println!("[brain] Ready");
+                            }
+                        }
+                        Err(e) => {
+                            eprintln!("Warning: Could not spawn brain (dev or bundled): {}", e);
+                        }
+                    }
+                } else {
+                    println!("[brain] Already running — skipping spawn");
+                }
+            }
+
             // Non-fatal: if window positioning fails, continue anyway
             if let Err(e) = window::setup_main_window(app) {
                 eprintln!("Warning: Failed to position main window: {}", e);
@@ -343,9 +371,18 @@ pub fn run() {
 
     // Run with ExitRequested handler: closing all windows does NOT exit the app.
     // The app stays alive in the system tray. Only tray → Quit actually exits.
-    app.run(|_app_handle, event| {
-        if let tauri::RunEvent::ExitRequested { api, .. } = event {
-            api.prevent_exit();
+    app.run(|app_handle, event| {
+        match event {
+            tauri::RunEvent::ExitRequested { api, .. } => {
+                api.prevent_exit();
+            }
+            tauri::RunEvent::Exit => {
+                // Kill the brain process on app exit
+                if let Some(brain) = app_handle.try_state::<brain::BrainProcess>() {
+                    brain.kill();
+                }
+            }
+            _ => {}
         }
     });
 }

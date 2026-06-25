@@ -116,13 +116,17 @@ async function main(): Promise<void> {
     app.log.info("Telegram bot polling");
   }
 
-  await app.listen({ port: config.port, host: "0.0.0.0" });
+  await app.listen({ port: config.port, host: "127.0.0.1" });
   app.log.info(`Krishna Brain listening on :${config.port}`);
 
-  // Graceful shutdown — stop Telegram polling, then Fastify.
+  // Graceful shutdown — sync DB to Turso, stop Telegram polling, then Fastify.
   const shutdown = async () => {
     app.log.info("Shutting down…");
     await stopTelegramBot();
+    // Force a final sync so the last writes reach Turso before we close.
+    // No-op when sync is not configured (local-only mode).
+    const { syncClient } = await import("./db/libsql-driver");
+    await syncClient(db);
     await app.close();
     process.exit(0);
   };

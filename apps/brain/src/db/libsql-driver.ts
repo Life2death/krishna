@@ -44,3 +44,17 @@ export function libsqlDriver(client: Client): SqlDriver {
     },
   };
 }
+
+/**
+ * Force a one-time sync with the remote Turso DB.
+ * Only meaningful when the client is an embedded replica (syncUrl was set).
+ * Called on graceful shutdown so the last writes reach Turso immediately.
+ */
+export async function syncClient(client: Client): Promise<void> {
+  try {
+    await client.sync();
+    console.log("[db] Sync completed");
+  } catch (err) {
+    console.error("[db] Sync failed:", (err as Error)?.message ?? err);
+  }
+}
