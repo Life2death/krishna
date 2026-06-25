@@ -190,10 +190,14 @@ pub fn run() {
             {
                 let brain = app.state::<brain::BrainProcess>();
                 if !brain::BrainProcess::is_already_running() {
+                    // Load secrets from encrypted secure storage so the brain
+                    // can boot without a .env file (required for bundled dist).
+                    let brain_env = brain::BrainProcess::load_env(app.handle());
+
                     // Try dev mode first (source checkout); fall back to bundled.
                     let spawn_result = brain
-                        .spawn_dev(app.handle())
-                        .or_else(|_| brain.spawn_bundled(app.handle()));
+                        .spawn_dev(app.handle(), &brain_env)
+                        .or_else(|_| brain.spawn_bundled(app.handle(), &brain_env));
 
                     match spawn_result {
                         Ok(()) => {
