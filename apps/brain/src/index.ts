@@ -79,6 +79,24 @@ async function main(): Promise<void> {
 
   const app = Fastify({ logger: true });
   await app.register(websocket);
+
+  // CORS — the desktop runs in a webview (origin http://tauri.localhost /
+  // tauri://localhost) and fetches the brain cross-origin with an Authorization
+  // header, which triggers a preflight OPTIONS. Without CORS headers the webview
+  // blocks every request (and "Test Connection" fails regardless of token).
+  // Safe to allow broadly: the brain binds 127.0.0.1 only and is authed by a
+  // bearer token (no cookies/credentials). Runs in onRequest so it precedes auth
+  // and can short-circuit the preflight before the token gate.
+  app.addHook("onRequest", async (req, reply) => {
+    reply.header("Access-Control-Allow-Origin", "*");
+    reply.header("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS");
+    reply.header("Access-Control-Allow-Headers", "authorization,content-type");
+    reply.header("Access-Control-Max-Age", "86400");
+    if (req.method === "OPTIONS") {
+      return reply.code(204).send();
+    }
+  });
+
   app.addHook("preHandler", authHook(config.token));
 
   app.get("/health", async () => ({ ok: true, ts: Date.now(), clients: hub.size }));
