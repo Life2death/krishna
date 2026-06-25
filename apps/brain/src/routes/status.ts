@@ -60,13 +60,16 @@ export function statusRoutes(
         gmailTokenCache = { token, ts: now };
       }
       const tok = gmailTokenCache.token as any;
+      const hasRefreshToken = !!(tok?.refresh_token);
       sections.gmail = {
-        ok: !!tok,
+        ok: hasRefreshToken,
         configured: !!config.gmailOAuthKeysPath,
-        tools: tok ? 4 : 0,
+        tools: hasRefreshToken ? 4 : 0,
         tokenPresent: !!tok,
-        expiryDate: tok?.expiry_date ?? null,
-        expired: tok ? (tok.expiry_date ?? 0) < Date.now() : false,
+        hasRefreshToken,
+        expired: !hasRefreshToken,
+        expiryDate: null, // access-token expiry is routine (auto-refreshed)
+        error: tok && !hasRefreshToken ? "Missing refresh token — re-run gmail:auth" : undefined,
       };
     } catch {
       gmailTokenCache = null;
@@ -75,6 +78,8 @@ export function statusRoutes(
         configured: !!config.gmailOAuthKeysPath,
         tools: 0,
         tokenPresent: false,
+        hasRefreshToken: false,
+        expired: true,
         error: "gmail init failed",
       };
     }

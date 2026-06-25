@@ -73,11 +73,7 @@ function syncDetail(s: any): string {
 function gmailDetail(s: any): string {
   if (!s.configured) return "Not configured";
   if (!s.tokenPresent) return "No token — run gmail:auth";
-  if (s.expired) return "Token expired — re-run gmail:auth";
-  if (s.expiryDate) {
-    const remaining = s.expiryDate - Date.now();
-    if (remaining < 86_400_000) return `Token expires ${moment(s.expiryDate).fromNow()}`;
-  }
+  if (!s.hasRefreshToken) return "Missing refresh token — re-run gmail:auth";
   return `${s.tools} tool(s) ready`;
 }
 

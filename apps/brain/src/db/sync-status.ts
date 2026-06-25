@@ -40,6 +40,10 @@ export function getSyncStatus(): Readonly<SyncState> {
   return state;
 }
 
+export function updateSyncStatus(partial: Partial<SyncState>): void {
+  Object.assign(state, partial);
+}
+
 export async function syncAndRecord(client: Client): Promise<void> {
   if (!state.enabled) return;
 

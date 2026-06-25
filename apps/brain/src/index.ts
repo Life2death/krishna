@@ -37,8 +37,10 @@ async function main(): Promise<void> {
   const ctx: BrainContext = { crypto, hub, db };
 
   // 3a. Sync status tracker (for /status endpoint + shutdown).
-  const { initSyncStatus } = await import("./db/sync-status");
+  const { initSyncStatus, syncAndRecord } = await import("./db/sync-status");
   initSyncStatus();
+  // Periodic syncAndRecord so the sync card's lastSyncAt reflects reality.
+  const syncTimer = setInterval(() => syncAndRecord(db), config.syncInterval * 1000);
 
   // 3b. MCP tool hub — connect to configured MCP servers.
   const mcpHub = new McpHub();
@@ -101,9 +103,10 @@ async function main(): Promise<void> {
   // Graceful shutdown — sync DB to Turso, stop Telegram polling, then Fastify.
   const shutdown = async () => {
     app.log.info("Shutting down…");
+    clearInterval(syncTimer);
     await stopTelegramBot();
-    const { syncAndRecord } = await import("./db/sync-status");
-    await syncAndRecord(db);
+    const { syncAndRecord: finalSync } = await import("./db/sync-status");
+    await finalSync(db);
     await app.close();
     process.exit(0);
   };
