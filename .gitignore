@@ -38,3 +38,7 @@ devlog*.txt
 src-tauri/gen/android/buildSrc/.kotlin/
 src-tauri/gen/android/app/src/main/assets/
 src-tauri/gen/android/keystore.properties
+
+# Brain bundled runtime outputs (produced by bundle-brain.ts at build time)
+src-tauri/resources/brain/brain.js
+src-tauri/resources/brain/node_modules/
