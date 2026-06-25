@@ -36,6 +36,10 @@ async function main(): Promise<void> {
   const hub = new Hub();
   const ctx: BrainContext = { crypto, hub, db };
 
+  // 3a. Sync status tracker (for /status endpoint + shutdown).
+  const { initSyncStatus } = await import("./db/sync-status");
+  initSyncStatus();
+
   // 3b. MCP tool hub — connect to configured MCP servers.
   const mcpHub = new McpHub();
   mcpHub.setWsHub(hub);
@@ -103,6 +107,8 @@ async function main(): Promise<void> {
   chatHistoryRoutes(app, ctx);
   chatRoutes(app);
   mcpToolsRoutes(app, mcpHub);
+  const { statusRoutes } = await import("./routes/status");
+  statusRoutes(app, ctx);
   devicesRoutes(app, ctx);
   resumeSummaryRoutes(app, ctx);
   factExtractRoutes(app, ctx);
@@ -125,8 +131,8 @@ async function main(): Promise<void> {
     await stopTelegramBot();
     // Force a final sync so the last writes reach Turso before we close.
     // No-op when sync is not configured (local-only mode).
-    const { syncClient } = await import("./db/libsql-driver");
-    await syncClient(db);
+    const { syncAndRecord } = await import("./db/sync-status");
+    await syncAndRecord(db);
     await app.close();
     process.exit(0);
   };
