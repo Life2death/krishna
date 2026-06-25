@@ -98,6 +98,25 @@ async function main(): Promise<void> {
     console.log("[rag] Disabled via config");
   }
 
+  // Graceful shutdown — sync DB to Turso, stop Telegram polling, then Fastify.
+  const shutdown = async () => {
+    app.log.info("Shutting down…");
+    await stopTelegramBot();
+    const { syncAndRecord } = await import("./db/sync-status");
+    await syncAndRecord(db);
+    await app.close();
+    process.exit(0);
+  };
+  process.on("SIGINT", shutdown);
+  process.on("SIGTERM", shutdown);
+
+  // Shutdown endpoint — allows Tauri to request graceful shutdown (runs sync-to-Turso).
+  app.post("/shutdown", async () => {
+    app.log.info("Received shutdown request via HTTP");
+    shutdown().catch((err) => app.log.error(err, "Shutdown error"));
+    return { ok: true };
+  });
+
   // REST domains.
   memoriesRoutes(app, ctx);
   skillsRoutes(app, ctx);
@@ -108,7 +127,7 @@ async function main(): Promise<void> {
   chatRoutes(app);
   mcpToolsRoutes(app, mcpHub);
   const { statusRoutes } = await import("./routes/status");
-  statusRoutes(app, ctx);
+  statusRoutes(app, ctx, mcpHub);
   devicesRoutes(app, ctx);
   resumeSummaryRoutes(app, ctx);
   factExtractRoutes(app, ctx);
@@ -125,19 +144,6 @@ async function main(): Promise<void> {
   await app.listen({ port: config.port, host: "127.0.0.1" });
   app.log.info(`Krishna Brain listening on :${config.port}`);
 
-  // Graceful shutdown — sync DB to Turso, stop Telegram polling, then Fastify.
-  const shutdown = async () => {
-    app.log.info("Shutting down…");
-    await stopTelegramBot();
-    // Force a final sync so the last writes reach Turso before we close.
-    // No-op when sync is not configured (local-only mode).
-    const { syncAndRecord } = await import("./db/sync-status");
-    await syncAndRecord(db);
-    await app.close();
-    process.exit(0);
-  };
-  process.on("SIGINT", shutdown);
-  process.on("SIGTERM", shutdown);
 }
 
 main().catch((err) => {

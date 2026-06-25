@@ -3,13 +3,23 @@ import type { BrainContext } from "../context.ts";
 import { config } from "../config.ts";
 import { isRagReady, getStore } from "../rag/index.ts";
 import { getSyncStatus } from "../db/sync-status.ts";
+import type { McpHub } from "../mcp/hub.ts";
 
 interface StatusSection {
   ok: boolean;
   [key: string]: unknown;
 }
 
-export function statusRoutes(app: FastifyInstance, ctx: BrainContext): void {
+// Cache the Gmail token decryption so we don't hit the OS keyring + argon2
+// on every 15s poll. TTL of 60s; re-auth clears it (old token is invalidated).
+let gmailTokenCache: { token: unknown; ts: number } | null = null;
+const GMAIL_CACHE_TTL = 60_000;
+
+export function statusRoutes(
+  app: FastifyInstance,
+  ctx: BrainContext,
+  mcpHub?: McpHub,
+): void {
   app.get("/status", async () => {
     const sections: Record<string, StatusSection> = {};
 
@@ -36,23 +46,37 @@ export function statusRoutes(app: FastifyInstance, ctx: BrainContext): void {
       lastError: sync.lastError,
     };
 
-    // Gmail
+    // Gmail — cached token decryption
     try {
-      const { loadToken } = await import("../gmail/token-store");
-      const { makeFieldCrypto } = await import("../crypto/field-crypto.ts");
-      const { loadMasterKey } = await import("../crypto/keyring.ts");
-      const crypto = makeFieldCrypto(await loadMasterKey());
-      const token = config.gmailTokenPath ? await loadToken(config.gmailTokenPath, crypto) : null;
+      const now = Date.now();
+      if (!gmailTokenCache || now - gmailTokenCache.ts > GMAIL_CACHE_TTL) {
+        const { loadToken } = await import("../gmail/token-store");
+        const { makeFieldCrypto } = await import("../crypto/field-crypto.ts");
+        const { loadMasterKey } = await import("../crypto/keyring.ts");
+        const crypto = makeFieldCrypto(await loadMasterKey());
+        const token = config.gmailTokenPath
+          ? await loadToken(config.gmailTokenPath, crypto)
+          : null;
+        gmailTokenCache = { token, ts: now };
+      }
+      const tok = gmailTokenCache.token as any;
       sections.gmail = {
-        ok: !!token,
+        ok: !!tok,
         configured: !!config.gmailOAuthKeysPath,
-        tools: token ? 4 : 0,
-        tokenPresent: !!token,
-        expiryDate: token?.expiry_date ?? null,
-        expired: token ? (token.expiry_date ?? 0) < Date.now() : false,
+        tools: tok ? 4 : 0,
+        tokenPresent: !!tok,
+        expiryDate: tok?.expiry_date ?? null,
+        expired: tok ? (tok.expiry_date ?? 0) < Date.now() : false,
       };
     } catch {
-      sections.gmail = { ok: false, configured: !!config.gmailOAuthKeysPath, tools: 0, tokenPresent: false, error: "gmail init failed" };
+      gmailTokenCache = null;
+      sections.gmail = {
+        ok: false,
+        configured: !!config.gmailOAuthKeysPath,
+        tools: 0,
+        tokenPresent: false,
+        error: "gmail init failed",
+      };
     }
 
     // RAG
@@ -71,7 +95,11 @@ export function statusRoutes(app: FastifyInstance, ctx: BrainContext): void {
         sections.rag = { ok: true, enabled: true, ready, embeddings: count };
       }
     } catch (err) {
-      sections.rag = { ok: false, enabled: !config.ragDisabled, error: err instanceof Error ? err.message : String(err) };
+      sections.rag = {
+        ok: false,
+        enabled: !config.ragDisabled,
+        error: err instanceof Error ? err.message : String(err),
+      };
     }
 
     // AI
@@ -82,13 +110,11 @@ export function statusRoutes(app: FastifyInstance, ctx: BrainContext): void {
       model: config.claudeModel,
     };
 
-    // MCP
-    try {
-      const { McpHub } = await import("../mcp/index.ts");
-      sections.mcp = { ok: true, tools: 0 };
-    } catch {
-      sections.mcp = { ok: false, tools: 0 };
-    }
+    // MCP — real tool count from the hub
+    sections.mcp = {
+      ok: !!mcpHub,
+      tools: mcpHub?.getAllTools().length ?? 0,
+    };
 
     // Data counts
     try {
@@ -106,7 +132,10 @@ export function statusRoutes(app: FastifyInstance, ctx: BrainContext): void {
         skills: Number((skillCount.rows[0] as any).c),
       };
     } catch (err) {
-      sections.data = { ok: false, error: err instanceof Error ? err.message : String(err) };
+      sections.data = {
+        ok: false,
+        error: err instanceof Error ? err.message : String(err),
+      };
     }
 
     return sections;
@@ -114,8 +143,9 @@ export function statusRoutes(app: FastifyInstance, ctx: BrainContext): void {
 
   // Force sync
   app.post("/status/sync", async () => {
-    const { syncAndRecord } = await import("../db/sync-status.ts");
+    const { syncAndRecord, getSyncStatus } = await import("../db/sync-status.ts");
     await syncAndRecord(ctx.db);
-    return { synced: true };
+    const s = getSyncStatus();
+    return { synced: s.lastSyncOk, lastSyncOk: s.lastSyncOk, lastError: s.lastError };
   });
 }
