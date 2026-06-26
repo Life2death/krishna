@@ -40,6 +40,7 @@ export function voiceIdRoutes(app: FastifyInstance, ctx: BrainContext): void {
       const vec = await embed(pcm);
       const storedVec = JSON.parse(voiceprint.embedding) as number[];
       const score = cosineSim(vec, storedVec);
+      console.log(`[voice-id] verify: score=${score.toFixed(4)} threshold=${effectiveThreshold} match=${score >= effectiveThreshold}`);
       return {
         match: score >= effectiveThreshold,
         score,

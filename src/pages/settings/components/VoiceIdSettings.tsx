@@ -104,14 +104,27 @@ export const VoiceIdSettings = () => {
     if (chunks.length === 0) return;
     setEnrolling(true);
     try {
-      const recordedBlob = new Blob(chunks, { type: mediaRecorderRef.current?.mimeType || "audio/webm" });
-      // Decode webm/ogg → raw PCM → WAV at 16kHz for the brain
+      const recordedBlob = new Blob(chunks, { type: "audio/webm" });
+      // Decode the recording, then resample to 16 kHz mono via OfflineAudioContext
+      // so enrollment audio matches the VAD verify path EXACTLY. (Sending 48 kHz and
+      // letting the brain's crude linear resampler downsample it aliased the audio and
+      // produced mismatched embeddings — owner self-score was ~0.44.)
       const arrayBuffer = await recordedBlob.arrayBuffer();
       const audioCtx = new AudioContext();
-      const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
-      const pcm = audioBuffer.getChannelData(0);
-      const wavBlob = floatArrayToWav(pcm, audioBuffer.sampleRate, "wav");
+      const decoded = await audioCtx.decodeAudioData(arrayBuffer);
       await audioCtx.close();
+      const offline = new OfflineAudioContext(
+        1,
+        Math.max(1, Math.ceil(decoded.duration * 16000)),
+        16000,
+      );
+      const srcNode = offline.createBufferSource();
+      srcNode.buffer = decoded;
+      srcNode.connect(offline.destination);
+      srcNode.start();
+      const rendered = await offline.startRendering();
+      const pcm16k = rendered.getChannelData(0); // 16 kHz mono
+      const wavBlob = floatArrayToWav(pcm16k, 16000, "wav");
       const result = await enrollVoice(wavBlob);
       setEnrollResult(`Enrolled (${result.sampleCount} sample${result.sampleCount > 1 ? "s" : ""}, ${result.dims} dims)`);
       await fetchStatus();

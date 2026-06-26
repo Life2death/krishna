@@ -78,7 +78,7 @@ async function main(): Promise<void> {
     }
   }
 
-  const app = Fastify({ logger: true });
+  const app = Fastify({ logger: true, bodyLimit: 25 * 1024 * 1024 });
   await app.register(websocket);
 
   // CORS — the desktop runs in a webview (origin http://tauri.localhost /
