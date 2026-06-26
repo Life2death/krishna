@@ -174,6 +174,47 @@ numbers in the PR:
 "Validated" here means the **discrimination capability** demonstrated on real voices — not the
 plumbing. A green synthetic test does not satisfy this gate.
 
+### 2.4.2 🔴 BUG found in real-voice testing — enroll/verify sample-rate mismatch
+First real-voice test result: the **owner scored 0.44 against their own voiceprint** (threshold 0.85) —
+i.e. it failed to recognize the enrolled user. Root cause (confirmed by reading the code):
+
+- **Enrollment** (`VoiceIdSettings.tsx` `handleEnroll`): mic → `MediaRecorder` (webm) →
+  `AudioContext.decodeAudioData` → `floatArrayToWav(pcm, audioBuffer.sampleRate, ...)` — i.e. the WAV
+  is written at the **device rate (typically 48 kHz)**.
+- **Verification** (`KrishnaVAD.tsx`): the VAD produces **16 kHz** audio → `floatArrayToWav(audio, 16000)`.
+- The brain's `embedding.ts` `resample()` then downsamples the 48 kHz enroll audio to 16 kHz with a
+  crude **linear interpolation, no anti-aliasing**. So the enrolled embedding is built from aliased
+  audio that systematically differs from the clean 16 kHz verify audio → low cosine → 0.44.
+
+**Fix (primary — client-side, make both paths identical 16 kHz):** in `handleEnroll`, resample the
+decoded audio to **16 kHz mono** before `floatArrayToWav`, using `OfflineAudioContext` (proper
+resampling, unlike the brain's linear one):
+```ts
+const decoded = await audioCtx.decodeAudioData(arrayBuffer);
+const offline = new OfflineAudioContext(1, Math.ceil(decoded.duration * 16000), 16000);
+const srcNode = offline.createBufferSource();
+srcNode.buffer = decoded;
+srcNode.connect(offline.destination);
+srcNode.start();
+const rendered = await offline.startRendering();
+const pcm16k = rendered.getChannelData(0);          // 16 kHz mono
+const wavBlob = floatArrayToWav(pcm16k, 16000, "wav");
+```
+Now enroll and verify hand the brain identical 16 kHz mono audio; the brain's `resample()` becomes a
+no-op (`fromRate === toRate`).
+
+**Mandatory after the fix:** **Reset Enrollment** first — the existing voiceprint was built from
+48 kHz audio and is contaminated; do not mix. Then re-enroll fresh (several phrases) and re-run §2.4.1.
+Expect the owner's self-score to jump well above threshold (≈0.9+).
+
+**Also commit into PR #5 (two fixes Claude made live in the brain to unblock testing, currently
+uncommitted in the voice worktree):**
+1. `apps/brain/src/index.ts` — `Fastify({ logger: true, bodyLimit: 25 * 1024 * 1024 })`. The 1 MB
+   default rejected the audio WAV (and large `/chat` bodies) with 413, surfacing as "Failed to fetch."
+2. `apps/brain/src/voice-id/routes.ts` — a `console.log` of the verify score (keep it; useful, or
+   promote to a proper debug log). Consider also returning/surfacing the live score in the UI so
+   calibration doesn't need server logs.
+
 ---
 
 ## 3. Android frontend (the bigger lift)
