@@ -121,6 +121,25 @@ export function statusRoutes(
       tools: mcpHub?.getAllTools().length ?? 0,
     };
 
+    // Voice ID
+    try {
+      const { createVoiceStore } = await import("../voice-id/store.ts");
+      const store = createVoiceStore(ctx.db, ctx.crypto);
+      const vp = await store.getVoiceprint();
+      sections.voiceId = {
+        ok: true,
+        enrolled: vp !== null,
+        sampleCount: vp?.sampleCount ?? 0,
+        dims: vp?.dims ?? 0,
+      };
+    } catch (err) {
+      sections.voiceId = {
+        ok: false,
+        enrolled: false,
+        error: err instanceof Error ? err.message : String(err),
+      };
+    }
+
     // Data counts
     try {
       const memCount = await ctx.db.execute("SELECT COUNT(*) as c FROM memories");

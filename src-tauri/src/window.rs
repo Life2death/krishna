@@ -71,9 +71,13 @@ pub fn open_dashboard(app: tauri::AppHandle) -> Result<(), String> {
 
 pub fn create_dashboard_window<R: Runtime>(
     app: &AppHandle<R>,
+    initial_route: &str,
 ) -> Result<WebviewWindow<R>, tauri::Error> {
-    let base_builder =
-        WebviewWindowBuilder::new(app, "dashboard", tauri::WebviewUrl::App("/dashboard".into()));
+    let base_builder = WebviewWindowBuilder::new(
+        app,
+        "dashboard",
+        tauri::WebviewUrl::App(initial_route.into()),
+    );
 
     #[cfg(target_os = "macos")]
     let base_builder = base_builder
@@ -139,8 +143,11 @@ pub fn show_dashboard_window<R: Runtime>(app: &AppHandle<R>) -> Result<(), Strin
             .set_focus()
             .map_err(|e| format!("Failed to focus dashboard window: {}", e))?;
     } else {
-        // Window doesn't exist, create it and then show it
-        let window = create_dashboard_window(app)
+        // Window doesn't exist, create it and then show it.
+        // Prefer /dashboard — if it's first-run the front-end FirstRunGuard
+        // will redirect to /setup. This branch is only reachable if the window
+        // was destroyed during the session, so the extra hop is harmless.
+        let window = create_dashboard_window(app, "/dashboard")
             .map_err(|e| format!("Failed to create dashboard window: {}", e))?;
         window
             .show()

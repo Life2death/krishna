@@ -174,7 +174,10 @@ impl BrainProcess {
         cmd.arg(&brain_js)
             .current_dir(&resource_dir)
             .stdout(Stdio::inherit())
-            .stderr(Stdio::inherit());
+            .stderr(Stdio::inherit())
+            .env("NODE_OPTIONS", "--no-deprecation")
+            .env("KRISHNA_RAG_DISABLED", "true");
+        // Apply secure-storage env vars on top (can override defaults)
         Self::apply_env(&mut cmd, env);
 
         let child = cmd.spawn().map_err(|e| format!("Failed to spawn bundled brain: {}", e))?;

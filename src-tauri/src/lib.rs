@@ -224,10 +224,16 @@ pub fn run() {
             #[cfg(target_os = "macos")]
             init(app.app_handle());
 
-            // Pre-create dashboard window so it's ready immediately
+            // Pre-create dashboard window so it's ready immediately.
+            // On first run, route to the setup wizard instead of the dashboard.
             let app_handle = app.handle();
             if app_handle.get_webview_window("dashboard").is_none() {
-                if let Err(e) = window::create_dashboard_window(&app_handle) {
+                let is_first_run = secure::get_stored_value(&app_handle, "KRISHNA_BRAIN_TOKEN")
+                    .ok()
+                    .flatten()
+                    .is_none();
+                let route = if is_first_run { "/setup" } else { "/dashboard" };
+                if let Err(e) = window::create_dashboard_window(&app_handle, route) {
                     eprintln!("Failed to pre-create dashboard window: {}", e);
                 }
             }

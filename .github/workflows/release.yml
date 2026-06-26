@@ -41,10 +41,42 @@ jobs:
       - name: Frontend tests
         run: npm test
 
+      # Windows code-signing: import .pfx certificate into the store when available.
+      # Requires WINDOWS_CERTIFICATE and WINDOWS_CERTIFICATE_PASSWORD secrets.
+      # See CODE_SIGNING_PLAN.md for setup instructions.
+      - name: Import Windows code-signing certificate
+        if: ${{ secrets.WINDOWS_CERTIFICATE != '' }}
+        env:
+          WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+        shell: pwsh
+        run: |
+          New-Item -ItemType directory -Path certificate -Force | Out-Null
+          Set-Content -Path certificate/tempCert.txt -Value $env:WINDOWS_CERTIFICATE
+          certutil -decode certificate/tempCert.txt certificate/certificate.pfx
+          Remove-Item -path certificate/tempCert.txt -Force
+          $secPwd = ConvertTo-SecureString $env:WINDOWS_CERTIFICATE_PASSWORD -Force -AsPlainText
+          Import-PfxCertificate -FilePath certificate/certificate.pfx `
+            -CertStoreLocation Cert:\CurrentUser\My `
+            -Password $secPwd
+
+      # Alternative: Azure Key Vault signing (relic). Uncomment if using Option B.
+      # - name: Azure login (Key Vault signing)
+      #   if: env.AZURE_CLIENT_ID != ''
+      #   uses: azure/login@v2
+      #   with:
+      #     client-id: ${{ secrets.AZURE_CLIENT_ID }}
+      #     tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+      #     client-secret: ${{ secrets.AZURE_CLIENT_SECRET }}
+
       - name: Build & publish Tauri app
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Azure Key Vault signing (uncomment if using Option B/C)
+          # AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          # AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          # AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
         with:
           tagName: ${{ github.ref_name }}
           releaseName: "Krishna ${{ github.ref_name }}"

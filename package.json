@@ -34,6 +34,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
+    "fetch:node": "npm run fetch:node -w apps/brain",
     "build:bundle": "npm run build:bundle -w apps/brain",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",

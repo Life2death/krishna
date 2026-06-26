@@ -28,7 +28,7 @@ if (windowLabel === "presence") {
       );
     } else {
       ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
-        <ThemeProvider defaultTheme="light">
+        <ThemeProvider defaultTheme="dark">
           <AppProvider>
             <ExpandedLayoutProvider>
               <KrishnaProvider>
