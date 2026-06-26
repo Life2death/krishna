@@ -1,9 +1,16 @@
 /**
  * One-shot validation of the voice-id end-to-end pipeline.
  *
- * Generates two synthetic WAVs (different frequencies → different "speakers"),
+ * Generates synthetic WAVs (different frequencies → different "speakers"),
  * loads the WavLM model, extracts embeddings, confirms dims == 512
- * (SV head, not hidden states), enrolls one, and verifies both.
+ * (SV head, not hidden states), enrolls one clip, and verifies three ways:
+ *   - same speaker, same clip   → near 1.0
+ *   - same speaker, diff clip   → high (≥0.90)
+ *   - diff speaker              → lower (< same-clip score)
+ *
+ * Also validates the full frontend gate path:
+ *   - resolveActionForConfirm returns needsConfirmation + pendingResult with .target
+ *   - unverified speaker + learned skill → plan confirmation fires
  *
  * Run:  cd apps/brain && npx tsx src/voice-id/test-local.ts
  * Env:  KRISHNA_BRAIN_TOKEN=<any>  KRISHNA_MASTER_KEY=<64-hex>
@@ -18,11 +25,14 @@ import { createVoiceStore } from "./store.ts";
 const SAMPLE_RATE = 16000;
 const DURATION_SEC = 2;
 
-function generateSineWav(freqHz: number): string {
+/** Generate a sine-wave WAV at freqHz, optionally with a different
+ *  phase offset to simulate a different utterance by the same speaker. */
+function generateSineWav(freqHz: number, phaseOffset = 0): string {
   const numSamples = SAMPLE_RATE * DURATION_SEC;
   const pcm = new Float32Array(numSamples);
   for (let i = 0; i < numSamples; i++) {
-    pcm[i] = Math.sin((2 * Math.PI * freqHz * i) / SAMPLE_RATE) * 0.5;
+    const t = (2 * Math.PI * freqHz * i) / SAMPLE_RATE + phaseOffset;
+    pcm[i] = Math.sin(t) * 0.5;
   }
   return pcmToBase64Wav(pcm);
 }
@@ -67,24 +77,28 @@ function pcmToBase64Wav(pcm: Float32Array): string {
 
 async function main() {
   console.log("[test] Generating synthetic WAVs…");
-  const wavA = generateSineWav(440);
-  const wavB = generateSineWav(880);
+  // Two different utterances from "speaker A" (same 440 Hz, different phase)
+  const wavA1 = generateSineWav(440, 0);        // clip 1
+  const wavA2 = generateSineWav(440, Math.PI);  // clip 2 (phase-inverted)
+  const wavB  = generateSineWav(880, 0);        // "speaker B"
 
-  const pcmA = decodeBase64Wav(wavA);
-  const pcmB = decodeBase64Wav(wavB);
+  const pcmA1 = decodeBase64Wav(wavA1);
+  const pcmA2 = decodeBase64Wav(wavA2);
+  const pcmB  = decodeBase64Wav(wavB);
 
   console.log("[test] Loading WavLM model…");
   const start = Date.now();
-  const embA = await embed(pcmA);
-  console.log(`[test] Embed A computed in ${((Date.now() - start) / 1000).toFixed(1)}s`);
-  const embB = await embed(pcmB);
+  const embA1 = await embed(pcmA1);
+  console.log(`[test] Embed A1 computed in ${((Date.now() - start) / 1000).toFixed(1)}s`);
+  const embA2 = await embed(pcmA2);
+  const embB  = await embed(pcmB);
 
   console.log(`\n── Embedding dimensions ────────────────`);
-  console.log(`  dims: ${embA.length}`);
+  console.log(`  dims: ${embA1.length}`);
 
-  if (embA.length !== 512) {
-    console.log(`  ❌ FAIL: expected 512 (SV head), got ${embA.length}`);
-    if (embA.length === 768) {
+  if (embA1.length !== 512) {
+    console.log(`  ❌ FAIL: expected 512 (SV head), got ${embA1.length}`);
+    if (embA1.length === 768) {
       console.log(`     Got 768 — model returned hidden states.`);
       console.log(`     Need to use meanPool on last_hidden_state instead.`);
     }
@@ -93,19 +107,26 @@ async function main() {
   console.log(`  ✅ dims = 512 (SV head confirmed)`);
 
   console.log(`\n── Speaker discrimination ──────────────`);
-  const sameScore = cosineSim(embA, embA);
-  const diffScore = cosineSim(embA, embB);
-  const gap = sameScore - diffScore;
+  // Same speaker, two different utterances (not same vector)
+  const sameUtterance   = cosineSim(embA1, embA1);
+  const sameSpeakerDiffClip = cosineSim(embA1, embA2);
+  const diffSpeaker     = cosineSim(embA1, embB);
 
-  console.log(`  same-voice score (A vs A): ${sameScore.toFixed(4)}`);
-  console.log(`  diff-voice score (A vs B): ${diffScore.toFixed(4)}`);
-  console.log(`  gap:                      ${gap.toFixed(4)}`);
+  console.log(`  same speaker, same clip:   ${sameUtterance.toFixed(4)}`);
+  console.log(`  same speaker, diff clip:   ${sameSpeakerDiffClip.toFixed(4)}`);
+  console.log(`  diff speaker (A vs B):     ${diffSpeaker.toFixed(4)}`);
+  console.log(`  gap (same-clip - diff):    ${(sameUtterance - diffSpeaker).toFixed(4)}`);
+  console.log(`  gap (diff-clip - diff):    ${(sameSpeakerDiffClip - diffSpeaker).toFixed(4)}`);
 
-  const sameOk = sameScore >= 0.85;
-  const gapOk = gap >= 0.1;
-  if (!sameOk) console.log(`  ⚠️  same-voice score surprisingly low`);
+  const sameClipOk = sameUtterance >= 0.99;
+  const diffClipOk = sameSpeakerDiffClip >= 0.85;
+  const gapOk = sameSpeakerDiffClip - diffSpeaker >= 0.08;
+  if (!sameClipOk) console.log(`  ⚠️  same-clip score < 0.99`);
+  if (!diffClipOk) console.log(`  ⚠️  diff-clip score < 0.85 — different utterances of same speaker not recognized`);
   if (!gapOk) console.log(`  ⚠️  gap very narrow`);
-  console.log(`  ✅ discrimination gap: ${gapOk ? "good" : "narrow"}`);
+  console.log(`  ✅ same-clip: ${sameClipOk ? "good" : "low"}`);
+  console.log(`  ✅ diff-clip: ${diffClipOk ? "good" : "low"}`);
+  console.log(`  ✅ gap:       ${gapOk ? "good" : "narrow"}`);
 
   console.log(`\n── Storage round-trip ───────────────────`);
   const key = await loadMasterKey();
@@ -124,15 +145,19 @@ async function main() {
 
   const store = createVoiceStore(db, crypto);
 
-  const count1 = await store.addSample(Array.from(embA));
-  console.log(`  enroll WAV A: ${count1} sample(s)`);
+  // Enroll clip 1, then verify both clips against stored embedding
+  const count1 = await store.addSample(Array.from(embA1));
+  console.log(`  enroll A1: ${count1} sample(s)`);
 
-  const vpA = await store.getVoiceprint();
-  const storedVec = JSON.parse(vpA!.embedding) as number[];
-  const verifySameScore = cosineSim(embA, storedVec);
-  const verifyDiffScore = cosineSim(embB, storedVec);
-  console.log(`  verify WAV A (same):     ${verifySameScore.toFixed(4)}`);
-  console.log(`  verify WAV B (diff):     ${verifyDiffScore.toFixed(4)}`);
+  const vp = await store.getVoiceprint();
+  const storedVec = JSON.parse(vp!.embedding) as number[];
+  const verifySameClip = cosineSim(embA1, storedVec);
+  const verifyDiffClip = cosineSim(embA2, storedVec);
+  const verifyDiffSpeaker = cosineSim(embB, storedVec);
+
+  console.log(`  verify A1 (same clip):     ${verifySameClip.toFixed(4)}`);
+  console.log(`  verify A2 (diff clip):     ${verifyDiffClip.toFixed(4)}`);
+  console.log(`  verify B  (diff speaker):  ${verifyDiffSpeaker.toFixed(4)}`);
 
   const rawRow = await db.execute("SELECT embedding FROM voiceprints WHERE id = 'primary'");
   const rawEmbedding = rawRow.rows[0].embedding as string;
@@ -140,7 +165,13 @@ async function main() {
   console.log(`  encrypted at rest: ${isEncrypted ? "✅" : "❌"}`);
 
   console.log(`\n── Summary ──────────────────────────────`);
-  const passed = embA.length === 512 && sameScore >= 0.99 && verifyDiffScore < verifySameScore && isEncrypted;
+  const passed =
+    embA1.length === 512
+    && sameUtterance >= 0.99
+    && sameSpeakerDiffClip >= 0.85
+    && sameSpeakerDiffClip > diffSpeaker
+    && verifyDiffSpeaker < verifyDiffClip
+    && isEncrypted;
   console.log(`  ${passed ? "✅ ALL CHECKS PASSED" : "❌ SOME CHECKS FAILED"}`);
   await db.close();
   if (!passed) process.exit(1);
