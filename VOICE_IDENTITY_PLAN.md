@@ -156,6 +156,24 @@ bundler so the two efforts don't collide.
   ("I don't recognize your voice…"). Owner can still confirm. ✅
 - Disable toggle → behaves exactly as pre-feature.
 
+### 2.4.1 ⚠️ REAL-VOICE CALIBRATION — MERGE GATE for Phase 2 (mandatory)
+Phase 1's test used **synthetic sine tones**, which prove only that the model loads / returns 512-d
+embeddings / encrypts — **NOT that it tells one person from another.** That capability is still
+UNVALIDATED. Before this Phase-2 PR may merge, validate with **real human recordings** and report the
+numbers in the PR:
+1. Enroll the **owner** from several *different* real utterances (not one clip reused).
+2. Verify the **owner** on a *fresh* utterance → record the score (expect high, but it will NOT be
+   1.0 — anything near 1.0 means you compared identical audio, which is the Phase-1 tautology bug).
+3. Verify **2–3 other people** → record their scores (expect clearly lower).
+4. **Re-calibrate `KRISHNA_VOICE_THRESHOLD`** from the observed distribution — the `0.85` default is a
+   placeholder; pick a value that cleanly separates owner-vs-others with margin. Document the chosen
+   value and the score table in the PR.
+5. Fix [test-local.ts](apps/brain/src/voice-id/test-local.ts) so "same speaker" compares two
+   *different* clips, not a vector against itself.
+
+"Validated" here means the **discrimination capability** demonstrated on real voices — not the
+plumbing. A green synthetic test does not satisfy this gate.
+
 ---
 
 ## 3. Android frontend (the bigger lift)
