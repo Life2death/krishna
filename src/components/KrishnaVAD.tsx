@@ -11,6 +11,7 @@ import { isKrishnaSpeaking } from "@/lib/krishna-mutex";
 import { getRepo } from "@/lib/repo-selector";
 import { invoke } from "@tauri-apps/api/core";
 import { emit } from "@tauri-apps/api/event";
+import { verifyVoice } from "@/lib/voice-client";
 
 export const KrishnaVAD = () => {
   const [isTranscribing, setIsTranscribing] = useState(false);
@@ -67,14 +68,24 @@ export const KrishnaVAD = () => {
 
         setIsTranscribing(true);
 
-        const transcription = await fetchSTT({
-          provider: providerConfig,
-          selectedProvider: selectedSttProvider,
-          audio: audioBlob,
-        });
+        // Run STT and voice-ID verification in parallel.
+        // Voice verify is fire-and-forget: failure is treated as fail-open (null).
+        const [transcription, voiceResult] = await Promise.all([
+          fetchSTT({
+            provider: providerConfig,
+            selectedProvider: selectedSttProvider,
+            audio: audioBlob,
+          }),
+          verifyVoice(audioBlob).catch((err) => {
+            console.error("[voice-id] Verify failed (fail-open):", err);
+            return null as any;
+          }),
+        ]);
 
         if (transcription) {
-          await krishna.processCommand(transcription);
+          await krishna.processCommand(transcription, {
+            voiceVerifyResult: voiceResult ?? undefined,
+          });
         }
       } catch (error) {
         console.error("Krishna VAD transcription failed:", error);
