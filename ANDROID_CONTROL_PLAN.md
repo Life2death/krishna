@@ -21,6 +21,44 @@ installed app ("open Spotify"), and toggle/open system settings ("turn on the fl
 
 ---
 
+## Git workflow — READ FIRST (agent must follow)
+
+This work runs **in parallel** with the voice-ID feature, which is being validated separately. To
+avoid colliding with anyone's build, do all Android work in a **dedicated second worktree** — never
+in the other two checkouts.
+
+1. **Where you work:** your own worktree on a new branch off `main`:
+   ```bash
+   git worktree add -b feature/android-control ../krishna-agent2 main
+   ```
+   Do **all** edits in `D:\Learning\krishna-agent2`.
+   - ❌ **Do NOT touch `D:\Learning\krishna`** — that's the user's stable/test checkout (on `main`).
+   - ❌ **Do NOT touch `D:\Learning\krishna-agent`** — that worktree holds the voice-ID branch
+     (`feature/voice-android`) currently being validated. Leave it alone.
+2. **First-time setup in the worktree:** worktrees don't share `node_modules` or the Rust `target/`,
+   so run `npm install` at the worktree root first.
+   - ⚠️ **Known gotcha (we hit it):** the worktree `npm install` can leave **truncated native
+     binaries**, failing at runtime with *"Cannot find native binding"* / *"not a valid Win32
+     application"* (seen with `@tauri-apps/cli-win32-x64-msvc` and `@rolldown/binding-win32-x64-msvc`).
+     Fix by copying the good binary of the **same version** from `D:\Learning\krishna\node_modules\…`
+     over the broken one in `D:\Learning\krishna-agent2\node_modules\…`. Verify with
+     `node -e "require('@tauri-apps/cli')"`.
+3. **Build order (per §3 below):** start with **Phase 1** — scaffold the `device-control` Kotlin
+   plugin and prove the bridge with `setTorch` (flashlight toggles by `invoke`) before anything else.
+   Then `launchApp`/`listApps` + `openSetting`, then DND, then (Phase 3) the Accessibility Service.
+4. **Testing target: a PHYSICAL Android device** (confirmed) — emulators fake/lack the hardware these
+   features need. Deploy via `npm run tauri android dev` (USB debugging on) or sideload the APK.
+5. **Commit hygiene:** commit after each build-passing step; `npm run typecheck` + a successful
+   Android build must pass. Don't leave half-written files. Open a PR per phase; Claude reviews, the
+   user merges `feature/android-control` → `main`. Do not merge to `main` yourself.
+6. **Keep current:** if `main` advances (e.g. voice-ID merges), `git fetch && git merge origin/main`
+   into your branch so you don't drift.
+
+> If you're about to edit a file in `D:\Learning\krishna` or `D:\Learning\krishna-agent`, stop —
+> you're in the wrong directory. All Android work happens in `D:\Learning\krishna-agent2`.
+
+---
+
 ## 0. What's actually possible (verified capability matrix)
 
 | Action | Without Accessibility Service | With Accessibility Service |
