@@ -61,7 +61,13 @@
       "resources/piper": "piper",
       "resources/brain": "brain"
     },
-    "macOS": { "minimumSystemVersion": "10.13" }
+    "macOS": { "minimumSystemVersion": "10.13" },
+    "windows": {
+      "certificateThumbprint": "",
+      "digestAlgorithm": "sha256",
+      "timestampUrl": "http://timestamp.digicert.com",
+      "tsp": false
+    }
   },
   "plugins": {
     "sql": {

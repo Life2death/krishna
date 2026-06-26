@@ -15,18 +15,18 @@ only load when the desktop app is in **remote brain mode**.
 - NOTE: the brain was started as a background process this session — after a reboot, re-run
   `npm start` in `apps/brain`.
 
-## ⏳ Phase 2 — TODO: Gmail MCP + Google OAuth (user does the Google parts)
-Using `@gongrzhe/server-gmail-autoauth-mcp` (third-party Gmail MCP with built-in OAuth — it will
-hold an OAuth token to the inbox; authorize knowingly).
-1. **Google Cloud** (console.cloud.google.com): create/pick a project → enable **Gmail API** →
-   **OAuth consent screen** = External, add your Gmail as a **test user** → **Credentials → OAuth
-   client ID → Desktop app → download JSON**.
-2. Put the JSON at `C:\Users\vikra\.gmail-mcp\gcp-oauth.keys.json` (create the folder).
-3. Run `npx @gongrzhe/server-gmail-autoauth-mcp auth` → browser OAuth → saves
-   `~\.gmail-mcp\credentials.json` ("Authentication successful").
-4. Add the server to `apps/brain/.env` (one line):
-   `KRISHNA_MCP_SERVERS=[{"name":"gmail","transport":"stdio","command":"npx","args":["-y","@gongrzhe/server-gmail-autoauth-mcp"]}]`
-5. Restart the brain (`npm start`) → expect log `[mcp] Connected to 1 MCP server(s), N tools total`.
+## ⏳ Phase 2 — TODO: in-house READ-ONLY Gmail tool (decided 2026-06-25)
+**Decision changed:** do NOT use the third-party `@gongrzhe/server-gmail-autoauth-mcp` (its default
+scope can send/delete, `npx -y` floats "latest", and it stores the token in plaintext). Instead build
+a minimal **read-only** Gmail tool inside `apps/brain`, scope `gmail.readonly`, token **encrypted at
+rest** with the brain's field-crypto. Full spec for the coding agent: **`GMAIL_INHOUSE_TOOL_PLAN.md`**
+(repo root). Read-only only — no send/draft/delete, no plan to add.
+
+Vikram's manual step (Google Cloud, console.cloud.google.com): create/pick project → enable
+**Gmail API** → OAuth consent screen = External, add `vikram.panmand@gmail.com` as **test user** →
+Credentials → OAuth client ID → **Desktop app** → download JSON. **Request read-only scope only.**
+Then run `npm run gmail:auth` in `apps/brain` (added by the implementation) → browser OAuth →
+encrypted token saved → restart brain → expect log `[gmail] read-only tools registered`.
 
 ## ⏳ Phase 3 — TODO: connect the desktop app
 - App Settings → **Brain Connection** → Mode **Remote**, URL `http://localhost:8787`, paste the
