@@ -53,33 +53,31 @@ function resample(audio: Float32Array, fromRate: number, toRate: number): Float3
   return result;
 }
 
-function meanPool(tensor: any): Float32Array {
-  const { data, dims } = tensor;
-  const batchSize = dims[0];
-  const timeSteps = dims[1];
-  const featureDim = dims[2];
-  const pooled = new Float32Array(featureDim);
-  for (let b = 0; b < batchSize; b++) {
-    for (let t = 0; t < timeSteps; t++) {
-      for (let d = 0; d < featureDim; d++) {
-        const idx = b * timeSteps * featureDim + t * featureDim + d;
-        pooled[d] += data[idx];
-      }
-    }
-  }
-  for (let d = 0; d < featureDim; d++) {
-    pooled[d] /= timeSteps * batchSize;
-  }
-  return pooled;
-}
-
 export async function embed(pcm: Float32Array, sampleRate = 16000): Promise<Float32Array> {
   const { processor, model } = await getModel();
   const audio = resample(pcm, sampleRate, 16000);
   const inputs = await processor(audio);
   const output = await model(inputs);
-  const embedding = output.embeddings ?? meanPool(output.last_hidden_state);
-  return l2Normalize(embedding);
+  if (!output.embeddings) {
+    const keys = Object.keys(output).join(", ");
+    throw new Error(
+      `[voice-id] Model output missing "embeddings" field. ` +
+      `Available keys: [${keys}]. ` +
+      `Expected the SV head (512-dim), not raw hidden states. ` +
+      `Check that Xenova/wavlm-base-plus-sv is the speaker-verification variant.`
+    );
+  }
+  const tensor = output.embeddings;
+  if (!tensor.data || !tensor.dims) {
+    throw new Error(
+      `[voice-id] embeddings tensor has unexpected structure. ` +
+      `Expected { data: Float32Array, dims: number[] }, got ${JSON.stringify(Object.keys(tensor))}`
+    );
+  }
+  const flat: Float32Array = tensor.data instanceof Float32Array
+    ? tensor.data
+    : new Float32Array(tensor.data as ArrayLike<number>);
+  return l2Normalize(flat);
 }
 
 export function cosineSim(a: Float32Array | number[], b: Float32Array | number[]): number {
