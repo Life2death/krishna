@@ -77,7 +77,7 @@ export function readVoiceThreshold(): number {
   return readBrainConfig().voiceThreshold ?? 0.85;
 }
 
-export async function verifyVoice(wavBlob: Blob, threshold?: number): Promise<VoiceVerifyResult> {
+export async function verifyVoice(wavBlob: Blob, threshold: number = readVoiceThreshold()): Promise<VoiceVerifyResult> {
   const audio = await blobToBase64(wavBlob);
   return brainPost<VoiceVerifyResult>("/voice/verify", { audio, threshold });
 }
