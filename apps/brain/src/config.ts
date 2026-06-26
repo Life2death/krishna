@@ -40,6 +40,9 @@ export const config = {
 
   gmailOAuthKeysPath: optional("KRISHNA_GMAIL_OAUTH_KEYS_PATH"),
   gmailTokenPath: optional("KRISHNA_GMAIL_TOKEN_PATH", "./.gmail-token.enc"),
+
+  voiceIdEnabled: optional("KRISHNA_VOICE_ID_ENABLED") === "true",
+  voiceThreshold: Number(optional("KRISHNA_VOICE_THRESHOLD", "0.85")),
 };
 
 export type BrainConfig = typeof config;

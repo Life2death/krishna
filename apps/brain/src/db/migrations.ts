@@ -109,6 +109,14 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_skills_name ON skills(name);`],
   app_version TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_devices_last_seen ON devices(last_seen);`],
+  ["voiceprints.sql", `CREATE TABLE IF NOT EXISTS voiceprints (
+  id TEXT PRIMARY KEY,
+  embedding TEXT NOT NULL,
+  sample_count INTEGER NOT NULL DEFAULT 0,
+  dims INTEGER NOT NULL,
+  created_at TEXT DEFAULT (datetime('now')) NOT NULL,
+  updated_at TEXT DEFAULT (datetime('now')) NOT NULL
+);`],
   ["rag.sql", `CREATE TABLE IF NOT EXISTS memory_embeddings (
   id TEXT PRIMARY KEY,
   memory_id TEXT,
