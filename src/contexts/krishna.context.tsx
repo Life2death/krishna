@@ -4,6 +4,7 @@ import { useMcpTools, useDevicePresence } from "@/hooks";
 import { fetchAIResponse } from "@/lib/repo-bound";
 import { getRepo } from "@/lib/repo-selector";
 import { parseActions, executeAction, resolveActionForConfirm } from "@/lib/actions";
+import { readBrainConfig } from "@/lib/remote";
 import { executePlan, resolvePlaceholders } from "@/lib/executor";
 import { getAllTools } from "@/lib/tools";
 import { selectTools } from "@krishna/core/tool-selector";
@@ -1121,11 +1122,13 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
 
       let command = transcription.trim() || "hello";
 
-      // Voice-ID gate: if enrolled and speaker is unverified, tag the command.
+      // Voice-ID gate: if voice ID is enabled, enrolled, and speaker is unverified,
+      // tag the command. When disabled, always treat as verified.
       // Soft mode: the command is still processed and the assistant responds, but
       // any action is forced through the confirmation gate. Fail-open on error.
-      const voiceResult = opts?.voiceVerifyResult;
-      const isUnverified = !!(voiceResult?.enrolled && !voiceResult?.match);
+      const voiceIdEnabled = readBrainConfig().voiceIdEnabled ?? false;
+      const voiceResult = voiceIdEnabled ? opts?.voiceVerifyResult : undefined;
+      const isUnverified = voiceIdEnabled ? !!(voiceResult?.enrolled && !voiceResult?.match) : false;
       if (isUnverified) {
         console.warn("[voice-id] Unverified speaker — soft mode, forcing confirmation");
       }

@@ -69,9 +69,17 @@ async function blobToBase64(blob: Blob): Promise<string> {
   return btoa(binary);
 }
 
-export async function verifyVoice(wavBlob: Blob): Promise<VoiceVerifyResult> {
+export function isVoiceIdEnabled(): boolean {
+  return readBrainConfig().voiceIdEnabled ?? false;
+}
+
+export function readVoiceThreshold(): number {
+  return readBrainConfig().voiceThreshold ?? 0.85;
+}
+
+export async function verifyVoice(wavBlob: Blob, threshold?: number): Promise<VoiceVerifyResult> {
   const audio = await blobToBase64(wavBlob);
-  return brainPost<VoiceVerifyResult>("/voice/verify", { audio });
+  return brainPost<VoiceVerifyResult>("/voice/verify", { audio, threshold });
 }
 
 export async function enrollVoice(wavBlob: Blob): Promise<VoiceEnrollResult> {

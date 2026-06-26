@@ -9,6 +9,7 @@ import {
   KrishnaSettings,
   Integrations,
   BrainConnection,
+  VoiceIdSettings,
 } from "./components";
 import {
   ResponseLength,
@@ -98,6 +99,9 @@ const Settings = () => {
 
       {/* Brain Connection */}
       <BrainConnection />
+
+      {/* Voice ID */}
+      <VoiceIdSettings />
 
       {/* Skill Generation */}
       <div className="border-t pt-4">
