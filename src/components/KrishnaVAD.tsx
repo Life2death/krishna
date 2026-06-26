@@ -11,11 +11,13 @@ import { isKrishnaSpeaking } from "@/lib/krishna-mutex";
 import { getRepo } from "@/lib/repo-selector";
 import { invoke } from "@tauri-apps/api/core";
 import { emit } from "@tauri-apps/api/event";
-import { verifyVoice } from "@/lib/voice-client";
+import { verifyVoice, getVoiceStatus } from "@/lib/voice-client";
+import type { VoiceVerifyResult } from "@/lib/voice-client";
 
 export const KrishnaVAD = () => {
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [muted, setMuted] = useState(false);
+  const [voiceStatus, setVoiceStatus] = useState<VoiceVerifyResult | null>(null);
   const { selectedSttProvider, allSttProviders, selectedAIProvider } = useApp();
   const krishna = useKrishna();
 
@@ -82,6 +84,8 @@ export const KrishnaVAD = () => {
           }),
         ]);
 
+        if (voiceResult) setVoiceStatus(voiceResult);
+
         if (transcription) {
           await krishna.processCommand(transcription, {
             voiceVerifyResult: voiceResult ?? undefined,
@@ -94,6 +98,15 @@ export const KrishnaVAD = () => {
       }
     },
   });
+
+  // Fetch initial voice-ID enrollment status on mount
+  useEffect(() => {
+    getVoiceStatus()
+      .then((s) => {
+        if (s) setVoiceStatus({ enrolled: s.enrolled, match: true, score: 1, threshold: s.threshold });
+      })
+      .catch(() => {});
+  }, []);
 
   // `startOnLoad` is evaluated once when the VAD effect first runs, but providers
   // load asynchronously from localStorage — so on a fresh load the VAD often
@@ -162,6 +175,7 @@ export const KrishnaVAD = () => {
   };
 
   return (
+    <div className="relative inline-flex">
     <Button
       size="icon"
       title={getTitle()}
@@ -184,5 +198,24 @@ export const KrishnaVAD = () => {
     >
       {getIcon()}
     </Button>
+    {voiceStatus && (
+      <span
+        className={`absolute top-0 right-0 w-2 h-2 rounded-full border border-white dark:border-zinc-900 ${
+          voiceStatus.enrolled && !voiceStatus.match
+            ? "bg-amber-400"   // enrolled but unverified
+            : voiceStatus.enrolled
+            ? "bg-green-500"   // enrolled and verified
+            : "bg-zinc-400"    // not enrolled
+        }`}
+        title={
+          voiceStatus.enrolled && !voiceStatus.match
+            ? "Unverified speaker"
+            : voiceStatus.enrolled
+            ? "Speaker verified"
+            : "Voice ID not enrolled"
+        }
+      />
+    )}
+    </div>
   );
 };
