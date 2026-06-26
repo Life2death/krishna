@@ -1198,7 +1198,8 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
                 s.args.target?.includes("\\")
               )
             );
-            if (hasSensitiveStep) {
+            // Unverified speaker: always force confirmation (soft mode)
+            if (isUnverified || hasSensitiveStep) {
               pendingConfirmationRef.current = {
                 type: "plan",
                 spokenResponse: "Should I run the skill \"" + skill.name + "\"?",
