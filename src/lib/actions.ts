@@ -127,3 +127,61 @@ export async function executeAction(
 
   return { spokenResponse: "Unknown action" };
 }
+
+/** Resolve an action to a confirmable pendingResult without executing it.
+ *  Used for unverified-speaker gating: always returns needsConfirmation=true
+ *  with a proper ResolveResult (has .target, .displayName, .found) so the
+ *  accept handler can execute it on "yes".
+ */
+export async function resolveActionForConfirm(
+  action: Action,
+  llmFallback?: LlmFallbackFn
+): Promise<ExecuteActionResult> {
+  if (action.action === "open") {
+    const rawTarget = action.target.trim();
+    const lowerTarget = rawTarget.toLowerCase();
+
+    if (isUrl(rawTarget)) {
+      const url = rawTarget.startsWith("http") ? rawTarget : "https://" + rawTarget;
+      return {
+        spokenResponse: "Open " + rawTarget + "?",
+        needsConfirmation: true,
+        pendingResult: { found: true, target: url, displayName: rawTarget, source: "direct" } as ResolveResult,
+        input: rawTarget,
+      };
+    }
+
+    if (isFilePath(rawTarget)) {
+      return {
+        spokenResponse: "Open " + rawTarget + "?",
+        needsConfirmation: true,
+        pendingResult: { found: true, target: rawTarget, displayName: rawTarget, source: "direct" } as ResolveResult,
+        input: rawTarget,
+      };
+    }
+
+    const alias = resolveAppAlias(lowerTarget);
+    if (alias) {
+      return {
+        spokenResponse: "Open " + alias.name + "?",
+        needsConfirmation: true,
+        pendingResult: { found: true, target: alias.launchCommand, displayName: alias.name, source: "alias" } as ResolveResult,
+        input: rawTarget,
+      };
+    }
+
+    const result = await resolveTarget(rawTarget, llmFallback);
+    if (result.found && result.target) {
+      return {
+        spokenResponse: "I found " + result.displayName + ". Should I open it?",
+        needsConfirmation: true,
+        pendingResult: result,
+        input: rawTarget,
+      };
+    }
+
+    return { spokenResponse: "I couldn't find an app named \"" + rawTarget + "\"" };
+  }
+
+  return { spokenResponse: "Unknown action" };
+}

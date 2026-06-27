@@ -3,7 +3,8 @@ import { useApp } from "@/contexts";
 import { useMcpTools, useDevicePresence } from "@/hooks";
 import { fetchAIResponse } from "@/lib/repo-bound";
 import { getRepo } from "@/lib/repo-selector";
-import { parseActions, executeAction } from "@/lib/actions";
+import { parseActions, executeAction, resolveActionForConfirm } from "@/lib/actions";
+import { readBrainConfig } from "@/lib/remote";
 import { executePlan, resolvePlaceholders } from "@/lib/executor";
 import { getAllTools } from "@/lib/tools";
 import { selectTools } from "@krishna/core/tool-selector";
@@ -31,6 +32,7 @@ import { setConfirmAction } from "@krishna/core/tools/mcp-bridge";
 import type { AssistantStatus, StepAction } from "@/types/assistant";
 import type { Skill } from "@/types/skill";
 import type { Message, AttachedFile } from "@/types";
+import type { VoiceVerifyResult } from "@/lib/voice-client";
 import { MAX_FILES } from "@/config";
 
 export interface ConversationTurn {
@@ -45,7 +47,7 @@ interface KrishnaContextType {
   setKrishnaEnabled: (v: boolean) => void;
   status: AssistantStatus;
   lastSpoken: string;
-  processCommand: (transcription: string, opts?: { skipWakeWord?: boolean }) => Promise<void>;
+  processCommand: (transcription: string, opts?: { skipWakeWord?: boolean; voiceVerifyResult?: VoiceVerifyResult }) => Promise<void>;
   stopSpeaking: () => void;
   pendingCommand: string | null;
   lastError: string | null;
@@ -806,7 +808,7 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
   );
 
   const processCommand = useCallback(
-    async (transcription: string, opts?: { skipWakeWord?: boolean }) => {
+    async (transcription: string, opts?: { skipWakeWord?: boolean; voiceVerifyResult?: VoiceVerifyResult }) => {
       if (pendingConfirmationRef.current) {
         clearConfirmTimeout();
         const pending = pendingConfirmationRef.current;
@@ -1120,6 +1122,17 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
 
       let command = transcription.trim() || "hello";
 
+      // Voice-ID gate: if voice ID is enabled, enrolled, and speaker is unverified,
+      // tag the command. When disabled, always treat as verified.
+      // Soft mode: the command is still processed and the assistant responds, but
+      // any action is forced through the confirmation gate. Fail-open on error.
+      const voiceIdEnabled = readBrainConfig().voiceIdEnabled ?? false;
+      const voiceResult = voiceIdEnabled ? opts?.voiceVerifyResult : undefined;
+      const isUnverified = voiceIdEnabled ? !!(voiceResult?.enrolled && !voiceResult?.match) : false;
+      if (isUnverified) {
+        console.warn("[voice-id] Unverified speaker — soft mode, forcing confirmation");
+      }
+
       if (wakeWordEnabled && !opts?.skipWakeWord && !pendingConfirmationRef.current) {
         const { detected, remainder } = detectWakeWord(transcription, wakeWord);
         if (!detected) {
@@ -1188,7 +1201,8 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
                 s.args.target?.includes("\\")
               )
             );
-            if (hasSensitiveStep) {
+            // Unverified speaker: always force confirmation (soft mode)
+            if (isUnverified || hasSensitiveStep) {
               pendingConfirmationRef.current = {
                 type: "plan",
                 spokenResponse: "Should I run the skill \"" + skill.name + "\"?",
@@ -1536,7 +1550,9 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
             await promptMemoryConfirmation(action.key, action.value, command);
             return;
           }
-          const result = await executeAction(action, llmFallback);
+          const result = isUnverified
+            ? await resolveActionForConfirm(action, llmFallback)
+            : await executeAction(action, llmFallback);
           if (result.needsConfirmation && result.pendingResult) {
             pendingConfirmationRef.current = {
               type: "action",

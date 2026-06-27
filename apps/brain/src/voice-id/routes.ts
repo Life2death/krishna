@@ -26,23 +26,25 @@ export function voiceIdRoutes(app: FastifyInstance, ctx: BrainContext): void {
   });
 
   app.post("/voice/verify", async (req, reply) => {
-    const { audio: base64Wav } = req.body as { audio: string };
+    const { audio: base64Wav, threshold: clientThreshold } = req.body as { audio: string; threshold?: number };
     if (!base64Wav) {
       return reply.code(400).send({ error: "Missing audio field" });
     }
+    const effectiveThreshold = clientThreshold ?? config.voiceThreshold;
     try {
       const voiceprint = await store.getVoiceprint();
       if (!voiceprint) {
-        return { match: true, score: 0, threshold: config.voiceThreshold, enrolled: false };
+        return { match: true, score: 0, threshold: effectiveThreshold, enrolled: false };
       }
       const pcm = decodeBase64Wav(base64Wav);
       const vec = await embed(pcm);
       const storedVec = JSON.parse(voiceprint.embedding) as number[];
       const score = cosineSim(vec, storedVec);
+      console.log(`[voice-id] verify: score=${score.toFixed(4)} threshold=${effectiveThreshold} match=${score >= effectiveThreshold}`);
       return {
-        match: score >= config.voiceThreshold,
+        match: score >= effectiveThreshold,
         score,
-        threshold: config.voiceThreshold,
+        threshold: effectiveThreshold,
         enrolled: true,
       };
     } catch (err) {
