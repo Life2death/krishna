@@ -8,6 +8,25 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import AppRoutes from "./routes";
 import { initializeCore } from "./lib/startup";
 
+// Android WebView lacks the Web Speech API (window.speechSynthesis is undefined).
+// Shim it so TTS calls (getVoices/speak/cancel) no-op instead of throwing and
+// crashing the React tree (white screen). TTS just stays silent on Android.
+if (typeof (window as any).speechSynthesis === "undefined") {
+  (window as any).speechSynthesis = {
+    getVoices: () => [],
+    speak: () => {},
+    cancel: () => {},
+    pause: () => {},
+    resume: () => {},
+    speaking: false,
+    paused: false,
+    pending: false,
+    onvoiceschanged: null,
+    addEventListener: () => {},
+    removeEventListener: () => {},
+  };
+}
+
 const currentWindow = getCurrentWindow();
 const windowLabel = currentWindow.label;
 

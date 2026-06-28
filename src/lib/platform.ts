@@ -31,3 +31,10 @@ export const isWindows = (): boolean => getPlatform() === "windows";
  * Check if current platform is Linux
  */
 export const isLinux = (): boolean => getPlatform() === "linux";
+
+/**
+ * Check if current platform is Android (Tauri mobile)
+ */
+export const isAndroid = (): boolean =>
+  typeof navigator !== "undefined" &&
+  /android/i.test(navigator.userAgent || "");

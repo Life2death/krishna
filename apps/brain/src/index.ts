@@ -131,12 +131,15 @@ async function main(): Promise<void> {
   process.on("SIGINT", shutdown);
   process.on("SIGTERM", shutdown);
 
-  // Shutdown endpoint — allows Tauri to request graceful shutdown (runs sync-to-Turso).
-  app.post("/shutdown", async () => {
-    app.log.info("Received shutdown request via HTTP");
-    shutdown().catch((err) => app.log.error(err, "Shutdown error"));
-    return { ok: true };
-  });
+  // Shutdown endpoint — only register on loopback (safe for desktop; on cloud,
+  // the platform's SIGTERM already triggers the same graceful shutdown).
+  if (config.host === "127.0.0.1" || config.host === "localhost") {
+    app.post("/shutdown", async () => {
+      app.log.info("Received shutdown request via HTTP");
+      shutdown().catch((err) => app.log.error(err, "Shutdown error"));
+      return { ok: true };
+    });
+  }
 
   // REST domains.
   memoriesRoutes(app, ctx);
@@ -163,7 +166,7 @@ async function main(): Promise<void> {
     app.log.info("Telegram bot polling");
   }
 
-  await app.listen({ port: config.port, host: "127.0.0.1" });
+  await app.listen({ port: config.port, host: config.host });
   app.log.info(`Krishna Brain listening on :${config.port}`);
 
 }

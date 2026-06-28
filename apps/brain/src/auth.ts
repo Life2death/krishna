@@ -4,10 +4,10 @@ import type { FastifyRequest, FastifyReply } from "fastify";
 /**
  * Bearer-token gate on every HTTP request. `/health` is public; `/ws` carries
  * its token as a query param (browsers can't set headers on a WebSocket) and is
- * validated in the socket handler instead. `/shutdown` is also public: the
- * Tauri host POSTs it to trigger a graceful sync-and-exit, and the brain binds
- * to 127.0.0.1 only, so only local processes can reach it; it performs no data
- * access, only an orderly shutdown.
+ * validated in the socket handler instead. `/shutdown` is exempted here but is
+ * only registered on loopback in index.ts (no route exists on cloud), so the
+ * exemption is harmless — on desktop it's loopback-only; on cloud there's no
+ * endpoint to hit.
  */
 export function authHook(token: string) {
   const expected = `Bearer ${token}`;

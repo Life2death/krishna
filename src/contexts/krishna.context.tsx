@@ -10,6 +10,7 @@ import { selectTools } from "@krishna/core/tool-selector";
 import { getTTS, getElevenLabsTTS, getPiperTTS, type TTSProvider } from "@/lib/tts";
 import { safeLocalStorage } from "@/lib";
 import { secureStorage } from "@/lib/secure-storage";
+import { isAndroid } from "@/lib/platform";
 import { STORAGE_KEYS, DEFAULT_SYSTEM_PROMPT } from "@/config";
 import { setKrishnaSpeaking } from "@/lib/krishna-mutex";
 import { listen, emit } from "@tauri-apps/api/event";
@@ -141,6 +142,19 @@ const BASE_SYSTEM_PROMPT = [
   '}',
   '```',
 ].join("\n");
+
+const DEVICE_CONTROL_PROMPT = [
+  '',
+  'ANDROID DEVICE CONTROL (you are running on an Android phone — these control the device directly; append a ```action block, never read it aloud):',
+  '- Flashlight on/off: {"action":"set_torch","on":true}  (or false)',
+  '- List installed apps: {"action":"list_apps"}',
+  '- Launch an app by package: {"action":"launch_app","packageName":"com.whatsapp"}',
+  '- Open a system settings page: {"action":"open_setting","name":"bluetooth"}  (name ∈ bluetooth|wifi|location|airplane|nfc|sound|battery|display|accessibility|app_details)',
+  '- Set volume: {"action":"set_volume","stream":"music","level":50}  (stream ∈ music|ring|alarm|notification|system; level is a percentage 0–100)',
+  '- Do Not Disturb: {"action":"set_dnd","filter":"priority_only"}  (filter ∈ all|priority_only|alarms_only|none)',
+  '- Enable Bluetooth (prompts the user): {"action":"request_bluetooth_enable"}',
+  '- You CAN control this phone with the above. Do not claim you cannot toggle the flashlight, change volume, or open settings.',
+].join('\n');
 
 const SYSTEM_PROMPT_RULES = [
   '',
@@ -1463,7 +1477,8 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
         const personaPrefix = selectedSystemPrompt && selectedSystemPrompt !== DEFAULT_SYSTEM_PROMPT
           ? selectedSystemPrompt + "\n\n"
           : "";
-        const systemPrompt = buildMemoryPrompt(personaPrefix + BASE_SYSTEM_PROMPT + "\n\n" + toolsSection + SYSTEM_PROMPT_RULES + timeContext, memories);
+        const deviceControlSection = isAndroid() ? DEVICE_CONTROL_PROMPT : "";
+        const systemPrompt = buildMemoryPrompt(personaPrefix + BASE_SYSTEM_PROMPT + deviceControlSection + "\n\n" + toolsSection + SYSTEM_PROMPT_RULES + timeContext, memories);
         let fullResponse = "";
         for await (const chunk of fetchAIResponse({
           provider,

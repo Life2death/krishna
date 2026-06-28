@@ -7,6 +7,7 @@ const KNOWN_SAFE: ReadonlySet<string> = new Set([
   "web_search",
   "memory_write",
   "open_target",
+  "list_apps",
 ]);
 
 /**

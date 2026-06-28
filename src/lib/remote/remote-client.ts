@@ -121,7 +121,7 @@ export async function remoteDelete<T>(path: string, config: BrainConfig): Promis
 
 export async function remoteHealth(config: BrainConfig): Promise<boolean> {
   try {
-    const res = await fetch(buildUrl(config.brainUrl, "/health"), {
+    const res = await fetch(buildUrl(config.brainUrl, "/status"), {
       headers: buildHeaders(config.brainToken),
     });
     return res.ok;

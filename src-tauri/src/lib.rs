@@ -6,6 +6,8 @@ mod brain;
 mod automation;
 mod capture;
 mod db;
+#[cfg(mobile)]
+mod device_control;
 mod resolver;
 mod secure;
 mod shortcuts;
@@ -112,6 +114,10 @@ pub fn run() {
         .plugin(tauri_plugin_http::init())
         .plugin(tauri_plugin_keychain::init())
         .plugin(tauri_plugin_shell::init());
+    #[cfg(mobile)]
+    {
+        builder = builder.plugin(device_control::init());
+    }
     // PostHog (analytics) + machine-uid are desktop-only — both pull in the
     // `machine-uid` crate, which doesn't compile for Android/iOS.
     #[cfg(desktop)]

@@ -8,7 +8,15 @@ export interface KrishnaSettings {
 
 export type Action =
   | { action: "open"; target: string }
-  | { action: "remember"; key: string | null; value: string };
+  | { action: "remember"; key: string | null; value: string }
+  // Android device-control actions
+  | { action: "set_torch"; on: boolean }
+  | { action: "list_apps" }
+  | { action: "launch_app"; packageName: string }
+  | { action: "open_setting"; name: string; packageName?: string }
+  | { action: "set_volume"; stream?: string; level: number }
+  | { action: "set_dnd"; filter: string }
+  | { action: "request_bluetooth_enable" };
 
 export interface StepAction {
   tool: string;

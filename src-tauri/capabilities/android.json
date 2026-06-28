@@ -1,0 +1,42 @@
+{
+  "$schema": "../gen/schemas/android-schema.json",
+  "identifier": "android",
+  "description": "Capability for the main window on Android — core IPC, app plugins (sql/keychain/http/log/opener), and the device-control plugin.",
+  "windows": ["main", "dashboard"],
+  "platforms": ["android"],
+  "permissions": [
+    "core:default",
+    "core:event:default",
+    "log:default",
+    "opener:default",
+    "sql:default",
+    "sql:allow-load",
+    "sql:allow-select",
+    "sql:allow-execute",
+    "keychain:default",
+    "keychain:allow-get-item",
+    "keychain:allow-save-item",
+    "keychain:allow-remove-item",
+    {
+      "identifier": "http:default",
+      "allow": [
+        { "url": "http://10.231.19.102:8787/**" },
+        { "url": "https://krishna-brain.fly.dev/**" },
+        { "url": "https://api.anthropic.com/**" },
+        { "url": "https://api.groq.com/**" },
+        { "url": "https://api.openai.com/**" },
+        { "url": "https://generativelanguage.googleapis.com/**" },
+        { "url": "https://api.elevenlabs.io/**" },
+        { "url": "https://www.googleapis.com/**" },
+        { "url": "https://api.github.com/**" }
+      ]
+    },
+    "device-control:allow-set-torch",
+    "device-control:allow-list-apps",
+    "device-control:allow-launch-app",
+    "device-control:allow-open-setting",
+    "device-control:allow-set-volume",
+    "device-control:allow-set-dnd",
+    "device-control:allow-request-bluetooth-enable"
+  ]
+}

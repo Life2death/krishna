@@ -14,7 +14,8 @@ function optional(name: string, fallback = ""): string {
 }
 
 export const config = {
-  port: Number(optional("KRISHNA_BRAIN_PORT", "8787")),
+  port: Number(process.env.PORT || optional("KRISHNA_BRAIN_PORT", "8787")),
+  host: optional("KRISHNA_BRAIN_HOST", "127.0.0.1"),
   token: required("KRISHNA_BRAIN_TOKEN"),
 
   dbPath: optional("KRISHNA_DB_PATH", "./krishna-brain.db"),

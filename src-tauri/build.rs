@@ -17,5 +17,21 @@ fn main() {
         println!("cargo:rustc-env=POSTHOG_API_KEY={}", posthog_api_key);
     }
 
-    tauri_build::build()
+    tauri_build::try_build(
+        tauri_build::Attributes::new().plugin(
+            "device-control",
+            tauri_build::InlinedPlugin::new()
+                .commands(&[
+                    "set_torch",
+                    "list_apps",
+                    "launch_app",
+                    "open_setting",
+                    "set_volume",
+                    "set_dnd",
+                    "request_bluetooth_enable",
+                ])
+                .default_permission(tauri_build::DefaultPermissionRule::AllowAllCommands),
+        ),
+    )
+    .expect("failed to build tauri application");
 }

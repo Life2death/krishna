@@ -23,6 +23,6 @@ USER krishna
 EXPOSE 8787
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
-  CMD curl -sf http://localhost:8787/health || exit 1
+  CMD sh -c "curl -sf http://localhost:${PORT:-8787}/health || exit 1"
 
 CMD ["npx", "tsx", "apps/brain/src/index.ts"]
