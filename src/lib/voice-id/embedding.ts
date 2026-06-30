@@ -24,7 +24,7 @@ let loadStatus: ModelLoadStatus = { status: "idle" };
 const subscribers: Set<(s: ModelLoadStatus) => void> = new Set();
 
 function notify() {
-  for (const fn of subscribers) subscribers.forEach(fn);
+  subscribers.forEach((fn) => fn(loadStatus));
 }
 
 export function subscribeToModelLoad(cb: (s: ModelLoadStatus) => void): () => void {
