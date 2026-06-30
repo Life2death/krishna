@@ -5,7 +5,7 @@ import {
   getVoiceprint,
   setVoiceprint,
   resetVoiceprint,
-} from "@krishna/core/database/voiceprints.action";
+} from "@krishna/core/database";
 
 export interface VoiceVerifyResult {
   match: boolean;
