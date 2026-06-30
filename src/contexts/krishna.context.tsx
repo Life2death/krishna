@@ -4,7 +4,6 @@ import { useMcpTools, useDevicePresence } from "@/hooks";
 import { fetchAIResponse } from "@/lib/repo-bound";
 import { getRepo } from "@/lib/repo-selector";
 import { parseActions, executeAction, resolveActionForConfirm } from "@/lib/actions";
-import { readBrainConfig } from "@/lib/remote";
 import { executePlan, resolvePlaceholders } from "@/lib/executor";
 import { getAllTools } from "@/lib/tools";
 import { selectTools } from "@krishna/core/tool-selector";
@@ -779,7 +778,6 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
   const llmFallback = useCallback(
     async (input: string): Promise<string | null> => {
       if (!llmFallbackEnabled) return null;
-      if (getRepo().mode === "remote") return null;
       if (!selectedAIProvider.provider) return null;
       const provider = allAiProviders.find((p) => p.id === selectedAIProvider.provider);
       if (!provider) return null;
@@ -1122,16 +1120,9 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
 
       let command = transcription.trim() || "hello";
 
-      // Voice-ID gate: if voice ID is enabled, enrolled, and speaker is unverified,
-      // tag the command. When disabled, always treat as verified.
-      // Soft mode: the command is still processed and the assistant responds, but
-      // any action is forced through the confirmation gate. Fail-open on error.
-      const voiceIdEnabled = readBrainConfig().voiceIdEnabled ?? false;
-      const voiceResult = voiceIdEnabled ? opts?.voiceVerifyResult : undefined;
-      const isUnverified = voiceIdEnabled ? !!(voiceResult?.enrolled && !voiceResult?.match) : false;
-      if (isUnverified) {
-        console.warn("[voice-id] Unverified speaker — soft mode, forcing confirmation");
-      }
+      // Phase 0: Voice-ID is disabled (client-side relocation deferred to Phase 1).
+      const voiceResult = opts?.voiceVerifyResult;
+      const isUnverified = false;
 
       if (wakeWordEnabled && !opts?.skipWakeWord && !pendingConfirmationRef.current) {
         const { detected, remainder } = detectWakeWord(transcription, wakeWord);
@@ -1155,27 +1146,22 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
       );
       emit("command-log-updated").catch(() => {});
 
-      let provider;
-      if (getRepo().mode === "remote") {
-        provider = undefined;
-      } else {
-        if (!selectedAIProvider.provider) {
-          const errMsg = "No AI provider configured — open Settings › Brain.";
-          setLastError(errMsg);
-          setStatus("idle");
-          logOutcome(command, "failed", "no_ai_provider", errMsg);
-          return;
-        }
-        provider = allAiProviders.find(
-          (p) => p.id === selectedAIProvider.provider
-        );
-        if (!provider) {
-          const errMsg = "AI provider not found — check Settings › Brain.";
-          setLastError(errMsg);
-          setStatus("idle");
-          logOutcome(command, "failed", "ai_error", errMsg);
-          return;
-        }
+      if (!selectedAIProvider.provider) {
+        const errMsg = "No AI provider configured — open Settings › Brain.";
+        setLastError(errMsg);
+        setStatus("idle");
+        logOutcome(command, "failed", "no_ai_provider", errMsg);
+        return;
+      }
+      const provider = allAiProviders.find(
+        (p) => p.id === selectedAIProvider.provider
+      );
+      if (!provider) {
+        const errMsg = "AI provider not found — check Settings › Brain.";
+        setLastError(errMsg);
+        setStatus("idle");
+        logOutcome(command, "failed", "ai_error", errMsg);
+        return;
       }
 
       // Skill match: check if the command matches a learned skill (pattern-based)

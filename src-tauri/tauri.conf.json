@@ -6,7 +6,7 @@
   "build": {
     "beforeDevCommand": "npm run dev",
     "devUrl": "http://localhost:1420",
-    "beforeBuildCommand": "npm run build:bundle && npm run build",
+    "beforeBuildCommand": "npm run build",
     "frontendDist": "../dist"
   },
   "app": {
@@ -58,8 +58,7 @@
     ],
     "resources": {
       "info.plist": "info.plist",
-      "resources/piper": "piper",
-      "resources/brain": "brain"
+      "resources/piper": "piper"
     },
     "macOS": { "minimumSystemVersion": "10.13" },
     "windows": {

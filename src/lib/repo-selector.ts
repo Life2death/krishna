@@ -37,17 +37,7 @@ import {
   deleteAllConversations as localDeleteAllConversations,
 } from "@/lib/database";
 
-import {
-  readBrainConfig,
-  createRemoteMemoriesRepo,
-  createRemoteSkillsRepo,
-  createRemoteLearnedActionsRepo,
-  createRemoteRemindersRepo,
-  createRemoteSystemPromptsRepo,
-  createRemoteChatHistoryRepo,
-  createRemoteChatRepo,
-  type RemoteChatRepo,
-} from "./remote";
+
 
 export interface MemoriesRepo {
   getAllMemories(): Promise<Memory[]>;
@@ -115,7 +105,6 @@ export interface ChatRepo {
 }
 
 export interface Repo {
-  mode: "local" | "remote";
   memories: MemoriesRepo;
   skills: SkillsRepo;
   learnedActions: LearnedActionsRepo;
@@ -126,7 +115,6 @@ export interface Repo {
 }
 
 const localRepo: Repo = {
-  mode: "local",
   memories: {
     getAllMemories: localGetAllMemories,
     createMemory: localCreateMemory,
@@ -190,43 +178,6 @@ const localRepo: Repo = {
   },
 };
 
-let currentConfig = readBrainConfig();
-let remoteRepo: Repo | null = null;
-
 export function getRepo(): Repo {
-  const config = readBrainConfig();
-
-  if (config.brainMode === "remote" && config.brainUrl && config.brainToken) {
-    if (!remoteRepo || currentConfig.brainMode !== config.brainMode ||
-        currentConfig.brainUrl !== config.brainUrl ||
-        currentConfig.brainToken !== config.brainToken) {
-      currentConfig = config;
-      const r = createRemoteMemoriesRepo(config);
-      const s = createRemoteSkillsRepo(config);
-      const la = createRemoteLearnedActionsRepo(config);
-      const rem = createRemoteRemindersRepo(config);
-      const sp = createRemoteSystemPromptsRepo(config);
-      const ch = createRemoteChatHistoryRepo(config);
-      const chat = createRemoteChatRepo(config);
-
-      remoteRepo = {
-        mode: "remote",
-        memories: r,
-        skills: s,
-        learnedActions: la,
-        reminders: rem,
-        systemPrompts: sp,
-        chatHistory: ch,
-        chat,
-      };
-    }
-    return remoteRepo!;
-  }
-
   return localRepo;
-}
-
-export function resetRepoCache(): void {
-  currentConfig = readBrainConfig();
-  remoteRepo = null;
 }

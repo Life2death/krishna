@@ -10,8 +10,6 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { SparklesIcon, LoaderCircleIcon, CheckIcon, AlertCircleIcon } from "lucide-react";
-import { getRepo } from "@/lib/repo-selector";
-import { readBrainConfig } from "@/lib/remote/remote-client";
 import { createSkill } from "@/lib/repo-bound";
 
 interface GeneratedSkill {
@@ -37,31 +35,7 @@ export function CreateSkillDialog() {
     setSaved(false);
 
     try {
-      const repo = getRepo();
-      if (repo.mode === "remote") {
-        const config = readBrainConfig();
-        const baseUrl = config.brainUrl.replace(/\/+$/, "");
-        const res = await fetch(`${baseUrl}/skills/generate`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${config.brainToken}`,
-          },
-          body: JSON.stringify({ description }),
-        });
-        if (!res.ok) {
-          const text = await res.text().catch(() => "Unknown error");
-          throw new Error(`Brain error: ${res.status} ${text}`);
-        }
-        const skill = await res.json();
-        setGenerated({
-          triggerExamples: skill.triggerExamples,
-          params: JSON.parse(skill.params),
-          planTemplate: JSON.parse(skill.planTemplate),
-        });
-      } else {
-        throw new Error("Skill generation requires remote brain mode. Configure a brain connection in Settings.");
-      }
+      throw new Error("Skill generation via AI is not available in local mode yet (coming in Phase 4). Create skills manually below.");
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {

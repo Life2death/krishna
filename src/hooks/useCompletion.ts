@@ -210,18 +210,15 @@ export const useCompletion = () => {
         }));
 
         try {
-          const repo = getRepo();
-          const aiIterable = repo.mode === "remote"
-            ? repo.chat.fetchAIResponse({ userMessage: input, history: messageHistory, systemPrompt: buildEffectiveSystemPrompt(), signal })
-            : localFetchAIResponse({
-                provider: provider!,
-                selectedProvider: selectedAIProvider,
-                systemPrompt: buildEffectiveSystemPrompt(),
-                history: messageHistory,
-                userMessage: input,
-                imagesBase64,
-                signal,
-              });
+          const aiIterable = localFetchAIResponse({
+            provider: provider!,
+            selectedProvider: selectedAIProvider,
+            systemPrompt: buildEffectiveSystemPrompt(),
+            history: messageHistory,
+            userMessage: input,
+            imagesBase64,
+            signal,
+          });
           for await (const chunk of aiIterable) {
             // Only update if this is still the current request
             if (currentRequestIdRef.current !== requestId) {
@@ -616,18 +613,15 @@ export const useCompletion = () => {
             }));
 
             // Use the fetchAIResponse function with image and signal
-            const repo = getRepo();
-            const aiIterable = repo.mode === "remote"
-              ? repo.chat.fetchAIResponse({ userMessage: prompt, history: messageHistory, systemPrompt: buildEffectiveSystemPrompt(), signal })
-              : localFetchAIResponse({
-                  provider: provider!,
-                  selectedProvider: selectedAIProvider,
-                  systemPrompt: buildEffectiveSystemPrompt(),
-                  history: messageHistory,
-                  userMessage: prompt,
-                  imagesBase64: [base64],
-                  signal,
-                });
+            const aiIterable = localFetchAIResponse({
+              provider: provider!,
+              selectedProvider: selectedAIProvider,
+              systemPrompt: buildEffectiveSystemPrompt(),
+              history: messageHistory,
+              userMessage: prompt,
+              imagesBase64: [base64],
+              signal,
+            });
           for await (const chunk of aiIterable) {
               // Only update if this is still the current request
               if (currentRequestIdRef.current !== requestId || signal.aborted) {

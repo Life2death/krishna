@@ -1,4 +1,4 @@
-import { readBrainConfig } from "./remote/remote-client";
+import { readBrainConfig } from "./brain-config";
 
 export interface VoiceVerifyResult {
   match: boolean;

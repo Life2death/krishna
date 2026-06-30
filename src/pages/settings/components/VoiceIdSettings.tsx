@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { Switch, Label, Header, Button, Slider } from "@/components";
-import { readBrainConfig, saveBrainConfig } from "@/lib/remote";
+import { readBrainConfig, saveBrainConfig } from "@/lib/brain-config";
 import {
   getVoiceStatus,
   enrollVoice,

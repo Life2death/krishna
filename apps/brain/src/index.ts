@@ -37,47 +37,6 @@ async function main(): Promise<void> {
   const hub = new Hub();
   const ctx: BrainContext = { crypto, hub, db };
 
-  // 3a. Sync status tracker (for /status endpoint + shutdown).
-  const { initSyncStatus, syncAndRecord } = await import("./db/sync-status");
-  initSyncStatus();
-  // Periodic syncAndRecord so the sync card's lastSyncAt reflects reality.
-  const syncTimer = setInterval(() => syncAndRecord(db), config.syncInterval * 1000);
-
-  // 3b. MCP tool hub — connect to configured MCP servers.
-  const mcpHub = new McpHub();
-  mcpHub.setWsHub(hub);
-  const mcpConfig = loadMcpConfig();
-  if (mcpConfig.servers.length > 0) {
-    await mcpHub.connectAll(mcpConfig.servers);
-    console.log(`[mcp] Connected to ${mcpConfig.servers.length} MCP server(s), ${mcpHub.getAllTools().length} tools total`);
-  }
-
-  // 3c. Built-in Gmail provider (read-only + send) — register if token file exists.
-  const gmailTokenPath = config.gmailTokenPath;
-  const gmailKeysPath = config.gmailOAuthKeysPath;
-  if (gmailTokenPath && gmailKeysPath) {
-    try {
-      const { loadToken, saveToken } = await import("./gmail/token-store");
-      const { loadOAuthKeys, createGmailClient } = await import("./gmail/client");
-      const { createGmailProvider } = await import("./gmail/tools");
-
-      const tokens = await loadToken(gmailTokenPath, crypto);
-      if (tokens) {
-        const keys = await loadOAuthKeys(gmailKeysPath);
-        const gmail = await createGmailClient(tokens, keys, async (updated) => {
-          await saveToken(updated, gmailTokenPath, crypto);
-        });
-        const provider = createGmailProvider(gmail);
-        mcpHub.registerBuiltin(provider);
-        console.log(`[gmail] Read-only + send tools registered (${provider.tools.length} tools)`);
-      } else {
-        console.log("[gmail] No token found — skipping. Run `npm run gmail:auth` to authorize.");
-      }
-    } catch (err) {
-      console.error("[gmail] Failed to initialize:", err);
-    }
-  }
-
   const app = Fastify({ logger: true, bodyLimit: 25 * 1024 * 1024 });
   await app.register(websocket);
 
@@ -112,14 +71,90 @@ async function main(): Promise<void> {
     hub.add(socket);
   });
 
-  // RAG knowledge base (async init — non-blocking).
+  // REST domains (register _before_ listen so they're immediately available).
+  memoriesRoutes(app, ctx);
+  skillsRoutes(app, ctx);
+  learnedActionsRoutes(app, ctx);
+  remindersRoutes(app, ctx);
+  systemPromptsRoutes(app, ctx);
+  chatHistoryRoutes(app, ctx);
+  chatRoutes(app);
+  const mcpHub = new McpHub();
+  mcpToolsRoutes(app, mcpHub);
+  const { statusRoutes } = await import("./routes/status");
+  statusRoutes(app, ctx, mcpHub);
+  devicesRoutes(app, ctx);
+  resumeSummaryRoutes(app, ctx);
+  factExtractRoutes(app, ctx);
+  skillsGenerateRoutes(app);
+  dictateRoutes(app);
+  voiceIdRoutes(app, ctx);
+  ragRoutes(app, ctx);
+
+  // 4. Start listening FIRST — /health responds immediately.
+  await app.listen({ port: config.port, host: "127.0.0.1" });
+  app.log.info(`Krishna Brain listening on :${config.port}`);
+
+  // 5. Background initialisation — non-blocking, runs after listen so the brain
+  //    is reachable immediately even if these take time.
+
+  // 5a. Sync status tracker (for /status endpoint + shutdown).
+  const { initSyncStatus, syncAndRecord } = await import("./db/sync-status");
+  initSyncStatus();
+  const syncTimer = setInterval(() => syncAndRecord(db), config.syncInterval * 1000);
+
+  // 5b. MCP tool hub — connect to configured MCP servers.
+  mcpHub.setWsHub(hub);
+  const mcpConfig = loadMcpConfig();
+  if (mcpConfig.servers.length > 0) {
+    mcpHub.connectAll(mcpConfig.servers).then(() => {
+      console.log(`[mcp] Connected to ${mcpConfig.servers.length} MCP server(s), ${mcpHub.getAllTools().length} tools total`);
+    }).catch((err) => console.error("[mcp] Failed to connect:", err));
+  }
+
+  // 5c. Built-in Gmail provider (read-only + send) — register if token file exists.
+  const gmailTokenPath = config.gmailTokenPath;
+  const gmailKeysPath = config.gmailOAuthKeysPath;
+  if (gmailTokenPath && gmailKeysPath) {
+    (async () => {
+      try {
+        const { loadToken, saveToken } = await import("./gmail/token-store");
+        const { loadOAuthKeys, createGmailClient } = await import("./gmail/client");
+        const { createGmailProvider } = await import("./gmail/tools");
+
+        const tokens = await loadToken(gmailTokenPath, crypto);
+        if (tokens) {
+          const keys = await loadOAuthKeys(gmailKeysPath);
+          const gmail = await createGmailClient(tokens, keys, async (updated) => {
+            await saveToken(updated, gmailTokenPath, crypto);
+          });
+          const provider = createGmailProvider(gmail);
+          mcpHub.registerBuiltin(provider);
+          console.log(`[gmail] Read-only + send tools registered (${provider.tools.length} tools)`);
+        } else {
+          console.log("[gmail] No token found — skipping. Run `npm run gmail:auth` to authorize.");
+        }
+      } catch (err) {
+        console.error("[gmail] Failed to initialize:", err);
+      }
+    })();
+  }
+
+  // 5d. RAG knowledge base (async init — non-blocking).
   if (!config.ragDisabled) {
     initRag(ctx).catch((err) => console.error("[rag] Init failed:", err));
   } else {
     console.log("[rag] Disabled via config");
   }
 
-  // Graceful shutdown — sync DB to Turso, stop Telegram polling, then Fastify.
+  // 5e. Telegram bot (optional).
+  startBot(ctx).then((telegramBot) => {
+    if (telegramBot) {
+      app.log.info("Telegram bot polling");
+    }
+  }).catch((err) => console.error("[telegram] Failed to start:", err));
+
+  // 6. Graceful shutdown — sync DB to Turso, stop Telegram polling, then Fastify.
   const shutdown = async () => {
     app.log.info("Shutting down…");
     clearInterval(syncTimer);
@@ -137,35 +172,6 @@ async function main(): Promise<void> {
     shutdown().catch((err) => app.log.error(err, "Shutdown error"));
     return { ok: true };
   });
-
-  // REST domains.
-  memoriesRoutes(app, ctx);
-  skillsRoutes(app, ctx);
-  learnedActionsRoutes(app, ctx);
-  remindersRoutes(app, ctx);
-  systemPromptsRoutes(app, ctx);
-  chatHistoryRoutes(app, ctx);
-  chatRoutes(app);
-  mcpToolsRoutes(app, mcpHub);
-  const { statusRoutes } = await import("./routes/status");
-  statusRoutes(app, ctx, mcpHub);
-  devicesRoutes(app, ctx);
-  resumeSummaryRoutes(app, ctx);
-  factExtractRoutes(app, ctx);
-  skillsGenerateRoutes(app);
-  dictateRoutes(app);
-  voiceIdRoutes(app, ctx);
-  ragRoutes(app, ctx);
-
-  // Telegram bot (optional — only polls when TELEGRAM_BOT_TOKEN is set).
-  const telegramBot = await startBot(ctx);
-  if (telegramBot) {
-    app.log.info("Telegram bot polling");
-  }
-
-  await app.listen({ port: config.port, host: "127.0.0.1" });
-  app.log.info(`Krishna Brain listening on :${config.port}`);
-
 }
 
 main().catch((err) => {

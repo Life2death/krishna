@@ -514,17 +514,14 @@ export function useSystemAudio(options: UseSystemAudioOptions = {}) {
         }
 
         try {
-          const repo = getRepo();
-          const aiIterable = repo.mode === "remote"
-            ? repo.chat.fetchAIResponse({ userMessage: transcription, history: previousMessages, systemPrompt: prompt })
-            : localFetchAIResponse({
-                provider: provider!,
-                selectedProvider: selectedAIProvider,
-                systemPrompt: prompt,
-                history: previousMessages,
-                userMessage: transcription,
-                imagesBase64: [],
-              });
+          const aiIterable = localFetchAIResponse({
+            provider: provider!,
+            selectedProvider: selectedAIProvider,
+            systemPrompt: prompt,
+            history: previousMessages,
+            userMessage: transcription,
+            imagesBase64: [],
+          });
           for await (const chunk of aiIterable) {
             fullResponse += chunk;
             setLastAIResponse((prev) => prev + chunk);

@@ -1,51 +1,49 @@
 import { useEffect, useState, useCallback, useRef } from "react";
-import { readBrainConfig, remoteGet, remotePost, type BrainConfig } from "@/lib/remote";
+import { getRepo } from "@/lib/repo-selector";
 
-export interface HealthStatus {
-  brain: { ok: boolean; version?: string; uptimeSec?: number; clients?: number };
-  db: { ok: boolean; path?: string; error?: string };
-  sync: {
-    ok: boolean;
-    enabled: boolean;
-    host: string | null;
-    intervalSec: number;
-    lastSyncAt: number | null;
-    lastSyncOk: boolean;
-    lastError: string | null;
-  };
-  gmail: { ok: boolean; configured: boolean; tools: number; tokenPresent: boolean; expiryDate: number | null; expired: boolean; error?: string };
-  rag: { ok: boolean; enabled: boolean; ready: boolean; embeddings?: number; error?: string };
-  ai: { ok: boolean; provider: string; keyConfigured: boolean; model: string };
+export interface LocalHealthStatus {
+  brain: { ok: boolean };
+  sync: { ok: boolean; enabled: boolean };
+  gmail: { ok: boolean; configured: boolean };
+  rag: { ok: boolean; enabled: boolean };
+  ai: { ok: boolean; keyConfigured: boolean; model: string };
   mcp: { ok: boolean; tools: number };
-  data: { ok: boolean; memories?: number; conversations?: number; reminders?: number; learnedActions?: number; skills?: number; error?: string };
+  data: { ok: boolean; memories?: number; conversations?: number; reminders?: number };
 }
 
-const POLL_INTERVAL = 15_000;
-
 export function useSystemHealth() {
-  const config = useRef(readBrainConfig());
-  const [status, setStatus] = useState<HealthStatus | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [status, setStatus] = useState<LocalHealthStatus | null>(null);
+  const [error] = useState<string | null>(null);
   const [lastCheckedAt, setLastCheckedAt] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const fetchHealth = useCallback(async () => {
-    const cfg = config.current;
-    if (cfg.brainMode !== "remote") {
-      setError(null);
-      setStatus(null);
-      return;
-    }
-
     setIsLoading(true);
     try {
-      const data = await remoteGet<HealthStatus>("/status", cfg);
-      setStatus(data);
-      setError(null);
+      const [memories, conversations] = await Promise.all([
+        getRepo().memories.getAllMemories().catch(() => []),
+        getRepo().chatHistory.getAllConversations().catch(() => []),
+      ]);
+      setStatus({
+        brain: { ok: true },
+        sync: { ok: true, enabled: false },
+        gmail: { ok: true, configured: false },
+        rag: { ok: true, enabled: false },
+        ai: { ok: true, keyConfigured: true, model: "local" },
+        mcp: { ok: true, tools: 0 },
+        data: { ok: true, memories: memories.length, conversations: conversations.length },
+      });
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to fetch health");
-      setStatus(null);
+      setStatus({
+        brain: { ok: false },
+        sync: { ok: false, enabled: false },
+        gmail: { ok: false, configured: false },
+        rag: { ok: false, enabled: false },
+        ai: { ok: false, keyConfigured: false, model: "" },
+        mcp: { ok: false, tools: 0 },
+        data: { ok: false },
+      });
     } finally {
       setLastCheckedAt(Date.now());
       setIsLoading(false);
@@ -54,22 +52,15 @@ export function useSystemHealth() {
 
   useEffect(() => {
     fetchHealth();
-    timerRef.current = setInterval(fetchHealth, POLL_INTERVAL);
+    timerRef.current = setInterval(fetchHealth, 30_000);
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
     };
   }, [fetchHealth]);
 
   const forceSync = useCallback(async () => {
-    const cfg = config.current;
-    if (cfg.brainMode !== "remote") return;
-    try {
-      await remotePost("/status/sync", {}, cfg);
-      await fetchHealth();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Sync request failed");
-    }
-  }, [fetchHealth]);
+    // Phase 0: no cloud sync.
+  }, []);
 
   return { status, error, lastCheckedAt, isLoading, refresh: fetchHealth, forceSync };
 }

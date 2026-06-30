@@ -171,28 +171,22 @@ export const useChatCompletion = (
           });
         }
 
-        let provider;
-        if (getRepo().mode === "remote") {
-          provider = undefined;
-        } else {
-          // Check if AI provider is configured
-          if (!selectedAIProvider.provider) {
-            setState((prev) => ({
-              ...prev,
-              error: "Please select an AI provider in settings",
-            }));
-            return;
-          }
-          provider = allAiProviders.find(
-            (p) => p.id === selectedAIProvider.provider
-          );
-          if (!provider) {
-            setState((prev) => ({
-              ...prev,
-              error: "Invalid provider selected",
-            }));
-            return;
-          }
+        if (!selectedAIProvider.provider) {
+          setState((prev) => ({
+            ...prev,
+            error: "Please select an AI provider in settings",
+          }));
+          return;
+        }
+        const provider = allAiProviders.find(
+          (p) => p.id === selectedAIProvider.provider
+        );
+        if (!provider) {
+          setState((prev) => ({
+            ...prev,
+            error: "Invalid provider selected",
+          }));
+          return;
         }
 
         // Add user message to UI immediately
@@ -225,18 +219,15 @@ export const useChatCompletion = (
         let fullResponse = "";
 
         try {
-          const repo = getRepo();
-          const aiIterable = repo.mode === "remote"
-            ? repo.chat.fetchAIResponse({ userMessage: input, history: messageHistory, systemPrompt, signal })
-            : localFetchAIResponse({
-                provider: provider!,
-                selectedProvider: selectedAIProvider,
-                systemPrompt: systemPrompt || undefined,
-                history: messageHistory,
-                userMessage: input,
-                imagesBase64,
-                signal,
-              });
+          const aiIterable = localFetchAIResponse({
+            provider: provider!,
+            selectedProvider: selectedAIProvider,
+            systemPrompt: systemPrompt || undefined,
+            history: messageHistory,
+            userMessage: input,
+            imagesBase64,
+            signal,
+          });
           for await (const chunk of aiIterable) {
             // Only update if this is still the current request
             if (currentRequestIdRef.current !== requestId) {

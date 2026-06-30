@@ -9,7 +9,6 @@ import {
 import moment from "moment";
 import { useState } from "react";
 import type { FailureReason } from "@/lib/database";
-import { readBrainConfig } from "@/lib/remote";
 
 const FAILURE_LABELS: Record<FailureReason, string> = {
   stt_failed: "Speech recognition failed",
@@ -39,72 +38,12 @@ const FAILURE_HINTS: Partial<Record<FailureReason, string>> = {
   wake_word_missed: "Consider disabling the wake word or changing it in Settings.",
 };
 
-const HEALTH_CARDS: Array<{
-  key: keyof import("@/hooks/useSystemHealth").HealthStatus;
-  icon: typeof BrainCircuitIcon;
-  label: string;
-  detail: (s: any) => string;
-}> = [
-  { key: "brain", icon: BrainCircuitIcon, label: "Brain", detail: (s) => s.ok ? `Up ${fmtDuration(s.uptimeSec)}` : "Unreachable" },
-  { key: "sync", icon: CloudIcon, label: "Cloud Sync", detail: syncDetail },
-  { key: "gmail", icon: MailIcon, label: "Gmail", detail: gmailDetail },
-  { key: "rag", icon: SearchIcon, label: "RAG", detail: (s) => s.enabled ? (s.ready ? `${s.embeddings ?? 0} embeddings` : "Indexing…") : "Disabled" },
-  { key: "ai", icon: CpuIcon, label: "AI Provider", detail: (s) => s.keyConfigured ? s.model : "Not configured" },
-  { key: "mcp", icon: PuzzleIcon, label: "MCP Tools", detail: (s) => `${s.tools} tool(s)` },
-  { key: "data", icon: HardDriveIcon, label: "Data", detail: (s) => `${s.memories ?? "?"} memories · ${s.conversations ?? "?"} conversations` },
-];
-
-function fmtDuration(sec: number): string {
-  if (sec < 60) return `${sec}s`;
-  if (sec < 3600) return `${Math.floor(sec / 60)}m`;
-  return `${Math.floor(sec / 3600)}h ${Math.floor((sec % 3600) / 60)}m`;
-}
-
-function syncDetail(s: any): string {
-  if (!s.enabled) return "Local only — not syncing to cloud";
-  if (s.lastError) return `Sync error: ${s.lastError}`;
-  if (s.lastSyncAt) {
-    const ago = moment(s.lastSyncAt).fromNow();
-    return `Synced ${ago} · ${s.host ?? "?"} · every ${s.intervalSec}s`;
-  }
-  return "Waiting for first sync…";
-}
-
-function gmailDetail(s: any): string {
-  if (!s.configured) return "Not configured";
-  if (!s.tokenPresent) return "No token — run gmail:auth";
-  if (!s.hasRefreshToken) return "Missing refresh token — re-run gmail:auth";
-  return `${s.tools} tool(s) ready`;
-}
-
-function healthColor(s: any): "ok" | "warn" | "err" {
-  if (!s) return "err";
-  if (s.ok === false) return "err";
-  if (s.ok === true) return "ok";
-  return "warn";
-}
-
-function badgeForColor(c: "ok" | "warn" | "err"): { color: string; bg: string; label: string } {
-  switch (c) {
-    case "ok": return { color: "text-green-600", bg: "bg-green-50 dark:bg-green-950/30", label: "OK" };
-    case "warn": return { color: "text-amber-600", bg: "bg-amber-50 dark:bg-amber-950/30", label: "Warning" };
-    case "err": return { color: "text-red-600", bg: "bg-red-50 dark:bg-red-950/30", label: "Error" };
-  }
-}
-
 const Status = () => {
   const { stats, recent, isLoading: ciLoading, clearAll: clearCommandLog } = useCommandInsights();
-  const { status, error, lastCheckedAt, isLoading: healthLoading, refresh, forceSync } = useSystemHealth();
+  const { status, isLoading: healthLoading, refresh } = useSystemHealth();
   const [confirmClear, setConfirmClear] = useState(false);
   const topFailure = stats.byReason[0];
   const hasData = stats.total > 0 || stats.pending > 0;
-  const config = readBrainConfig();
-  const isRemote = config.brainMode === "remote";
-
-  const sections = status ? Object.keys(status) : [];
-  const overall: "ok" | "warn" | "err" = status
-    ? sections.every((k) => healthColor((status as any)[k]) === "ok") ? "ok" : sections.some((k) => healthColor((status as any)[k]) === "err") ? "err" : "warn"
-    : error ? "err" : "warn";
 
   return (
     <PageLayout
@@ -112,7 +51,7 @@ const Status = () => {
       description="Command insights — what Krishna heard, what succeeded, and what failed"
     >
       <>
-        {/* Command Insights section — unchanged */}
+        {/* Command Insights section */}
         {!ciLoading && !hasData && (
           <Empty
             isLoading={ciLoading}
@@ -219,61 +158,81 @@ const Status = () => {
               <DatabaseIcon className="h-4 w-4" />
               System Health
             </h2>
-            {isRemote && (
-              <>
-                <Badge className={`text-xs ${badgeForColor(overall).bg} ${badgeForColor(overall).color}`}>
-                  {badgeForColor(overall).label}
-                </Badge>
-                {lastCheckedAt && (
-                  <span className="text-xs text-muted-foreground">{moment(lastCheckedAt).fromNow()}</span>
-                )}
-              </>
-            )}
-            {isRemote && (
-              <div className="ml-auto flex gap-1">
-                <Button size="sm" variant="outline" className="h-6 px-2 text-xs" onClick={refresh} disabled={healthLoading}>
-                  <RefreshCwIcon className={`mr-1 h-3 w-3 ${healthLoading ? "animate-spin" : ""}`} />
-                  Refresh
-                </Button>
-                <Button size="sm" variant="outline" className="h-6 px-2 text-xs" onClick={forceSync}>
-                  <CloudIcon className="mr-1 h-3 w-3" />
-                  Sync now
-                </Button>
-              </div>
-            )}
+            <div className="ml-auto">
+              <Button size="sm" variant="outline" className="h-6 px-2 text-xs" onClick={refresh} disabled={healthLoading}>
+                <RefreshCwIcon className={`mr-1 h-3 w-3 ${healthLoading ? "animate-spin" : ""}`} />
+                Refresh
+              </Button>
+            </div>
           </div>
 
-          {!isRemote && (
+          {status && (
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              <div className="rounded-md border border-green-200 bg-green-50 p-3 dark:border-green-800 dark:bg-green-950">
+                <div className="mb-1 flex items-center gap-1.5">
+                  <BrainCircuitIcon className="h-4 w-4 text-green-600" />
+                  <span className="text-xs font-semibold">Brain</span>
+                  <Badge className="ml-auto text-xs bg-green-50 text-green-600 dark:bg-green-950 dark:text-green-300">OK</Badge>
+                </div>
+                <p className="text-xs text-muted-foreground">Local mode — no brain process</p>
+              </div>
+              <div className="rounded-md border border-amber-200 bg-amber-50 p-3 dark:border-amber-800 dark:bg-amber-950">
+                <div className="mb-1 flex items-center gap-1.5">
+                  <CloudIcon className="h-4 w-4 text-amber-600" />
+                  <span className="text-xs font-semibold">Cloud Sync</span>
+                  <Badge className="ml-auto text-xs bg-amber-50 text-amber-600 dark:bg-amber-950 dark:text-amber-300">Disabled</Badge>
+                </div>
+                <p className="text-xs text-muted-foreground">Local only — not syncing to cloud</p>
+              </div>
+              <div className="rounded-md border border-amber-200 bg-amber-50 p-3 dark:border-amber-800 dark:bg-amber-950">
+                <div className="mb-1 flex items-center gap-1.5">
+                  <MailIcon className="h-4 w-4 text-amber-600" />
+                  <span className="text-xs font-semibold">Gmail</span>
+                  <Badge className="ml-auto text-xs bg-amber-50 text-amber-600 dark:bg-amber-950 dark:text-amber-300">Disabled</Badge>
+                </div>
+                <p className="text-xs text-muted-foreground">Not configured</p>
+              </div>
+              <div className="rounded-md border border-amber-200 bg-amber-50 p-3 dark:border-amber-800 dark:bg-amber-950">
+                <div className="mb-1 flex items-center gap-1.5">
+                  <SearchIcon className="h-4 w-4 text-amber-600" />
+                  <span className="text-xs font-semibold">RAG</span>
+                  <Badge className="ml-auto text-xs bg-amber-50 text-amber-600 dark:bg-amber-950 dark:text-amber-300">Disabled</Badge>
+                </div>
+                <p className="text-xs text-muted-foreground">Local mode only</p>
+              </div>
+              <div className="rounded-md border border-green-200 bg-green-50 p-3 dark:border-green-800 dark:bg-green-950">
+                <div className="mb-1 flex items-center gap-1.5">
+                  <CpuIcon className="h-4 w-4 text-green-600" />
+                  <span className="text-xs font-semibold">AI Provider</span>
+                  <Badge className="ml-auto text-xs bg-green-50 text-green-600 dark:bg-green-950 dark:text-green-300">Local</Badge>
+                </div>
+                <p className="text-xs text-muted-foreground">Configured in AI Provider settings</p>
+              </div>
+              <div className="rounded-md border border-amber-200 bg-amber-50 p-3 dark:border-amber-800 dark:bg-amber-950">
+                <div className="mb-1 flex items-center gap-1.5">
+                  <PuzzleIcon className="h-4 w-4 text-amber-600" />
+                  <span className="text-xs font-semibold">MCP Tools</span>
+                  <Badge className="ml-auto text-xs bg-amber-50 text-amber-600 dark:bg-amber-950 dark:text-amber-300">0</Badge>
+                </div>
+                <p className="text-xs text-muted-foreground">Client-side MCP deferred to Phase 4</p>
+              </div>
+              <div className="rounded-md border border-green-200 bg-green-50 p-3 dark:border-green-800 dark:bg-green-950">
+                <div className="mb-1 flex items-center gap-1.5">
+                  <HardDriveIcon className="h-4 w-4 text-green-600" />
+                  <span className="text-xs font-semibold">Data</span>
+                  <Badge className="ml-auto text-xs bg-green-50 text-green-600 dark:bg-green-950 dark:text-green-300">OK</Badge>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  {status.data.memories ?? "?"} memories &middot; {status.data.conversations ?? "?"} conversations (local DB)
+                </p>
+              </div>
+            </div>
+          )}
+
+          {!status && (
             <div className="flex items-center gap-2 rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">
               <DatabaseIcon className="h-4 w-4 shrink-0" />
-              <span>Connect to the brain (Remote mode) to see system health. Open Settings → Brain Connection.</span>
-            </div>
-          )}
-
-          {isRemote && error && !status && (
-            <div className="flex items-center gap-2 rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-800 dark:bg-red-950 dark:text-red-300">
-              <XCircleIcon className="h-4 w-4 shrink-0" />
-              <span>Brain unreachable — {error}</span>
-            </div>
-          )}
-
-          {isRemote && status && (
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              {HEALTH_CARDS.map(({ key, icon: Icon, label, detail }) => {
-                const s = (status as any)[key];
-                const c = healthColor(s);
-                const badge = badgeForColor(c);
-                return (
-                  <div key={key} className={`rounded-md border p-3 ${badge.bg}`}>
-                    <div className="mb-1 flex items-center gap-1.5">
-                      <Icon className={`h-4 w-4 ${badge.color}`} />
-                      <span className="text-xs font-semibold">{label}</span>
-                      <Badge className={`ml-auto text-xs ${badge.bg} ${badge.color}`}>{badge.label}</Badge>
-                    </div>
-                    <p className="text-xs text-muted-foreground">{detail(s)}</p>
-                  </div>
-                );
-              })}
+              <span>Loading system health from local database…</span>
             </div>
           )}
         </div>
