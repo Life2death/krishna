@@ -7,3 +7,4 @@ export * from "./learned-actions.action";
 export * from "./skills.action";
 export * from "./memories.action";
 export * from "./reminders.action";
+export * from "./voiceprints.action";
