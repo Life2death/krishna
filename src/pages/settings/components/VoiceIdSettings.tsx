@@ -8,8 +8,9 @@ import {
   isVoiceIdEnabled,
 } from "@/lib/voice-client";
 import type { VoiceStatus } from "@/lib/voice-client";
-import { floatArrayToWav } from "@/lib/utils";
-import { Mic, Trash2, ShieldCheck, ShieldAlert, Loader2 } from "lucide-react";
+import { subscribeToModelLoad, getModelLoadStatus } from "@/lib/voice-id/embedding";
+import type { ModelLoadStatus } from "@/lib/voice-id/embedding";
+import { Mic, Trash2, ShieldCheck, ShieldAlert, Loader2, Download } from "lucide-react";
 
 export const VoiceIdSettings = () => {
   const [enabled, setEnabled] = useState(isVoiceIdEnabled());
@@ -21,6 +22,7 @@ export const VoiceIdSettings = () => {
   const [resetting, setResetting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [enrollResult, setEnrollResult] = useState<string | null>(null);
+  const [modelStatus, setModelStatus] = useState<ModelLoadStatus>(getModelLoadStatus());
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
@@ -40,6 +42,10 @@ export const VoiceIdSettings = () => {
   useEffect(() => {
     fetchStatus();
   }, [fetchStatus]);
+
+  useEffect(() => {
+    return subscribeToModelLoad((s) => setModelStatus(s));
+  }, []);
 
   const handleToggle = (checked: boolean) => {
     const cfg = readBrainConfig();
@@ -124,8 +130,7 @@ export const VoiceIdSettings = () => {
       srcNode.start();
       const rendered = await offline.startRendering();
       const pcm16k = rendered.getChannelData(0); // 16 kHz mono
-      const wavBlob = floatArrayToWav(pcm16k, 16000, "wav");
-      const result = await enrollVoice(wavBlob);
+      const result = await enrollVoice(pcm16k, 16000);
       setEnrollResult(`Enrolled (${result.sampleCount} sample${result.sampleCount > 1 ? "s" : ""}, ${result.dims} dims)`);
       await fetchStatus();
     } catch (err) {
@@ -155,7 +160,7 @@ export const VoiceIdSettings = () => {
     <div id="voice-id" className="space-y-3">
       <Header
         title="Voice ID"
-        description="Speaker verification: only allow your voice to execute commands. Voice ID must be enabled in the brain (.env: KRISHNA_VOICE_ID_ENABLED=true)."
+        description="Speaker verification: only allow your voice to execute commands. Voice ID runs entirely on your device."
         isMainTitle
       />
 
@@ -206,6 +211,19 @@ export const VoiceIdSettings = () => {
               </p>
             </div>
 
+            {/* Model download status */}
+            {modelStatus.status === "loading" && (
+              <div className="flex items-center gap-2 text-xs text-muted-foreground py-1">
+                <Download className="h-3 w-3 animate-pulse" />
+                <span>Downloading voice model ({Math.round(modelStatus.progress * 100)}%)…</span>
+              </div>
+            )}
+            {modelStatus.status === "error" && (
+              <p className="text-xs text-red-500 py-1">
+                Voice model failed to load: {modelStatus.error}
+              </p>
+            )}
+
             {/* Enroll section */}
             <div className="space-y-2 pt-1">
               <Label className="text-sm font-medium">Enroll Your Voice</Label>
@@ -216,7 +234,7 @@ export const VoiceIdSettings = () => {
                 <Button
                   size="sm"
                   onClick={recording ? stopRecording : startRecording}
-                  disabled={enrolling}
+                  disabled={enrolling || modelStatus.status === "loading"}
                   variant={recording ? "destructive" : "default"}
                 >
                   {recording ? (

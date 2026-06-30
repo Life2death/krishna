@@ -78,7 +78,7 @@ export const KrishnaVAD = () => {
             audio: audioBlob,
           }),
           voiceIdEnabled
-            ? verifyVoice(audioBlob).catch((err) => {
+            ? verifyVoice(audio, 16000).catch((err) => {
                 console.error("[voice-id] Verify failed (fail-open):", err);
                 return null as any;
               })
