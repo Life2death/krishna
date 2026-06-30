@@ -122,6 +122,14 @@ spawn + the `remote` repo path). Each current brain responsibility gets a new ho
   (above). Write-behind to Turso; pull on interval; **restore-from-cloud** flow for a fresh laptop. All
   opt-in; app fully works without it. (This is where `REMOTE_CLOUD_BRAIN_FIX.md`'s Turso/Fly notes feed in
   — but the cloud is a **sync target, not a runtime brain**.)
+  - **Tests/CI (verified 2026-06-30):** Phase 0 already turned CI **green** (removing the remote layer
+    deleted its failing tests) — `TypeScript + Vitest` and `cargo check` both pass on `main`. So there is
+    **no orphaned-test cleanup needed.** The remaining test item is **local-dev only**: on Node 26 /
+    Windows, `vitest run` intermittently throws *"Failed to start forks worker"* for ~6 files (CI on
+    Node 24 runs all 103 tests fine — it's a fork-pool/runtime quirk, not code). **Optional fix:** pin the
+    vitest pool in `vitest.config.ts` (e.g. `pool: 'forks'` + `poolOptions.forks.singleFork: true`, or
+    `pool: 'threads'`) so local runs are reliable. Low priority; not a CI blocker. **Also add new tests**
+    for the Phase-2 sync layer (write-behind, offline read/write, conflict last-write-wins, restore).
 - **Phase 3 — Mobile companion (Android first).** Direct Anthropic + cloud-store memories + master-key
   pairing + client-side voice-ID (or deferred). Fold in the device-control plugin work.
 - **Phase 4 — Relocate Gmail + MCP client-side, then retire the brain.** Per §Gmail & MCP: stand up the
