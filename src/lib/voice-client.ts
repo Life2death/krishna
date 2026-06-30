@@ -81,14 +81,6 @@ export async function enrollVoice(
 
   const normalized = Array.from(l2Normalize(avg));
   const encrypted = await encryptVoiceprint(JSON.stringify(normalized));
-
-  let roundTripped: string;
-  const decrypted = await decryptVoiceprint(encrypted);
-  if (decrypted) {
-    roundTripped = decrypted;
-  } else {
-    roundTripped = JSON.stringify(normalized);
-  }
   await setVoiceprint(encrypted, sampleCount, normalized.length);
 
   return { sampleCount, dims: normalized.length };
@@ -106,18 +98,4 @@ export async function getVoiceStatus(): Promise<VoiceStatus> {
 
 export async function resetEnrollment(): Promise<void> {
   await resetVoiceprint();
-}
-
-export async function decodeWavToPcm(wavBlob: Blob): Promise<Float32Array> {
-  const arrayBuffer = await wavBlob.arrayBuffer();
-  const audioCtx = new AudioContext();
-  const decoded = await audioCtx.decodeAudioData(arrayBuffer);
-  await audioCtx.close();
-  const offline = new OfflineAudioContext(1, Math.max(1, Math.ceil(decoded.duration * 16000)), 16000);
-  const srcNode = offline.createBufferSource();
-  srcNode.buffer = decoded;
-  srcNode.connect(offline.destination);
-  srcNode.start();
-  const rendered = await offline.startRendering();
-  return rendered.getChannelData(0);
 }

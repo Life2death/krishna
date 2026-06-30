@@ -45,28 +45,6 @@ export async function setVoiceprint(embedding: string, sampleCount: number, dims
   );
 }
 
-function l2Normalize(vec: number[]): number[] {
-  let norm = 0;
-  for (let i = 0; i < vec.length; i++) norm += vec[i] * vec[i];
-  norm = Math.sqrt(norm);
-  if (norm === 0) return vec;
-  return vec.map(v => v / norm);
-}
-
-export async function addVoiceSample(vec: number[]): Promise<number> {
-  const existing = await getVoiceprint();
-  if (!existing) {
-    await setVoiceprint(JSON.stringify(vec), 1, vec.length);
-    return 1;
-  }
-  const currentVec = JSON.parse(existing.embedding) as number[];
-  const n = existing.sampleCount;
-  const avg = currentVec.map((v, i) => ((v * n) + vec[i]) / (n + 1));
-  const normalized = l2Normalize(avg);
-  await setVoiceprint(JSON.stringify(normalized), n + 1, normalized.length);
-  return n + 1;
-}
-
 export async function resetVoiceprint(): Promise<void> {
   await ensureVoiceprintsTable();
   const db = getDatabase();

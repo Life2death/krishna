@@ -3,13 +3,11 @@ import { secureStorage } from "./secure-storage";
 const PREFIX = "enc:v1:";
 
 async function getAesKey(): Promise<CryptoKey> {
-  const hex = await secureStorage.get("KRISHNA_MASTER_KEY");
-  if (!hex) throw new Error("KRISHNA_MASTER_KEY not found in secure storage");
-  const raw = new Uint8Array(32);
-  for (let i = 0; i < 64; i += 2) {
-    raw[i / 2] = parseInt(hex.substring(i, i + 2), 16);
-  }
-  return crypto.subtle.importKey("raw", raw, { name: "AES-GCM" }, false, ["encrypt", "decrypt"]);
+  const masterKey = await secureStorage.get("KRISHNA_MASTER_KEY");
+  if (!masterKey) throw new Error("KRISHNA_MASTER_KEY not found in secure storage");
+  const encoded = new TextEncoder().encode(masterKey);
+  const hash = await crypto.subtle.digest("SHA-256", encoded);
+  return crypto.subtle.importKey("raw", hash, { name: "AES-GCM" }, false, ["encrypt", "decrypt"]);
 }
 
 export async function encryptVoiceprint(plain: string): Promise<string> {
