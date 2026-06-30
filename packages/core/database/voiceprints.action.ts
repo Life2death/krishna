@@ -35,15 +35,13 @@ export async function getVoiceprint(): Promise<VoiceprintRow | null> {
   };
 }
 
-export async function setVoiceprint(vec: number[], sampleCount: number): Promise<void> {
+export async function setVoiceprint(embedding: string, sampleCount: number, dims: number): Promise<void> {
   await ensureVoiceprintsTable();
   const db = getDatabase();
-  const dims = vec.length;
-  const encoded = JSON.stringify(vec);
   await db.execute(
     `INSERT OR REPLACE INTO voiceprints (id, embedding, sample_count, dims, updated_at)
      VALUES ('primary', ?, ?, ?, datetime('now'))`,
-    [encoded, sampleCount, dims]
+    [embedding, sampleCount, dims]
   );
 }
 
@@ -58,14 +56,14 @@ function l2Normalize(vec: number[]): number[] {
 export async function addVoiceSample(vec: number[]): Promise<number> {
   const existing = await getVoiceprint();
   if (!existing) {
-    await setVoiceprint(vec, 1);
+    await setVoiceprint(JSON.stringify(vec), 1, vec.length);
     return 1;
   }
   const currentVec = JSON.parse(existing.embedding) as number[];
   const n = existing.sampleCount;
   const avg = currentVec.map((v, i) => ((v * n) + vec[i]) / (n + 1));
   const normalized = l2Normalize(avg);
-  await setVoiceprint(normalized, n + 1);
+  await setVoiceprint(JSON.stringify(normalized), n + 1, normalized.length);
   return n + 1;
 }
 
