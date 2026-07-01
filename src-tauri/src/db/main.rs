@@ -103,5 +103,12 @@ pub fn migrations() -> Vec<Migration> {
             sql: include_str!("migrations/sync-v2.sql"),
             kind: MigrationKind::Up,
         },
+        // Migration 16: Normalize updated_at to INTEGER epoch-ms for voiceprint tables
+        Migration {
+            version: 16,
+            description: "normalize_updated_at_to_integer",
+            sql: include_str!("migrations/normalize-updated-at.sql"),
+            kind: MigrationKind::Up,
+        },
     ]
 }

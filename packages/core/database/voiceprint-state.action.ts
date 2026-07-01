@@ -38,8 +38,8 @@ export async function ensureStateTable(): Promise<void> {
     mature INTEGER NOT NULL DEFAULT 0,
     adaptive_threshold REAL,
     threshold_confidence REAL,
-    created_at TEXT DEFAULT (datetime('now')) NOT NULL,
-    updated_at TEXT DEFAULT (datetime('now')) NOT NULL
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
   )`);
 }
 

@@ -40,8 +40,8 @@ export async function ensureSamplesTable(): Promise<void> {
     embedding TEXT NOT NULL,
     dims INTEGER NOT NULL,
     quality REAL,
-    created_at TEXT DEFAULT (datetime('now')) NOT NULL,
-    updated_at TEXT DEFAULT (datetime('now')) NOT NULL
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
   )`);
 }
 

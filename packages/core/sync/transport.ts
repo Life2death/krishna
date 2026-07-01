@@ -17,9 +17,9 @@ const TABLE_DDL: Record<string, string> = {
   memory_embeddings: `id TEXT PRIMARY KEY, memory_id TEXT, content TEXT, embedding TEXT, source TEXT DEFAULT 'memory', created_at INTEGER, updated_at INTEGER, embedding_model_version TEXT`,
   learned_actions: `id TEXT PRIMARY KEY, display_name TEXT, target TEXT, input TEXT, resolved_via TEXT, confidence REAL, created_at INTEGER, updated_at INTEGER`,
   skills: `id TEXT PRIMARY KEY, name TEXT, trigger_examples TEXT, params TEXT, plan_template TEXT, confirmed_by_user INTEGER DEFAULT 0, use_count INTEGER DEFAULT 0, created_at INTEGER, updated_at INTEGER`,
-  system_prompts: `id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, prompt TEXT, created_at TEXT, updated_at TEXT`,
+  system_prompts: `id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, prompt TEXT, created_at INTEGER, updated_at INTEGER`,
   reminders: `id TEXT PRIMARY KEY, text TEXT, due_at INTEGER, recurrence TEXT, skill_id TEXT, enabled INTEGER DEFAULT 1, created_at INTEGER, updated_at INTEGER`,
-  voiceprint_samples: `id TEXT PRIMARY KEY, speaker TEXT DEFAULT 'primary', embedding TEXT, dims INTEGER, quality REAL, created_at TEXT, updated_at TEXT`,
+  voiceprint_samples: `id TEXT PRIMARY KEY, speaker TEXT DEFAULT 'primary', embedding TEXT, dims INTEGER, quality REAL, created_at INTEGER, updated_at INTEGER`,
 };
 
 function args(params?: unknown[]): InValue[] {
@@ -33,29 +33,30 @@ export function createTransport(config: SyncConfig): Transport {
   });
 
   async function ensureRemoteSchema(): Promise<void> {
-    try {
-      const ddl: string[] = [
-        `CREATE TABLE IF NOT EXISTS sync_tombstones (
-          table_name TEXT NOT NULL,
-          row_id TEXT NOT NULL,
-          deleted_at INTEGER NOT NULL,
-          PRIMARY KEY (table_name, row_id)
-        );`,
-        `CREATE TABLE IF NOT EXISTS sync_state (
-          table_name TEXT PRIMARY KEY,
-          last_pulled_at INTEGER NOT NULL DEFAULT 0,
-          last_pushed_at INTEGER NOT NULL DEFAULT 0
-        );`,
-      ];
-      for (const table of SYNC_TABLES) {
-        const cols = TABLE_DDL[table];
-        if (cols) {
-          ddl.push(`CREATE TABLE IF NOT EXISTS "${table}" (${cols});`);
-        }
+    const ddl: string[] = [
+      `CREATE TABLE IF NOT EXISTS sync_tombstones (
+        table_name TEXT NOT NULL,
+        row_id TEXT NOT NULL,
+        deleted_at INTEGER NOT NULL,
+        PRIMARY KEY (table_name, row_id)
+      );`,
+      `CREATE TABLE IF NOT EXISTS sync_state (
+        table_name TEXT PRIMARY KEY,
+        last_pulled_at INTEGER NOT NULL DEFAULT 0,
+        last_pushed_at INTEGER NOT NULL DEFAULT 0
+      );`,
+    ];
+    for (const table of SYNC_TABLES) {
+      const cols = TABLE_DDL[table];
+      if (cols) {
+        ddl.push(`CREATE TABLE IF NOT EXISTS "${table}" (${cols});`);
       }
+    }
+    try {
       await client.executeMultiple(ddl.join('\n'));
     } catch (err) {
-      console.error('[sync] Failed to ensure remote schema — tables may need manual setup:', err);
+      console.error('[sync] Failed to ensure remote schema for tables — sync will fail until this is resolved:', err);
+      throw err;
     }
   }
 

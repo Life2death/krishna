@@ -238,7 +238,7 @@ const SystemPrompts = () => {
                 </CardHeader>
                 <div className="absolute bottom-2 left-4 w-full flex items-center justify-between">
                   <span className="text-[10px] lg:text-xs text-muted-foreground select-none">
-                    {prompt.created_at}
+                    {new Date(prompt.created_at).toLocaleString()}
                   </span>
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild className="mr-6">

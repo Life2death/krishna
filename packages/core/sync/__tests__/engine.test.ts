@@ -239,6 +239,20 @@ describe("SyncEngine", () => {
       expect(result.pushed).toBeGreaterThan(0);
       expect(remoteDb.rawGet("memories", "mem1")?.value).toBe("text-ts");
     });
+
+    it("compares TEXT numeric string against INTEGER watermark correctly", async () => {
+      localDb.rawSet("memories", "mem1", {
+        id: "mem1", value: "local-int", updated_at: T0 + 100,
+      });
+      await engine.syncNow();
+
+      // Remote now gets a newer TEXT-numeric update (simulating old format on other device)
+      remoteDb.rawSet("memories", "mem1", {
+        id: "mem1", value: "remote-text", updated_at: String(T0 + 200),
+      });
+      await engine.syncNow();
+      expect(localDb.rawGet("memories", "mem1")?.value).toBe("remote-text");
+    });
   });
 
   describe("concurrent write", () => {
@@ -251,11 +265,23 @@ describe("SyncEngine", () => {
 
       expect(remoteDb.rawGet("memories", "mem2")?.value).toBe("concurrent");
     });
+
+    it("handles concurrent writes on both sides across cycles", async () => {
+      // Device A (local) creates a row first
+      localDb.rawSet("memories", "mem1", { id: "mem1", value: "local", updated_at: T0 });
+      await engine.syncNow();
+
+      // Device B (remote) updates the same row with a newer timestamp
+      remoteDb.rawSet("memories", "mem1", { id: "mem1", value: "remote", updated_at: T0 + 1 });
+
+      await engine.syncNow();
+      // Remote is newer (T0+1 > T0) → should win after pull
+      expect(localDb.rawGet("memories", "mem1")?.value).toBe("remote");
+    });
   });
 
   describe("clock skew", () => {
     it("does not skip remote rows due to clock skew", async () => {
-      // Remote has rows with timestamps in the past relative to local clock
       remoteDb.rawSet("memories", "mem1", { id: "mem1", value: "older", updated_at: T0 - 3600000 });
       remoteDb.rawSet("memories", "mem2", { id: "mem2", value: "newer", updated_at: T0 });
 
@@ -263,6 +289,19 @@ describe("SyncEngine", () => {
 
       expect(localDb.rawGet("memories", "mem1")?.value).toBe("older");
       expect(localDb.rawGet("memories", "mem2")?.value).toBe("newer");
+    });
+
+    it("does not push row with updated_at before watermark", async () => {
+      localDb.rawSet("memories", "mem1", { id: "mem1", value: "before", updated_at: T0 });
+      await engine.syncNow();
+
+      localDb.rawSet("memories", "mem2", { id: "mem2", value: "skewed", updated_at: T0 - 1000 });
+      await engine.syncNow();
+      expect(remoteDb.rawGet("memories", "mem2")).toBeUndefined();
+
+      localDb.rawSet("memories", "mem2", { id: "mem2", value: "skewed", updated_at: T0 + 100 });
+      await engine.syncNow();
+      expect(remoteDb.rawGet("memories", "mem2")?.value).toBe("skewed");
     });
   });
 
