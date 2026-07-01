@@ -7,6 +7,48 @@ when ready. Newest theme at the top.
 
 ---
 
+## Theme: Voice latency & responsiveness  ⭐ #1 PRIORITY
+
+**Problem:** current spoken round-trip is ~3–4s. Krishna uses a **cascaded pipeline** —
+VAD → STT → LLM (Claude) → TTS — run **sequentially**, each its own network round trip, and
+the stages don't overlap (Claude finishes, *then* TTS starts, *then* audio plays). Two Krishna-
+specific culprits: (a) STT starts only *after* `KrishnaVAD.onSpeechEnd` (whole utterance
+encoded + sent — nothing transcribed while you talk); (b) TTS waits for the LLM reply instead
+of speaking the first sentence as it streams.
+
+### 1. Optimize the cascade — target ~1–1.5s to first audio  ⭐ do this first
+Keeps local-first + local voice-ID + Claude. The wins, biggest first:
+- **Stream LLM → start TTS on the first sentence/clause.** Don't wait for Claude's full reply;
+  pipe the first clause to TTS and begin playback while the rest generates. Usually removes
+  1–2s of *felt* latency. Biggest single win. Touchpoints: the completion/stream path +
+  `krishna.context.tsx` speak calls; chunk on sentence boundaries.
+- **Streaming STT.** Transcribe *while* the user talks (Deepgram/Groq streaming) instead of
+  WAV-encoding + sending the whole utterance after `onSpeechEnd`. Touchpoint: `KrishnaVAD.tsx`
+  `onSpeechEnd` → move to incremental/partial transcription.
+- **Tighten endpointing.** Shave VAD trailing-silence / redemption frames (carefully — too
+  aggressive cuts the user off).
+- **Fast providers + prompt caching.** Groq for STT/LLM is very low-latency; cache the system
+  prompt to cut Claude first-token time.
+- **Low-latency streaming TTS** (ElevenLabs streaming / local Piper) that plays on the first
+  audio chunk.
+- Net: overlap the stages so they run concurrently instead of back-to-back.
+**Feasibility:** Medium; no architecture change. **This is the highest-leverage speed work.**
+
+### 2. Optional "cloud turbo" speech-to-speech mode (Realtime API)  — later, opt-in only
+**What:** a single model that takes **audio in → audio out** over a persistent WebSocket
+(OpenAI/Gemini Realtime), no separate STT/LLM/TTS. Latency ~0.3–0.8s, very natural turn-taking.
+**Why not the default — it breaks three core commitments:**
+- **Local-first:** raw mic audio streams continuously to one cloud vendor; no offline; brain
+  back in the runtime path.
+- **Voice-ID:** no discrete STT step to hook WavLM into → speaker verification can't run.
+- **Provider:** locked to OpenAI/Gemini (Anthropic has no realtime speech API) — not Claude.
+**Security note:** continuous raw-voice (biometric-bearing) egress to a third party; far fewer
+redaction/gating control points than the cascade.
+**Verdict:** ship only as an explicit opt-in "turbo mode" the user enables knowing the mic
+streams to OpenAI/Gemini and voice-ID is disabled in that mode. Pursue **only after** item 1.
+
+---
+
 ## Theme: peerd-inspired upgrades
 
 Source & rationale: analysis of **peerd** (https://peerd.ai, https://github.com/NotASithLord/peerd,
