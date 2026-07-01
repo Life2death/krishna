@@ -1120,9 +1120,11 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
 
       let command = transcription.trim() || "hello";
 
-      // Phase 0: Voice-ID is disabled (client-side relocation deferred to Phase 1).
+      // Voice-ID enforcement: gate only when gallery is mature
       const voiceResult = opts?.voiceVerifyResult;
-      const isUnverified = false;
+      const isUnverified = voiceResult
+        ? voiceResult.enrolled && voiceResult.mature && !voiceResult.match
+        : false;
 
       if (wakeWordEnabled && !opts?.skipWakeWord && !pendingConfirmationRef.current) {
         const { detected, remainder } = detectWakeWord(transcription, wakeWord);

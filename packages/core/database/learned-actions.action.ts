@@ -1,5 +1,6 @@
 import { getDatabase } from "./driver";
 import { LearnedAction } from "../types";
+import { writeTombstone, writeTombstones } from "../sync/tombstone";
 
 interface DbLearnedAction {
   id: string;
@@ -51,21 +52,28 @@ export async function getLearnedActionById(id: string): Promise<LearnedAction | 
 
 export async function createLearnedAction(action: LearnedAction): Promise<LearnedAction> {
   const db = await getDatabase();
+  const now = Date.now();
   await db.execute(
-    "INSERT INTO learned_actions (id, display_name, target, input, resolved_via, confidence, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
-    [action.id, action.displayName, action.target, action.input, action.resolvedVia, action.confidence, action.createdAt]
+    "INSERT INTO learned_actions (id, display_name, target, input, resolved_via, confidence, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+    [action.id, action.displayName, action.target, action.input, action.resolvedVia, action.confidence, action.createdAt, now]
   );
   return action;
 }
 
 export async function deleteLearnedAction(id: string): Promise<boolean> {
   const db = await getDatabase();
+  await writeTombstone('learned_actions', id);
   const result = await db.execute("DELETE FROM learned_actions WHERE id = ?", [id]);
   return result.rowsAffected > 0;
 }
 
 export async function deleteAllLearnedActions(): Promise<boolean> {
   const db = await getDatabase();
+  const rows = await db.select<{ id: string }[]>("SELECT id FROM learned_actions");
+  const ids = rows.map((r) => r.id);
+  if (ids.length > 0) {
+    await writeTombstones('learned_actions', ids);
+  }
   await db.execute("DELETE FROM learned_actions");
   return true;
 }

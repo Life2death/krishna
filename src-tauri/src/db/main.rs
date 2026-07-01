@@ -80,5 +80,28 @@ pub fn migrations() -> Vec<Migration> {
             sql: include_str!("migrations/command-log.sql"),
             kind: MigrationKind::Up,
         },
+        // Migration 13: Sync infrastructure — sync_tombstones, sync_state,
+        // updated_at columns, memory_embeddings, backfill
+        Migration {
+            version: 13,
+            description: "add_sync_infrastructure",
+            sql: include_str!("migrations/sync-v1.sql"),
+            kind: MigrationKind::Up,
+        },
+        // Migration 14: Voice-ID Continuous Learning — voiceprint_samples gallery
+        // and voiceprint_state calibration row
+        Migration {
+            version: 14,
+            description: "add_voiceprint_gallery_and_state",
+            sql: include_str!("migrations/voice-id-v1.sql"),
+            kind: MigrationKind::Up,
+        },
+        // Migration 15: Fix TEXT updated_at → INTEGER for sync correctness
+        Migration {
+            version: 15,
+            description: "fix_text_updated_at_for_sync",
+            sql: include_str!("migrations/sync-v2.sql"),
+            kind: MigrationKind::Up,
+        },
     ]
 }

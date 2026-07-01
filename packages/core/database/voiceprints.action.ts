@@ -1,4 +1,5 @@
 import { getDatabase } from "./driver";
+import { writeTombstone } from "../sync/tombstone";
 
 export interface VoiceprintRow {
   id: string;
@@ -40,13 +41,14 @@ export async function setVoiceprint(embedding: string, sampleCount: number, dims
   const db = getDatabase();
   await db.execute(
     `INSERT OR REPLACE INTO voiceprints (id, embedding, sample_count, dims, updated_at)
-     VALUES ('primary', ?, ?, ?, datetime('now'))`,
-    [embedding, sampleCount, dims]
+     VALUES ('primary', ?, ?, ?, ?)`,
+    [embedding, sampleCount, dims, Date.now()]
   );
 }
 
 export async function resetVoiceprint(): Promise<void> {
   await ensureVoiceprintsTable();
   const db = getDatabase();
+  await writeTombstone('voiceprints', 'primary');
   await db.execute("DELETE FROM voiceprints WHERE id = 'primary'");
 }

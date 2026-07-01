@@ -8,3 +8,5 @@ export * from "./skills.action";
 export * from "./memories.action";
 export * from "./reminders.action";
 export * from "./voiceprints.action";
+export * from "./voiceprint-samples.action";
+export * from "./voiceprint-state.action";

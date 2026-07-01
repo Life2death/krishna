@@ -179,17 +179,34 @@ export const VoiceIdSettings = () => {
         {enabled && (
           <>
             {/* Status badge */}
-            <div className="flex items-center gap-2 text-sm">
-              {statusLoading ? (
-                <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-              ) : isEnrolled ? (
-                <ShieldCheck className="h-4 w-4 text-green-500" />
-              ) : (
-                <ShieldAlert className="h-4 w-4 text-amber-500" />
+            <div className="space-y-1">
+              <div className="flex items-center gap-2 text-sm">
+                {statusLoading ? (
+                  <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                ) : isEnrolled ? (
+                  <ShieldCheck className="h-4 w-4 text-green-500" />
+                ) : (
+                  <ShieldAlert className="h-4 w-4 text-amber-500" />
+                )}
+                <span className={isEnrolled ? "text-green-600" : "text-amber-600"}>
+                  {statusLoading ? "Checking..." : isEnrolled ? `Enrolled (${status!.sampleCount}/30 samples)` : "Not enrolled"}
+                </span>
+              </div>
+              {status && (status.mature ? (
+                <p className="text-xs text-green-600 flex items-center gap-1">
+                  <ShieldCheck className="h-3 w-3" /> Mature gallery — enforcement active
+                </p>
+              ) : status.sampleCount > 0 ? (
+                <p className="text-xs text-amber-600">
+                  Gallery maturing ({status.sampleCount}/12 samples needed) — display-only mode
+                </p>
+              ) : null)}
+              {status?.adaptiveThreshold != null && (
+                <p className="text-xs text-muted-foreground">
+                  Adaptive threshold: {status.adaptiveThreshold.toFixed(3)}
+                  {status.thresholdConfidence != null ? ` (confidence: ${(status.thresholdConfidence * 100).toFixed(0)}%)` : ""}
+                </p>
               )}
-              <span className={isEnrolled ? "text-green-600" : "text-amber-600"}>
-                {statusLoading ? "Checking..." : isEnrolled ? `Enrolled (${status!.sampleCount} sample${status!.sampleCount > 1 ? "s" : ""})` : "Not enrolled"}
-              </span>
             </div>
 
             {/* Threshold slider */}
@@ -228,7 +245,8 @@ export const VoiceIdSettings = () => {
             <div className="space-y-2 pt-1">
               <Label className="text-sm font-medium">Enroll Your Voice</Label>
               <p className="text-xs text-muted-foreground">
-                Say 1–3 short phrases (2–3 seconds each) into your microphone. Each recording improves accuracy.
+                Say 1–3 short phrases (2–3 seconds each). Each recording improves accuracy.
+                Gallery learns from daily use once enrolled (up to 30 samples).
               </p>
               <div className="flex items-center gap-2">
                 <Button

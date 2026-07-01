@@ -1,5 +1,6 @@
 import { getDatabase } from "./driver";
 import type { Reminder } from "../types/reminder";
+import { writeTombstone } from "../sync/tombstone";
 
 interface DbReminder {
   id: string;
@@ -43,9 +44,10 @@ export async function getDueReminders(): Promise<Reminder[]> {
 
 export async function createReminder(reminder: Reminder): Promise<Reminder> {
   const db = await getDatabase();
+  const now = Date.now();
   await db.execute(
-    "INSERT INTO reminders (id, text, due_at, recurrence, skill_id, enabled, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
-    [reminder.id, reminder.text, reminder.dueAt, reminder.recurrence, reminder.skillId, reminder.enabled, reminder.createdAt]
+    "INSERT INTO reminders (id, text, due_at, recurrence, skill_id, enabled, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+    [reminder.id, reminder.text, reminder.dueAt, reminder.recurrence, reminder.skillId, reminder.enabled, reminder.createdAt, now]
   );
   return reminder;
 }
@@ -53,22 +55,23 @@ export async function createReminder(reminder: Reminder): Promise<Reminder> {
 export async function updateReminder(reminder: Reminder): Promise<void> {
   const db = await getDatabase();
   await db.execute(
-    "UPDATE reminders SET text = ?, due_at = ?, recurrence = ?, skill_id = ?, enabled = ? WHERE id = ?",
-    [reminder.text, reminder.dueAt, reminder.recurrence, reminder.skillId, reminder.enabled, reminder.id]
+    "UPDATE reminders SET text = ?, due_at = ?, recurrence = ?, skill_id = ?, enabled = ?, updated_at = ? WHERE id = ?",
+    [reminder.text, reminder.dueAt, reminder.recurrence, reminder.skillId, reminder.enabled, Date.now(), reminder.id]
   );
 }
 
 export async function cancelReminder(id: string): Promise<boolean> {
   const db = await getDatabase();
   const result = await db.execute(
-    "UPDATE reminders SET enabled = 0 WHERE id = ?",
-    [id]
+    "UPDATE reminders SET enabled = 0, updated_at = ? WHERE id = ?",
+    [Date.now(), id]
   );
   return result.rowsAffected > 0;
 }
 
 export async function deleteReminder(id: string): Promise<boolean> {
   const db = await getDatabase();
+  await writeTombstone('reminders', id);
   const result = await db.execute("DELETE FROM reminders WHERE id = ?", [id]);
   return result.rowsAffected > 0;
 }

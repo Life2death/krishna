@@ -21,7 +21,6 @@ import { resumeSummaryRoutes } from "./routes/resume-summary.ts";
 import { skillsGenerateRoutes } from "./routes/skills-generate.ts";
 import { dictateRoutes } from "./routes/dictate.ts";
 import { factExtractRoutes } from "./routes/fact-extract.ts";
-import { voiceIdRoutes } from "./voice-id/routes.ts";
 import { ragRoutes } from "./routes/rag.ts";
 import { initRag } from "./rag/index.ts";
 import { startBot, stopBot as stopTelegramBot } from "./telegram/bot.ts";
@@ -88,7 +87,6 @@ async function main(): Promise<void> {
   factExtractRoutes(app, ctx);
   skillsGenerateRoutes(app);
   dictateRoutes(app);
-  voiceIdRoutes(app, ctx);
   ragRoutes(app, ctx);
 
   // 4. Start listening FIRST — /health responds immediately.

@@ -10,7 +10,7 @@ import { useKrishna } from "@/hooks";
 import { isKrishnaSpeaking } from "@/lib/krishna-mutex";
 import { invoke } from "@tauri-apps/api/core";
 import { emit } from "@tauri-apps/api/event";
-import { verifyVoice, getVoiceStatus, isVoiceIdEnabled } from "@/lib/voice-client";
+import { verifyVoice, getVoiceStatus, isVoiceIdEnabled, considerAddSample } from "@/lib/voice-client";
 import type { VoiceVerifyResult } from "@/lib/voice-client";
 
 export const KrishnaVAD = () => {
@@ -85,7 +85,16 @@ export const KrishnaVAD = () => {
             : Promise.resolve(null),
         ]);
 
-        if (voiceResult) setVoiceStatus(voiceResult);
+        if (voiceResult) {
+          setVoiceStatus(voiceResult);
+
+          // Passive learning: on every verified utterance, consider adding a sample
+          if (voiceResult.enrolled && voiceResult.match) {
+            considerAddSample(audio, 16000, voiceResult).catch((err) =>
+              console.error("[voice-id] Passive sample add failed:", err)
+            );
+          }
+        }
 
         if (transcription) {
           await krishna.processCommand(transcription, {
@@ -104,7 +113,7 @@ export const KrishnaVAD = () => {
   useEffect(() => {
     getVoiceStatus()
       .then((s) => {
-        if (s) setVoiceStatus({ enrolled: s.enrolled, match: true, score: 1, threshold: s.threshold });
+        if (s) setVoiceStatus({ enrolled: s.enrolled, match: true, score: 1, threshold: s.threshold, mature: s.mature, sampleCount: s.sampleCount });
       })
       .catch(() => {});
   }, []);

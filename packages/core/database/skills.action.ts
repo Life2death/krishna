@@ -1,5 +1,6 @@
 import { getDatabase } from "./driver";
 import type { Skill } from "../types";
+import { writeTombstone, writeTombstones } from "../sync/tombstone";
 
 interface DbSkill {
   id: number;
@@ -53,9 +54,10 @@ export async function getSkillById(id: number): Promise<Skill | null> {
 
 export async function createSkill(skill: Skill): Promise<Skill> {
   const db = await getDatabase();
+  const now = Date.now();
   await db.execute(
-    "INSERT INTO skills (id, name, trigger_examples, params, plan_template, confirmed_by_user, use_count, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-    [skill.id, skill.name, skill.triggerExamples, skill.params, skill.planTemplate, skill.confirmedByUser, skill.useCount, skill.createdAt]
+    "INSERT INTO skills (id, name, trigger_examples, params, plan_template, confirmed_by_user, use_count, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+    [skill.id, skill.name, skill.triggerExamples, skill.params, skill.planTemplate, skill.confirmedByUser, skill.useCount, skill.createdAt, now]
   );
   return skill;
 }
@@ -70,12 +72,18 @@ export async function updateSkillUseCount(id: number): Promise<void> {
 
 export async function deleteSkill(id: number): Promise<boolean> {
   const db = await getDatabase();
+  await writeTombstone('skills', String(id));
   const result = await db.execute("DELETE FROM skills WHERE id = ?", [id]);
   return result.rowsAffected > 0;
 }
 
 export async function deleteAllSkills(): Promise<boolean> {
   const db = await getDatabase();
+  const rows = await db.select<{ id: number }[]>("SELECT id FROM skills");
+  const ids = rows.map((r) => String(r.id));
+  if (ids.length > 0) {
+    await writeTombstones('skills', ids);
+  }
   await db.execute("DELETE FROM skills");
   return true;
 }

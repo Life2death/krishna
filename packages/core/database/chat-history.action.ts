@@ -1,6 +1,7 @@
 import { getDatabase } from "./driver";
 import { ChatConversation } from "../types";
 import { safeLocalStorage } from "../safe-local-storage";
+import { writeTombstone, writeTombstones } from "../sync/tombstone";
 
 // Legacy localStorage key for migration purposes
 const LEGACY_CHAT_HISTORY_KEY = "chat_history";
@@ -25,6 +26,7 @@ interface DbMessage {
   content: string;
   timestamp: number;
   attached_files: string | null; // JSON string
+  updated_at?: number | null;
 }
 
 /**
@@ -120,8 +122,9 @@ export async function createConversation(
         ? JSON.stringify(message.attachedFiles)
         : null;
 
+      const msgUpdatedAt = Date.now();
       await db.execute(
-        "INSERT INTO messages (id, conversation_id, role, content, timestamp, attached_files) VALUES (?, ?, ?, ?, ?, ?)",
+        "INSERT INTO messages (id, conversation_id, role, content, timestamp, attached_files, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
         [
           message.id,
           conversation.id,
@@ -129,6 +132,7 @@ export async function createConversation(
           message.content,
           message.timestamp,
           attachedFilesJson,
+          msgUpdatedAt,
         ]
       );
     }
@@ -295,8 +299,9 @@ export async function updateConversation(
           ? JSON.stringify(message.attachedFiles)
           : null;
 
+        const msgUpdatedAt = Date.now();
         await db.execute(
-          "INSERT INTO messages (id, conversation_id, role, content, timestamp, attached_files) VALUES (?, ?, ?, ?, ?, ?)",
+          "INSERT INTO messages (id, conversation_id, role, content, timestamp, attached_files, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
           [
             message.id,
             conversation.id,
@@ -304,6 +309,7 @@ export async function updateConversation(
             message.content,
             message.timestamp,
             attachedFilesJson,
+            msgUpdatedAt,
           ]
         );
       }
@@ -316,7 +322,7 @@ export async function updateConversation(
       for (const msg of existingMessages) {
         await db
           .execute(
-            "INSERT INTO messages (id, conversation_id, role, content, timestamp, attached_files) VALUES (?, ?, ?, ?, ?, ?)",
+            "INSERT INTO messages (id, conversation_id, role, content, timestamp, attached_files, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
             [
               msg.id,
               msg.conversation_id,
@@ -324,6 +330,7 @@ export async function updateConversation(
               msg.content,
               msg.timestamp,
               msg.attached_files,
+              msg.updated_at ?? Date.now(),
             ]
           )
           .catch(() => {});
@@ -374,6 +381,17 @@ export async function deleteConversation(id: string): Promise<boolean> {
   const db = await getDatabase();
 
   try {
+    // Get message IDs for tombstone creation before cascade delete
+    const msgs = await db.select<{ id: string }[]>(
+      "SELECT id FROM messages WHERE conversation_id = ?", [id]
+    );
+    const msgIds = msgs.map((r) => r.id);
+
+    await writeTombstone('conversations', id);
+    if (msgIds.length > 0) {
+      await writeTombstones('messages', msgIds);
+    }
+
     const result = await db.execute("DELETE FROM conversations WHERE id = ?", [
       id,
     ]);
@@ -392,6 +410,16 @@ export async function deleteAllConversations(): Promise<void> {
   const db = await getDatabase();
 
   try {
+    // Create tombstones before deleting
+    const convRows = await db.select<{ id: string }[]>("SELECT id FROM conversations");
+    const msgRows = await db.select<{ id: string }[]>("SELECT id FROM messages");
+
+    const convIds = convRows.map((r) => r.id);
+    const msgIds = msgRows.map((r) => r.id);
+
+    if (convIds.length > 0) await writeTombstones('conversations', convIds);
+    if (msgIds.length > 0) await writeTombstones('messages', msgIds);
+
     // Delete in correct order (messages first due to foreign key)
     await db.execute("DELETE FROM messages");
     await db.execute("DELETE FROM conversations");
@@ -432,8 +460,8 @@ export async function appendMessages(
       continue;
     }
     await db.execute(
-      "INSERT INTO messages (id, conversation_id, role, content, timestamp, attached_files) VALUES (?, ?, ?, ?, ?, ?)",
-      [crypto.randomUUID(), conversationId, msg.role, msg.content, msg.timestamp, null]
+      "INSERT INTO messages (id, conversation_id, role, content, timestamp, attached_files, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+      [crypto.randomUUID(), conversationId, msg.role, msg.content, msg.timestamp, null, Date.now()]
     );
   }
 }
@@ -588,7 +616,7 @@ export async function migrateLocalStorageToSQLite(): Promise<{
               : null;
 
             await db.execute(
-              "INSERT INTO messages (id, conversation_id, role, content, timestamp, attached_files) VALUES (?, ?, ?, ?, ?, ?)",
+              "INSERT INTO messages (id, conversation_id, role, content, timestamp, attached_files, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
               [
                 message.id,
                 conversation.id,
@@ -596,6 +624,7 @@ export async function migrateLocalStorageToSQLite(): Promise<{
                 message.content,
                 message.timestamp || Date.now(),
                 attachedFilesJson,
+                Date.now(),
               ]
             );
           }

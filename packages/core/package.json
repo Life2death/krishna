@@ -5,6 +5,7 @@
   "type": "module",
   "main": "./index.ts",
   "dependencies": {
-    "@bany/curl-to-json": "^1.2.8"
+    "@bany/curl-to-json": "^1.2.8",
+    "@libsql/client": "^0.15.4"
   }
 }

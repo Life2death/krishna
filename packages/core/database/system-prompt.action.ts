@@ -4,6 +4,7 @@ import type {
   SystemPromptInput,
   UpdateSystemPromptInput,
 } from "../types";
+import { writeTombstone } from "../sync/tombstone";
 
 /**
  * Create a new system prompt
@@ -25,9 +26,10 @@ export async function createSystemPrompt(
     throw new Error("System prompt text cannot be empty");
   }
 
+  const now = Date.now();
   const result = await db.execute(
-    "INSERT INTO system_prompts (name, prompt) VALUES (?, ?)",
-    [name, prompt]
+    "INSERT INTO system_prompts (name, prompt, created_at, updated_at) VALUES (?, ?, ?, ?)",
+    [name, prompt, now, now]
   );
 
   // Get the last inserted row
@@ -102,6 +104,9 @@ export async function updateSystemPrompt(
     throw new Error("No fields to update");
   }
 
+  updates.push("updated_at = ?");
+  values.push(Date.now());
+
   values.push(id);
 
   await db.execute(
@@ -126,6 +131,7 @@ export async function updateSystemPrompt(
  */
 export async function deleteSystemPrompt(id: number): Promise<void> {
   const db = await getDatabase();
+  await writeTombstone('system_prompts', String(id));
   const result = await db.execute("DELETE FROM system_prompts WHERE id = ?", [
     id,
   ]);
