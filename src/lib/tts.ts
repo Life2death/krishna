@@ -1,3 +1,5 @@
+import { sanitizeSpeech } from "./speech-sanitize";
+
 export interface TTSProvider {
   speak(text: string): Promise<void>;
   stop(): void;
@@ -6,19 +8,6 @@ export interface TTSProvider {
   setRate(rate: number): void;
   setPitch(pitch: number): void;
   getVoices(): SpeechSynthesisVoice[];
-}
-
-function stripMarkdown(text: string): string {
-  return text
-    .replace(/```[\s\S]*?```/g, "")
-    .replace(/`([^`]+)`/g, "$1")
-    .replace(/\*\*([^*]+)\*\*/g, "$1")
-    .replace(/\*([^*]+)\*/g, "$1")
-    .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
-    .replace(/#{1,6}\s/g, "")
-    .replace(/>\s/g, "")
-    .replace(/```action\n[\s\S]*?\n```/g, "")
-    .trim();
 }
 
 // ---------------------------------------------------------------------------
@@ -33,7 +22,7 @@ export class BrowserTTS implements TTSProvider {
     return new Promise((resolve) => {
       window.speechSynthesis.cancel();
 
-      const cleaned = stripMarkdown(text);
+      const cleaned = sanitizeSpeech(text);
       if (!cleaned.trim()) { resolve(); return; }
 
       const utterance = new SpeechSynthesisUtterance(cleaned);
@@ -85,7 +74,7 @@ export class ElevenLabsTTS implements TTSProvider {
       try {
         this.stop();
 
-        const cleaned = stripMarkdown(text);
+        const cleaned = sanitizeSpeech(text);
         if (!cleaned.trim()) { resolve(); return; }
 
         if (!this.apiKey) {
@@ -199,7 +188,7 @@ export class PiperTTS implements TTSProvider {
       try {
         this.stop();
 
-        const cleaned = stripMarkdown(text);
+        const cleaned = sanitizeSpeech(text);
         if (!cleaned.trim()) { resolve(); return; }
 
         const { invoke } = await import("@tauri-apps/api/core");

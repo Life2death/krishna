@@ -8,6 +8,8 @@ import { executePlan, resolvePlaceholders } from "@/lib/executor";
 import { getAllTools } from "@/lib/tools";
 import { selectTools } from "@krishna/core/tool-selector";
 import { getTTS, getElevenLabsTTS, getPiperTTS, type TTSProvider } from "@/lib/tts";
+import { setSpokenUrlNames } from "@/lib/speech-sanitize";
+import { APP_ALIASES } from "@/config/app-aliases";
 import { safeLocalStorage } from "@/lib";
 import { secureStorage } from "@/lib/secure-storage";
 import { STORAGE_KEYS, DEFAULT_SYSTEM_PROMPT } from "@/config";
@@ -1459,6 +1461,10 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
       try {
         historyRef.current = [...historyRef.current, { role: "user" as const, content: command }].slice(-8);
         const memories = await getAllMemories();
+        setSpokenUrlNames(
+          memories,
+          APP_ALIASES.filter(a => a.type === "url"),
+        );
         const now = new Date();
         const timeContext = `\n\nCurrent date and time: ${now.toLocaleString("en-IN", { timeZone: "Asia/Kolkata", weekday: "long", year: "numeric", month: "long", day: "numeric", hour: "2-digit", minute: "2-digit" })} IST`;
         const toolsSection = buildToolsSection(command);
