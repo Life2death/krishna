@@ -289,7 +289,7 @@ Rationale: ~2s time-to-first-word is dominated by TTFT, which P3 doesn't touch; 
 model do. P3's queue was also the vehicle for P2-F7 — decoupled here into a minimal fix so the
 filler bug is gone regardless.
 
-## Phase 4 — commits 4f2e9e8, 7fe1b6b, be4bad8 (reviewed 2026-07-02) — ALL FINDINGS FIXED
+## Phase 4 — commits 4f2e9e8, 7fe1b6b, be4bad8, 76a7313 (reviewed 2026-07-02) — ALL FINDINGS FIXED
 
 Direction is right (stable/volatile split, device TZ, usage plumbing, Cache column), but the
 implementation only migrated 3 of 10 provider templates and the injection/capture logic is
@@ -388,7 +388,7 @@ prefix below minimum → fatten stable prefix or accept no Anthropic caching on 
 voice turns ~30s apart. Watch LatencyPanel: turn 1 Cache should show creation>0; turns 2+
 should show read>0 AND a lower Send→1st vs the 1.8–2.0s baseline. Paste the table back.
 
-### P4-F6 · BLOCKER · OPEN — pre-flight validator rejects the new placeholders: ALL providers fail ("Missing required variable: STABLE_SYSTEM_PROMPT")
+### P4-F6 · BLOCKER · FIXED (p4 commit 76a7313) — pre-flight validator rejects the new placeholders: ALL providers fail ("Missing required variable: STABLE_SYSTEM_PROMPT")
 Found by owner live test (first turn failed with "AI provider error … please configure it in
 settings"). `fetchAIResponse` pre-flight (both copies, ~line 96-108) treats every extracted
 `{{VAR}}` as user-configurable unless exempted — and the exemption list is still only
@@ -398,12 +398,13 @@ provider is broken at runtime**. Unit tests missed it because their fixture temp
 include the new placeholders.
 **Fix:** add `STABLE_SYSTEM_PROMPT` and `VOLATILE_SYSTEM_PROMPT` to the exemption filter in
 BOTH `packages/core/functions/ai-response.function.ts` and `src/lib/functions/ai-response.
-function.ts`. Add a regression test that runs the REAL built-in claude + openrouter templates
-through the pre-flight with only API_KEY/MODEL configured (this class of bug = fixtures
-diverging from real templates; test the real constants). Also check `curl-validator.ts`'s
-`requiredVariables` — if it requires `{{SYSTEM_PROMPT}}` in custom curls, it must now accept
-either `SYSTEM_PROMPT` or the STABLE/VOLATILE pair, else editing/saving a provider with the
-new template form fails validation in Settings.
+function.ts`. Also add to `extractVariables()` `doNotInclude` list in `common.function.ts`
+(both copies) so the Settings UI also hides them. Add a regression test that runs the REAL
+built-in claude + openrouter templates through the pre-flight with only API_KEY/MODEL
+configured (this class of bug = fixtures diverging from real templates; test the real
+constants). curl-validator.ts's `requiredVariables` is called with `['TEXT']` only — no
+change needed for the custom-provider save path. Full suite: 22 files, 333/333 tests green
++ tsc clean.
 
 ---
 *Log format for the agent: change `OPEN` → `FIXED (p<N> commit <sha>)` with a one-line note.*
