@@ -53,6 +53,8 @@ export async function* fetchAIResponse(params: {
   userMessage: string;
   imagesBase64?: string[];
   signal?: AbortSignal;
+  maxOutputTokens?: number;
+  modelOverride?: string;
   onUsage?: (usage: { prompt_tokens?: number; completion_tokens?: number; cache_read_input_tokens?: number; cache_creation_input_tokens?: number }) => void;
 }): AsyncIterable<string> {
   try {
@@ -66,6 +68,8 @@ export async function* fetchAIResponse(params: {
       userMessage,
       imagesBase64 = [],
       signal,
+      maxOutputTokens,
+      modelOverride,
       onUsage,
     } = params;
 
@@ -142,6 +146,7 @@ export async function* fetchAIResponse(params: {
           value,
         ])
       ),
+      ...(modelOverride ? { MODEL: modelOverride } : {}),
       SYSTEM_PROMPT: stableSystemPrompt
         ? buildEnhancedSystemPrompt(stableSystemPrompt + "\n\n" + (volatileSystemPrompt || ""))
         : enhancedSystemPrompt || "",
@@ -170,6 +175,18 @@ export async function* fetchAIResponse(params: {
         if (typeof bodyObj.stream_options === "undefined" && bodyObj.messages && !bodyObj.system) {
           bodyObj.stream_options = { include_usage: true };
         }
+      }
+    }
+
+    // Override max_tokens when voice path provides a cap
+    if (maxOutputTokens !== undefined) {
+      const maxTokensKey = Object.keys(bodyObj).find(
+        (k) => k === "max_tokens" || k === "max_completion_tokens" || k === "maxOutputTokens"
+      );
+      if (maxTokensKey) {
+        bodyObj[maxTokensKey] = maxOutputTokens;
+      } else {
+        console.warn("fetchAIResponse: maxOutputTokens set but no max-tokens key found in body");
       }
     }
 

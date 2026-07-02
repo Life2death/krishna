@@ -1538,6 +1538,7 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
           }
         }, 1500);
         let firstChunk = true;
+        const voiceSettings = getResponseSettings();
         for await (const chunk of fetchAIResponse({
           provider,
           selectedProvider: selectedAIProvider,
@@ -1547,6 +1548,8 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
           userMessage: command,
           imagesBase64: attachedFilesRef.current.map(f => f.base64),
           signal,
+          maxOutputTokens: voiceSettings.voiceMaxTokens,
+          modelOverride: voiceSettings.voiceModel || undefined,
           onUsage: (u) => {
             if (!usageData) usageData = {};
             if (u.prompt_tokens !== undefined) usageData.prompt_tokens = u.prompt_tokens;

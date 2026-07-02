@@ -219,3 +219,5 @@ export const DEFAULT_RESPONSE_LENGTH = "auto";
 export const DEFAULT_LANGUAGE = "english";
 export const DEFAULT_AUTO_SCROLL = true;
 export const DEFAULT_HONORIFIC = "sir";
+export const DEFAULT_VOICE_MAX_TOKENS = 200;
+export const DEFAULT_VOICE_MODEL = "";

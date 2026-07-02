@@ -4,6 +4,8 @@ import {
   DEFAULT_LANGUAGE,
   DEFAULT_AUTO_SCROLL,
   DEFAULT_HONORIFIC,
+  DEFAULT_VOICE_MAX_TOKENS,
+  DEFAULT_VOICE_MODEL,
 } from "../response-settings.constants";
 
 export interface ResponseSettings {
@@ -11,6 +13,8 @@ export interface ResponseSettings {
   language: string;
   autoScroll: boolean;
   honorific: string;
+  voiceMaxTokens: number;
+  voiceModel: string;
 }
 
 export const DEFAULT_RESPONSE_SETTINGS: ResponseSettings = {
@@ -18,6 +22,8 @@ export const DEFAULT_RESPONSE_SETTINGS: ResponseSettings = {
   language: DEFAULT_LANGUAGE,
   autoScroll: DEFAULT_AUTO_SCROLL,
   honorific: DEFAULT_HONORIFIC,
+  voiceMaxTokens: DEFAULT_VOICE_MAX_TOKENS,
+  voiceModel: DEFAULT_VOICE_MODEL,
 };
 
 /**
@@ -43,6 +49,10 @@ export const getResponseSettings = (): ResponseSettings => {
           : DEFAULT_RESPONSE_SETTINGS.autoScroll,
       honorific:
         parsedSettings.honorific || DEFAULT_RESPONSE_SETTINGS.honorific,
+      voiceMaxTokens:
+        parsedSettings.voiceMaxTokens ?? DEFAULT_RESPONSE_SETTINGS.voiceMaxTokens,
+      voiceModel:
+        parsedSettings.voiceModel ?? DEFAULT_RESPONSE_SETTINGS.voiceModel,
     };
   } catch (error) {
     console.error("Failed to get response settings:", error);
@@ -92,6 +102,36 @@ export const updateLanguage = (language: string): ResponseSettings => {
 export const updateAutoScroll = (autoScroll: boolean): ResponseSettings => {
   const currentSettings = getResponseSettings();
   const newSettings = { ...currentSettings, autoScroll };
+  setResponseSettings(newSettings);
+  return newSettings;
+};
+
+/**
+ * Update honorific
+ */
+export const updateHonorific = (honorific: string): ResponseSettings => {
+  const currentSettings = getResponseSettings();
+  const newSettings = { ...currentSettings, honorific };
+  setResponseSettings(newSettings);
+  return newSettings;
+};
+
+/**
+ * Update voice max tokens
+ */
+export const updateVoiceMaxTokens = (voiceMaxTokens: number): ResponseSettings => {
+  const currentSettings = getResponseSettings();
+  const newSettings = { ...currentSettings, voiceMaxTokens };
+  setResponseSettings(newSettings);
+  return newSettings;
+};
+
+/**
+ * Update voice model
+ */
+export const updateVoiceModel = (voiceModel: string): ResponseSettings => {
+  const currentSettings = getResponseSettings();
+  const newSettings = { ...currentSettings, voiceModel };
   setResponseSettings(newSettings);
   return newSettings;
 };

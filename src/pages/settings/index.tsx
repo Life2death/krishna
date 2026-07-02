@@ -15,6 +15,7 @@ import {
   ResponseLength,
   LanguageSelector,
   AutoScrollToggle,
+  HonorificInput,
 } from "@/pages/responses/components";
 import { CreateSkillDialog, PersonaSelector } from "./components";
 import { PageLayout } from "@/layouts";
@@ -129,6 +130,9 @@ const Settings = () => {
 
       {/* Auto-Scroll Toggle */}
       <AutoScrollToggle />
+
+      {/* Honorific */}
+      <HonorificInput />
 
     </PageLayout>
   );

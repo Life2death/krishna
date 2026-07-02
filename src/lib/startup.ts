@@ -58,11 +58,19 @@ export async function initializeCore(): Promise<void> {
   setSettingsGetter(() => {
     try {
       const stored = safeLocalStorage.getItem("response_settings");
-      return stored
+      const base = stored
         ? JSON.parse(stored)
         : { responseLength: "auto", language: "english", autoScroll: true, honorific: "sir" };
+      return {
+        responseLength: base.responseLength ?? "auto",
+        language: base.language ?? "english",
+        autoScroll: base.autoScroll ?? true,
+        honorific: base.honorific ?? "sir",
+        voiceMaxTokens: base.voiceMaxTokens ?? 200,
+        voiceModel: base.voiceModel ?? "",
+      };
     } catch {
-      return { responseLength: "auto", language: "english", autoScroll: true, honorific: "sir" };
+      return { responseLength: "auto", language: "english", autoScroll: true, honorific: "sir", voiceMaxTokens: 200, voiceModel: "" };
     }
   });
 
