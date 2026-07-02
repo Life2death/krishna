@@ -501,11 +501,12 @@ conversational turns (~150–200 output tokens), keep the etiquette line, verify
 **Recommended order:** P4-F7 (regression) → P4-F8 (cache proof) → Phase 6 (length cap +
 fast-model setting). Prefix-fattening decision AFTER P4-F8's exact number + model choice.
 
-**Status as of Phase 4 fix commit b34e4f4:**
-- P4-F7: **FIXED** — cancel filler instead of awaiting it; 1st→Audio restored to baseline
-- P4-F8: **(b) ruled out** — `cache_control` survives pipeline; prefix ~1700 tokens (below
-  2048 minimum). Owner decision needed: accept no Anthropic cache vs fatten prefix vs
-  skip to Phase 6 (fast model, higher leverage)
+**Status as of Phase 4 fix commit 5b9f47d:**
+- P4-F7: **FIXED** → **SUPERSEDED by P4-F9** (b34e4f4's hard-cancel was wrong)
+- P4-F8: **CLOSED** — `cache_control` survives pipeline; prefix ~1700 tokens (below 2048
+  minimum). Accept no Anthropic cache on current prompt size.
+- P4-F9: **FIXED** — threshold 700→1500ms + await (not stop) + 2 tests.
+  Full suite: 23 files, 335/335 tests, tsc clean.
 
 ## P4-F7/F8 resolution review — commit b34e4f4 (reviewed 2026-07-02)
 
