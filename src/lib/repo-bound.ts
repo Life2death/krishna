@@ -53,10 +53,13 @@ export function fetchAIResponse(params: {
   provider?: unknown;
   selectedProvider?: unknown;
   systemPrompt?: string;
+  stableSystemPrompt?: string;
+  volatileSystemPrompt?: string;
   history?: Message[];
   userMessage: string;
   imagesBase64?: string[];
   signal?: AbortSignal;
+  onUsage?: (usage: { prompt_tokens?: number; completion_tokens?: number; cache_read_input_tokens?: number }) => void;
 }): AsyncIterable<string> {
   return getRepo().chat.fetchAIResponse(params);
 }

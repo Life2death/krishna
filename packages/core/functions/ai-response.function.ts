@@ -47,20 +47,26 @@ export async function* fetchAIResponse(params: {
     variables: Record<string, string>;
   };
   systemPrompt?: string;
+  stableSystemPrompt?: string;
+  volatileSystemPrompt?: string;
   history?: Message[];
   userMessage: string;
   imagesBase64?: string[];
   signal?: AbortSignal;
+  onUsage?: (usage: { prompt_tokens?: number; completion_tokens?: number; cache_read_input_tokens?: number }) => void;
 }): AsyncIterable<string> {
   try {
     const {
       provider,
       selectedProvider,
       systemPrompt,
+      stableSystemPrompt,
+      volatileSystemPrompt,
       history = [],
       userMessage,
       imagesBase64 = [],
       signal,
+      onUsage,
     } = params;
 
     // Check if already aborted
@@ -137,6 +143,8 @@ export async function* fetchAIResponse(params: {
         ])
       ),
       SYSTEM_PROMPT: enhancedSystemPrompt || "",
+      STABLE_SYSTEM_PROMPT: stableSystemPrompt ? buildEnhancedSystemPrompt(stableSystemPrompt) : enhancedSystemPrompt || "",
+      VOLATILE_SYSTEM_PROMPT: volatileSystemPrompt || "",
     };
 
     bodyObj = deepVariableReplacer(bodyObj, allVariables);
@@ -154,6 +162,9 @@ export async function* fetchAIResponse(params: {
           bodyObj[streamKey] = true;
         } else {
           bodyObj.stream = true;
+        }
+        if (typeof bodyObj.stream_options === "undefined") {
+          bodyObj.stream_options = { include_usage: true };
         }
       }
     }
@@ -260,6 +271,13 @@ export async function* fetchAIResponse(params: {
           if (!trimmed || trimmed === "[DONE]") continue;
           try {
             const parsed = JSON.parse(trimmed);
+            if (parsed.usage && onUsage) {
+              onUsage({
+                prompt_tokens: parsed.usage.prompt_tokens,
+                completion_tokens: parsed.usage.completion_tokens,
+                cache_read_input_tokens: parsed.usage.cache_read_input_tokens,
+              });
+            }
             const delta = getStreamingContent(
               parsed,
               provider?.responseContentPath || ""

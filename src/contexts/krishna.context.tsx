@@ -20,7 +20,7 @@ import { parseYesNo } from "@/lib/parse-yes-no";
 import { saveAndConfirm } from "@/lib/resolver";
 import { getAllSkills, getSkillByName, createSkill, updateSkillUseCount } from "@/lib/repo-bound";
 import { getAllMemories, createMemory } from "@/lib/repo-bound";
-import { parseRememberCommand, buildMemoryPrompt } from "@/lib/memory";
+import { parseRememberCommand } from "@/lib/memory";
 import { detectWakeWord } from "@/lib/wake-word";
 import { parseReminderCommand } from "@/lib/reminders";
 import { createReminder, getDueReminders, updateReminder, cancelReminder } from "@/lib/repo-bound";
@@ -1500,6 +1500,7 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
 
         abortRef.current = new AbortController();
       const signal = abortRef.current.signal;
+      let usageData: { prompt_tokens?: number; completion_tokens?: number; cache_read_input_tokens?: number } | undefined;
 
       try {
         historyRef.current = [...historyRef.current, { role: "user" as const, content: command }].slice(-8);
@@ -1509,15 +1510,20 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
           APP_ALIASES.filter(a => a.type === "url"),
         );
         const now = new Date();
-        const timeContext = `\n\nCurrent date and time: ${now.toLocaleString("en-IN", { timeZone: "Asia/Kolkata", weekday: "long", year: "numeric", month: "long", day: "numeric", hour: "2-digit", minute: "2-digit" })} IST`;
+        const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+        const timeContext = `\n\nCurrent date and time: ${now.toLocaleString("en-IN", { timeZone, weekday: "long", year: "numeric", month: "long", day: "numeric", hour: "2-digit", minute: "2-digit" })}`;
         const toolsSection = buildToolsSection(command);
         const honorific = getResponseSettings().honorific || "sir";
         const personaPrefix = selectedSystemPrompt && selectedSystemPrompt !== DEFAULT_SYSTEM_PROMPT
           ? selectedSystemPrompt.replace(/\{honorific\}/g, honorific) + "\n\n"
           : "";
-        const rawPrompt = (personaPrefix + BASE_SYSTEM_PROMPT + "\n\n" + toolsSection + SYSTEM_PROMPT_RULES + timeContext)
+        const stableBase = (personaPrefix + BASE_SYSTEM_PROMPT + "\n\n" + toolsSection + SYSTEM_PROMPT_RULES)
           .replace(/\{honorific\}/g, honorific);
-        const systemPrompt = buildMemoryPrompt(rawPrompt, memories);
+        const confirmedMemories = memories.filter(m => m.confirmed && m.value);
+        const memoryBlock = confirmedMemories.length > 0
+          ? "\n\nThings I know about the user:\n" + confirmedMemories.map(m => "- " + (m.key ? m.key + ": " : "") + m.value).join("\n") + "\n\nUse these facts when relevant."
+          : "";
+        const volatilePrompt = timeContext + memoryBlock;
         let fullResponse = "";
         fillerSpokenRef.current = false;
         turnTiming.mark("request_sent");
@@ -1535,11 +1541,13 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
         for await (const chunk of fetchAIResponse({
           provider,
           selectedProvider: selectedAIProvider,
-          systemPrompt,
+          stableSystemPrompt: stableBase,
+          volatileSystemPrompt: volatilePrompt,
           history: historyRef.current,
           userMessage: command,
           imagesBase64: attachedFilesRef.current.map(f => f.base64),
           signal,
+          onUsage: (u) => { usageData = u; },
         })) {
           if (signal.aborted) break;
           if (firstChunk) {
@@ -1587,6 +1595,7 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
           }
           const cId = currentCaptureIdRef.current;
           if (cId) {
+            if (usageData) turnTiming.setUsage(usageData);
             turnTiming.freeze();
             updateCommandTiming({ id: cId, timing: turnTiming.toJSON() }).catch((err) =>
               console.error("Failed to persist turn timing:", err)
@@ -1710,6 +1719,7 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
         }
         const cId = currentCaptureIdRef.current;
         if (cId) {
+          if (usageData) turnTiming.setUsage(usageData);
           turnTiming.freeze();
           updateCommandTiming({ id: cId, timing: turnTiming.toJSON() }).catch((err) =>
             console.error("Failed to persist turn timing:", err)

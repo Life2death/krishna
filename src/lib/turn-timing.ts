@@ -16,16 +16,26 @@ export interface TurnTimingData {
     first_token_to_last_token?: number;
     total?: number;
   };
+  usage?: {
+    prompt_tokens?: number;
+    completion_tokens?: number;
+    cache_read_input_tokens?: number;
+  };
 }
 
 export class TurnTiming {
   private _marks: Partial<Record<TimingMark, number>> = {};
   private _frozen = false;
+  private _usage?: { prompt_tokens?: number; completion_tokens?: number; cache_read_input_tokens?: number };
 
   mark(name: TimingMark): void {
     if (this._frozen) return;
     if (this._marks[name] !== undefined) return;
     this._marks[name] = performance.now();
+  }
+
+  setUsage(usage: { prompt_tokens?: number; completion_tokens?: number; cache_read_input_tokens?: number }): void {
+    this._usage = usage;
   }
 
   get marks(): Partial<Record<TimingMark, number>> {
@@ -50,6 +60,7 @@ export class TurnTiming {
         first_token_to_last_token: this.delta("first_token", "last_token"),
         total: this.delta("end_of_speech", "last_audio"),
       },
+      ...(this._usage ? { usage: this._usage } : {}),
     };
   }
 

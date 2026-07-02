@@ -21,6 +21,12 @@ function formatDelta(ms: number | undefined): string {
   return `${(ms / 1000).toFixed(1)}s`;
 }
 
+function formatTokens(n: number | undefined): string {
+  if (n === undefined) return "—";
+  if (n === 0) return "0";
+  return n.toLocaleString();
+}
+
 export const LatencyPanel = () => {
   const [entries, setEntries] = useState<TimedEntry[]>([]);
 
@@ -71,6 +77,7 @@ export const LatencyPanel = () => {
                 <th className="text-right py-1 pr-2">Send→1st</th>
                 <th className="text-right py-1 pr-2">1st→Audio</th>
                 <th className="text-right py-1 pr-2">Tokens</th>
+                <th className="text-right py-1 pr-2">Cache</th>
                 <th className="text-right py-1 pr-2">TTS</th>
                 <th className="text-right py-1 pr-2">Total</th>
                 <th className="text-left py-1 pl-2">Outcome</th>
@@ -94,6 +101,9 @@ export const LatencyPanel = () => {
                   </td>
                   <td className="py-1 pr-2 text-right tabular-nums">
                     {formatDelta(e.timing.deltas.first_token_to_last_token)}
+                  </td>
+                  <td className="py-1 pr-2 text-right tabular-nums">
+                    {formatTokens(e.timing.usage?.cache_read_input_tokens)}
                   </td>
                   <td className="py-1 pr-2 text-right tabular-nums">
                     {formatDelta(e.timing.deltas.first_audio_to_last_audio)}

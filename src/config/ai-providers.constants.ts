@@ -7,7 +7,7 @@ export const AI_PROVIDERS = [
   -H "Authorization: Bearer {{API_KEY}}" \
   -d '{
     "model": "{{MODEL}}",
-    "messages": [{"role": "system", "content": "{{SYSTEM_PROMPT}}"}, {"role": "user", "content": [{"type": "text", "text": "{{TEXT}}"}, {"type": "image_url", "image_url": {"url": "data:image/png;base64,{{IMAGE}}"}}]}]
+    "messages": [{"role": "system", "content": "{{STABLE_SYSTEM_PROMPT}}"}, {"role": "system", "content": "{{VOLATILE_SYSTEM_PROMPT}}"}, {"role": "user", "content": [{"type": "text", "text": "{{TEXT}}"}, {"type": "image_url", "image_url": {"url": "data:image/png;base64,{{IMAGE}}"}}]}]
   }'`,
     responseContentPath: "choices[0].message.content",
     streaming: true,
@@ -19,7 +19,7 @@ export const AI_PROVIDERS = [
   -H "Authorization: Bearer {{API_KEY}}" \\
   -d '{
     "model": "{{MODEL}}",
-    "messages": [{"role": "system", "content": "{{SYSTEM_PROMPT}}"}, {"role": "user", "content": [{"type": "text", "text": "{{TEXT}}"}, {"type": "image_url", "image_url": {"url": "data:image/png;base64,{{IMAGE}}"}}]}]
+    "messages": [{"role": "system", "content": "{{STABLE_SYSTEM_PROMPT}}"}, {"role": "system", "content": "{{VOLATILE_SYSTEM_PROMPT}}"}, {"role": "user", "content": [{"type": "text", "text": "{{TEXT}}"}, {"type": "image_url", "image_url": {"url": "data:image/png;base64,{{IMAGE}}"}}]}]
   }'`,
     responseContentPath: "choices[0].message.content",
     streaming: true,
@@ -96,7 +96,7 @@ export const AI_PROVIDERS = [
     -H "Authorization: Bearer {{API_KEY}}" \
     -d '{
       "model": "{{MODEL}}",
-      "messages": [{"role": "system", "content": "{{SYSTEM_PROMPT}}"}, {"role": "user", "content": [{"type": "text", "text": "{{TEXT}}"}, {"type": "image_url", "image_url": {"url": "data:image/png;base64,{{IMAGE}}"}}]}],
+      "messages": [{"role": "system", "content": "{{STABLE_SYSTEM_PROMPT}}"}, {"role": "system", "content": "{{VOLATILE_SYSTEM_PROMPT}}"}, {"role": "user", "content": [{"type": "text", "text": "{{TEXT}}"}, {"type": "image_url", "image_url": {"url": "data:image/png;base64,{{IMAGE}}"}}]}],
       "temperature": 1,
       "max_completion_tokens": 8192,
       "top_p": 1,
