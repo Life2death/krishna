@@ -59,7 +59,7 @@ registered correctly, CRUD threading is consistent, panel reads `timing`). The e
 prompt text is good. But the P0-F1 fix introduced a data-clobbering regression, and two plan
 items were skipped.
 
-### P1-F1 · BLOCKER · OPEN — final timing write NULLs the columns written moments earlier
+### P1-F1 · BLOCKER · FIXED (p1 commit 236d1fb) — final timing write NULLs the columns written moments earlier
 `updateCommandOutcome` executes `UPDATE command_log SET outcome=?, failure_reason=?,
 detail=?, timing=?, response=? WHERE id=?` — **all columns, unconditionally**. The new
 post-TTS calls pass only `{id, outcome, timing}`, so on EVERY turn the second write nulls
@@ -73,19 +73,19 @@ leave `updateCommandOutcome` as-is. (Alternative: build the SET clause dynamical
 provided fields — bigger change, not needed.) Add a regression test: log outcome with
 response/detail → write timing → assert response/detail survive.
 
-### P1-F2 · BUG · OPEN — honorific is hardcoded, plan requires a setting
+### P1-F2 · BUG · FIXED (p1 commit 236d1fb) — honorific is hardcoded, plan requires a setting
 Plan P1: "Address the owner with an honorific (**setting**; default 'sir')." Both
 `BASE_SYSTEM_PROMPT` and the seed persona hardcode "sir". Make it a settings value (default
 "sir") interpolated into the prompt at assembly time — same pattern as the existing
 response-length/language settings in `buildEnhancedSystemPrompt` / prompt assembly.
 
-### P1-F3 · BUG · OPEN — required snapshot test missing
+### P1-F3 · BUG · FIXED (p1 commit 236d1fb) — required snapshot test missing
 Phase 1 acceptance: "snapshot test of the assembled prompt." Test count is unchanged
 (287 before, 287 after) — no test was added. Add a snapshot/assertion test covering the
 assembled system prompt (persona prefix + BASE + rules) including the etiquette section and
 the honorific interpolation from P1-F2.
 
-### P1-F4 · NIT · OPEN — post-TTS write: no rejection handling, no refresh event
+### P1-F4 · NIT · FIXED (p1 commit 236d1fb) — post-TTS write: no rejection handling, no refresh event
 The new `updateCommandOutcome(...)` calls after TTS are fire-and-forget without `.catch`
 (unhandled rejection if the DB write fails) and don't `emit("command-log-updated")`, so
 dashboard views lag until the panel's 5s poll. Add `.catch(console.error)` + the emit —
@@ -99,6 +99,42 @@ already-initialized DB (like the owner's). Behavior is still correct because
 existing installs; either drop the duplicated etiquette from the seed (BASE covers it) or
 add a seed-version upsert. Also: only `persona:default` was updated (coder/researcher/
 planner untouched) — acceptable via BASE, note it was a conscious choice.
+
+## Phase 1 fix commit — 236d1fb (reviewed 2026-07-02)
+
+The P1-F1 fix is exactly right (narrow `UPDATE ... SET timing=?`, `.catch`, refresh emit) and
+the honorific setting is threaded completely through constants/storage/settings/core-init/
+startup/test-setup. FIXED marks for P1-F1/F2/F4 accepted. Two new issues, both introduced by
+this commit:
+
+### P1-F6 · BUG · OPEN — `{honorific}` placeholder leaks unreplaced in the text-chat path
+Interpolation happens only in the voice path (`krishna.context.tsx:1488` replaces on the
+assembled prompt). The **text-chat path** (`src/pages/chats/components/View.tsx` →
+`useChatCompletion` → `fetchAIResponse`) passes `systemPrompt` from app context with **no
+replacement** — so on any install where the seeded `persona:default` (which now contains
+literal `{honorific}`) is the selected prompt, the raw placeholder is sent to the model.
+Existing installs are shielded only by accident (P1-F5: seeds are inert there), but every
+**fresh install — including the M1 mobile build — hits this**. **Fix:** interpolate at a
+single choke point both paths share — e.g. inside `fetchAIResponse`/`buildEnhancedSystemPrompt`
+(`ai-response.function.ts`) or a shared `applyHonorific(prompt)` util called by both; remove
+the now-redundant double replace of `personaPrefix` in krishna.context while at it.
+
+### P1-F7 · BUG · OPEN — new test has a failing assertion; suite apparently not run
+`src/__tests__/phase1-prompt.test.ts` asserts
+`expect(src.default).toContain('"SPOKEN CONVERSATION ETIQUETTE:"')` — with embedded double
+quotes — but the source (`krishna.context.tsx:147`) uses **single** quotes, so the raw source
+cannot contain that string and the assertion should fail. The commit message doesn't claim a
+test run and the phase report predates this commit. **Fix:** run `vitest run` (full suite),
+change the assertion to `toContain('SPOKEN CONVERSATION ETIQUETTE:')` (no embedded quotes),
+and remove the unused `SPOKEN_CONVERSATION_SECTION` const + unused `beforeEach` import. Also
+verify the `?raw` imports actually resolve under vitest — if they don't, export
+`BASE_SYSTEM_PROMPT` for testing instead of grepping source text (cleaner anyway).
+Report the post-fix test count (was 287; must be >287 and green).
+
+### P1-F8 · NIT · OPEN — honorific has no settings UI yet
+The setting exists in storage with default "sir", but nothing in the Settings page edits it.
+Add a small text field alongside the existing response-length/language controls — fine to
+defer to P6 (request-tuning phase already touches settings).
 
 ---
 *Log format for the agent: change `OPEN` → `FIXED (p<N> commit <sha>)` with a one-line note.*
