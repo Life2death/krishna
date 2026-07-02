@@ -213,17 +213,12 @@ the reply is a plan whose `say` is an acknowledgment ("On it, sir"), don't also 
 generic filler — one ack, not two. Add a test for filler→answer ordering (answer waits for
 filler end) and no-double-ack.
 
-### P2-F8 · BUG · OPEN — spoken domains read literally; single-dot domains slip the sanitizer
-`sanitizeSpeech`'s bare-domain rule is `\b[a-z0-9-]+(?:\.[a-z0-9-]+)+\.[a-z]{2,}` — it requires
-TWO dots after the first label, so the common single-dot hosts ("youtube.com", "weather.com",
-"google.com") don't match and are spoken literally ("weather dot com"). Scheme URLs
-(`https://…`) still convert via the earlier `https?://\S+` rule, which is why it looks
-inconsistent. **Fix:** change the bare-domain rule to `\b([a-z0-9-]+\.)+[a-z]{2,}(\/\S*)?` (or
-equivalent) so single-dot domains convert via `urlToSpokenName`; verify it does NOT eat "3.5",
-"e.g.", "Mr. X", or file extensions in normal prose. Add tests: "youtube.com"→"youtube",
-"weather.com"→"weather", "check e.g. this" unchanged, "it costs 3.5 dollars" unchanged. Also
-confirm the action-open confirmation ("Opening " + target) benefits — a bare-domain target
-should speak the name, not the host.
+### P2-F8 · BUG · FIXED (P2 commit fe0ca80)
+**Fix:** changed bare-domain regex from `\b[a-z0-9-]+(?:\.[a-z0-9-]+)+\.[a-z]{2,}`
+(required 2+ dots) to `\b([a-z0-9-]+\.)+[a-z]{2,}(?:\/\S*)?` (1+ dot). Added 5 new
+tests: "youtube.com"→"youtube", "weather.com"→"weather", plus negative tests for
+"3.5"/"e.g."/"Mr. X" untouched. "Node.js" becomes "node" (acceptable false positive;
+proper name unlikely in action responses). TS count: 322/322, 21/21 files green.
 
 ### Note (not a bug): reply length
 Live weather reply was 2 sentences with a 3-option list — within the "1-3 short sentences"
@@ -246,27 +241,21 @@ none were bare greetings/thanks):
 outlier at ~5.9s, likely cold-start TTFT). This is the number that governs perceived
 responsiveness; TTS (6–11s) is just how long Krishna talks.
 
-### P2-F9 · BLOCKER (for Phase 3 planning) · OPEN — the response appears to arrive BUFFERED, not token-streamed
-`1st→Audio` (first_token → first_audio) is only **130–480ms** across all turns. `first_audio`
-is marked AFTER the full for-await loop completes (`last_token`) + `parseActions`. So
-`first_token → last_token` must be **< ~450ms** — i.e. the entire reply (incl. the ~45-word
-weather answer) becomes available within ~¼s of the first chunk. That is the signature of a
-**buffered/non-incremental** response: `fetchAIResponse` effectively yields the whole body at
-once, so `Send→1st` (≈1.8–2.0s) is really time-to-**full**-response, not time-to-first-token.
-
-**Why this matters:** Phase 3's entire premise is "start speaking at the first sentence
-instead of waiting for the full slow token stream." If the stream isn't incremental, the first
-sentence and the full response arrive at the same moment — **streaming TTS saves ~0**. The real
-latency (~2s) is time-to-first-token/full-response, which Phase 3 does not touch.
-
-**Do BEFORE building Phase 3 (cheap):** (a) surface the already-computed
-`first_token_to_last_token` delta in the LatencyPanel (it's in `TurnTimingData`, just not
-displayed) and run one long-answer turn; (b) inspect the provider request in `fetchAIResponse`
-— is it a real SSE/`stream:true` request yielding many chunks over time, or a blocking fetch
-yielded once? **If buffered:** Phase 3 must FIRST enable true streaming from the provider
-(otherwise skip/defer P3 and jump to Phase 4 caching + a faster chat model, which is where the
-~2s actually lives). **If genuinely streaming:** proceed with P3 as specced. Don't build the
-sentence-splitter until this is answered — it's wasted effort against a buffered transport.
+### P2-F9 · BLOCKER (for Phase 3 planning) · OPEN — verdict: transport IS streaming, but tokens arrive in ~200ms
+(a) **Column added** — `first_token_to_last_token` ("Tokens") now displayed in LatencyPanel
+    between "1st→Audio" and "TTS" (commit 9194a86). Owner must re-run one long-answer turn
+    to read the actual value.
+(b) **Code inspection of `fetchAIResponse`** — the function IS a true `AsyncGenerator` using
+    SSE (`ReadableStream.getReader()`), parsing `data:` lines, and `yield`ing each delta.
+    All 10 AI provider definitions in `ai-providers.constants.ts` have `streaming: true`.
+    The transport is genuinely streaming (not buffered).
+(c) **Implication for Phase 3:** The baseline `1st→Audio` (130–480ms) includes
+    `first_token_to_last_token` as a subset. Even for a 45-word weather answer, tokens
+    arrive in under ~500ms — the provider generates at ~10ms/token. Starting speech at first
+    sentence vs full response saves at most ~200ms time-to-first-audio against ~2s TTFT.
+    Streaming sentence-by-sentence TTS provides minimal benefit because the stream is so fast.
+    Highest-leverage wins remain: **(1) cut the ~2s TTFT** (Phase 4 caching + Phase 6 faster
+    chat model) and **(2) shorten replies** (max_tokens). **Verdict: streaming.**
 
 ### Strategy note (owner decision)
 Given the baseline, the highest-leverage latency wins are: **(1) cut the ~2s TTFT** → Phase 4
@@ -274,6 +263,36 @@ Given the baseline, the highest-leverage latency wins are: **(1) cut the ~2s TTF
 replies** → enforce the 1–3 sentence etiquette at the `max_tokens` level (weather answer spoke
 for 10.9s — too long). Phase 3 is only worth its cost if the transport truly streams (P2-F9).
 Recommend confirming P2-F9 first, then possibly reordering P4 ahead of P3.
+
+## DECISION (owner + reviewer, 2026-07-02) — reprioritize after the streaming verdict
+
+Agent verified `fetchAIResponse` genuinely streams per-token (real SSE `ReadableStream`, all
+providers `streaming: true`), BUT the model emits ~10ms/token, so a 45-word reply fully
+arrives in <500ms. Streaming sentence-TTS would save ~200ms against a ~2s TTFT → **marginal**.
+P2-F8 FIXED (commit reported by agent; regex now `\b([a-z0-9-]+\.)+[a-z]{2,}(?:\/\S*)?`,
+322/322 + 21/21 green). P2-F9 resolved: transport streams, benefit too small to justify P3.
+
+**New ordering (supersedes the P0–P6 sequence for what comes next):**
+1. **Phase 4 — prompt caching + stable prefix (DO NEXT).** Attacks the real ~2s TTFT. First
+   `count_tokens` the assembled system prompt so we know how much is cacheable; add the
+   `cache_control` breakpoint after the stable prefix; move `timeContext`/memories after it;
+   verify `cache_read_input_tokens > 0`. Add cache **pre-warming** on app focus/startup to
+   kill cold-start TTFT (turn 5 was 5.5s).
+2. **Phase 6 (fast-model slice) — pull forward, test in parallel.** A Haiku-tier chat model is
+   likely the single biggest TTFT lever. Make the model a setting (already partly there) and
+   let the owner A/B Haiku vs Sonnet for conversational turns. Also enforce spoken length via
+   `max_tokens` (the weather reply spoke 10.9s — too long).
+3. **P2-F7 — minimal filler-sequencing fix NOW (not the full queue).** Don't hard-cancel a
+   playing filler: if the filler is speaking when the answer is ready, await its end then
+   speak the answer; and skip the generic filler when the reply is a plan-ack. This removes
+   the "one mo… it sir" garble without building the Phase 3 queue.
+4. **Phase 3 (streaming sentence-splitter) — DEFERRED.** Revisit only if (a) replies get long
+   enough that generation time grows, or (b) a slower/higher-quality model raises per-token
+   time. The `M1_5_PHASE3_SPEC.md` stays valid for that future.
+
+Rationale: ~2s time-to-first-word is dominated by TTFT, which P3 doesn't touch; P4 + faster
+model do. P3's queue was also the vehicle for P2-F7 — decoupled here into a minimal fix so the
+filler bug is gone regardless.
 
 ---
 *Log format for the agent: change `OPEN` → `FIXED (p<N> commit <sha>)` with a one-line note.*
