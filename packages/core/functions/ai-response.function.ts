@@ -96,7 +96,7 @@ export async function* fetchAIResponse(params: {
 
     const extractedVariables = extractVariables(provider.curl);
     const requiredVars = extractedVariables.filter(
-      ({ key }) => key !== "SYSTEM_PROMPT" && key !== "TEXT" && key !== "IMAGE"
+      ({ key }) => key !== "SYSTEM_PROMPT" && key !== "STABLE_SYSTEM_PROMPT" && key !== "VOLATILE_SYSTEM_PROMPT" && key !== "TEXT" && key !== "IMAGE"
     );
     for (const { key } of requiredVars) {
       if (

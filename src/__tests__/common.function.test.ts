@@ -4,10 +4,11 @@ import {
   setByPath,
   extractVariables,
   deepVariableReplacer,
-  buildDynamicMessages,
   processUserMessageTemplate,
+  buildDynamicMessages,
   getStreamingContent,
 } from "@/lib/functions/common.function";
+import { AI_PROVIDERS } from "@/config/ai-providers.constants";
 
 // ─────────────────────────────────────────────
 // getByPath
@@ -113,6 +114,37 @@ describe("extractVariables", () => {
   it("returns empty array when no variables present", () => {
     const curl = `curl -X POST https://api.example.com/v1/chat`;
     expect(extractVariables(curl)).toEqual([]);
+  });
+});
+
+// ── P4-F6 regression: real built-in templates ──────────────────────────
+describe("P4-F6: real templates pass pre-flight with only API_KEY/MODEL", () => {
+  const claude = AI_PROVIDERS.find((p) => p.id === "claude")!;
+  const openrouter = AI_PROVIDERS.find((p) => p.id === "openrouter")!;
+
+  it.each([
+    ["claude", claude],
+    ["openrouter", openrouter],
+  ])("extractVariables on %s excludes STABLE_SYSTEM_PROMPT and VOLATILE_SYSTEM_PROMPT", (_, provider) => {
+    const vars = extractVariables(provider.curl);
+    const values = vars.map((v) => v.value);
+    expect(values).not.toContain("STABLE_SYSTEM_PROMPT");
+    expect(values).not.toContain("VOLATILE_SYSTEM_PROMPT");
+    // Only API_KEY and MODEL remain as required
+    expect(values).toEqual(expect.arrayContaining(["API_KEY", "MODEL"]));
+  });
+
+  it.each([
+    ["claude", claude],
+    ["openrouter", openrouter],
+  ])("duplicated exemption filter in fetchAIResponse also passes for %s", (_, provider) => {
+    const vars = extractVariables(provider.curl);
+    const requiredVars = vars.filter(
+      ({ key }) => key !== "SYSTEM_PROMPT" && key !== "STABLE_SYSTEM_PROMPT" && key !== "VOLATILE_SYSTEM_PROMPT" && key !== "TEXT" && key !== "IMAGE"
+    );
+    const keys = requiredVars.map((v) => v.key);
+    // Only api_key and model should remain
+    expect(keys).toEqual(["api_key", "model"]);
   });
 });
 
