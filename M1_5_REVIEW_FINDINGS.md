@@ -230,5 +230,50 @@ Live weather reply was 2 sentences with a 3-option list — within the "1-3 shor
 etiquette, acceptable. Acknowledge-then-act confirmed working ("can you open Chrome?" →
 "On it, sir."). "sir" honorific present throughout. Persona behavior is landing.
 
+## BASELINE (owner run, 2026-07-02, dc53d74) — and a strategy-changing finding
+
+Raw (dev-space LatencyPanel), all 5 reached the LLM path (canned correctly did NOT fire —
+none were bare greetings/thanks):
+| # | Transcript | E→Send | Send→1st | 1st→Audio | TTS | Total |
+|---|---|---|---|---|---|---|
+| 1 | can you open Chrome? | 85ms | 2.0s | 132ms | 1.9s | 4.1s |
+| 2 | what's the weather in Mumbai? | 83ms | 1.8s | 229ms | 10.9s | 13.0s |
+| 3 | what's the better | 74ms | 1.9s | 477ms | 9.8s | 12.2s |
+| 4 | thanks for the information | 86ms | 1.9s | 139ms | 6.1s | 8.2s |
+| 5 | good morning. what time is it? | 314ms | 5.5s | 134ms | 9.4s | 15.4s |
+
+**Time-to-first-spoken-word** (E→Send + Send→1st + 1st→Audio) ≈ **2.1–2.5s** (turn 5 an
+outlier at ~5.9s, likely cold-start TTFT). This is the number that governs perceived
+responsiveness; TTS (6–11s) is just how long Krishna talks.
+
+### P2-F9 · BLOCKER (for Phase 3 planning) · OPEN — the response appears to arrive BUFFERED, not token-streamed
+`1st→Audio` (first_token → first_audio) is only **130–480ms** across all turns. `first_audio`
+is marked AFTER the full for-await loop completes (`last_token`) + `parseActions`. So
+`first_token → last_token` must be **< ~450ms** — i.e. the entire reply (incl. the ~45-word
+weather answer) becomes available within ~¼s of the first chunk. That is the signature of a
+**buffered/non-incremental** response: `fetchAIResponse` effectively yields the whole body at
+once, so `Send→1st` (≈1.8–2.0s) is really time-to-**full**-response, not time-to-first-token.
+
+**Why this matters:** Phase 3's entire premise is "start speaking at the first sentence
+instead of waiting for the full slow token stream." If the stream isn't incremental, the first
+sentence and the full response arrive at the same moment — **streaming TTS saves ~0**. The real
+latency (~2s) is time-to-first-token/full-response, which Phase 3 does not touch.
+
+**Do BEFORE building Phase 3 (cheap):** (a) surface the already-computed
+`first_token_to_last_token` delta in the LatencyPanel (it's in `TurnTimingData`, just not
+displayed) and run one long-answer turn; (b) inspect the provider request in `fetchAIResponse`
+— is it a real SSE/`stream:true` request yielding many chunks over time, or a blocking fetch
+yielded once? **If buffered:** Phase 3 must FIRST enable true streaming from the provider
+(otherwise skip/defer P3 and jump to Phase 4 caching + a faster chat model, which is where the
+~2s actually lives). **If genuinely streaming:** proceed with P3 as specced. Don't build the
+sentence-splitter until this is answered — it's wasted effort against a buffered transport.
+
+### Strategy note (owner decision)
+Given the baseline, the highest-leverage latency wins are: **(1) cut the ~2s TTFT** → Phase 4
+(prompt caching, stable prefix) + Phase 6 (optional Haiku-tier chat model); **(2) shorten
+replies** → enforce the 1–3 sentence etiquette at the `max_tokens` level (weather answer spoke
+for 10.9s — too long). Phase 3 is only worth its cost if the transport truly streams (P2-F9).
+Recommend confirming P2-F9 first, then possibly reordering P4 ahead of P3.
+
 ---
 *Log format for the agent: change `OPEN` → `FIXED (p<N> commit <sha>)` with a one-line note.*
