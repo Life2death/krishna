@@ -136,5 +136,46 @@ The setting exists in storage with default "sir", but nothing in the Settings pa
 Add a small text field alongside the existing response-length/language controls — fine to
 defer to P6 (request-tuning phase already touches settings).
 
+## Phase 2 — commit c303e7b (reviewed 2026-07-02)
+
+Good: canned check is correctly placed AFTER the pending-confirmation resolution (line 825
+handles "yes/no" for plans/skills before the canned layer at ~1166, so confirmations are not
+swallowed) and after wake-word stripping; filler timer is cleared on every exit path traced
+(stream end, speak start, catch); canned path records the turn, logs outcome, persists
+timing. Structure is right. Two real problems:
+
+### P2-F1 · BLOCKER · OPEN — unanchored substring patterns hijack real commands
+`matchCannedResponse` tests patterns like `\b(hi|hello|hey)\b`, `\b(good\s*)?morning\b`,
+`\b(yes|yeah|sure|okay|ok|alright|got\s*it|on\s*it)\b` against the WHOLE utterance with no
+anchoring or length guard. Any real command containing one of these words is intercepted and
+never reaches the LLM/skills/reminders:
+- "**hey** Krishna, open Chrome and search flights" → canned greeting, command dropped.
+- "set an alarm for the **morning**" → `(good\s*)?` is optional, so bare "morning" matches.
+- "**ok** now open youtube" / "**sure**, and also remind me at 5" → canned ack, dropped.
+**Fix:** treat an utterance as canned ONLY if the entire (trimmed, punctuation-stripped)
+text is the greeting/thanks/ack — anchor every pattern `^…$` (e.g. `/^(good\s+)?(morning|
+afternoon|evening)$/i`, `/^(hi|hello|hey)( there| krishna)?$/i`) and/or require ≤3–4 words
+before matching. Add negative tests for the three examples above plus Hindi equivalents
+("नमस्ते, यूट्यूब खोलो" must NOT be canned).
+
+### P2-F2 · BUG · OPEN — protocol violation: P1-F6/P1-F7 skipped, failing suite excluded
+The phase report states "302/302 pass … **excludes pre-existing phase1-prompt.test.ts
+issues**". That excluded suite IS finding P1-F7 — the protocol requires OPEN BLOCKER/BUG
+findings to be fixed FIRST, and gate #3 requires the full `vitest run` green; excluding a
+failing file defeats the gate. P1-F6 (honorific placeholder leak in the text-chat path) was
+also untouched. Both MUST be fixed at the start of P3, and the P3 report must state the
+full-suite test count with zero exclusions.
+
+### P2-F3 · NIT · OPEN — canned `first_audio` mark is early
+In the canned path, `turnTiming.mark("first_audio")` fires before `await recordTurn(...)`
+and the speak call, so the canned fast-path metric under-reports by the DB-write time. Move
+the mark to immediately before `ttsRef.current.speak(speak)`.
+
+### P2-F4 · NIT · OPEN — bare "yes/okay" with nothing pending gets "On it, working on it"
+When no confirmation is pending, replying "On it, {honorific}! / working on it" to a bare
+"okay" is misleading — nothing is being worked on. Use neutral responses for the
+acknowledgment intent ("Yes, {honorific}?" / "I'm listening") or drop the intent and let
+those reach the LLM (they're rare once P2-F1 anchors the patterns).
+
 ---
 *Log format for the agent: change `OPEN` → `FIXED (p<N> commit <sha>)` with a one-line note.*
