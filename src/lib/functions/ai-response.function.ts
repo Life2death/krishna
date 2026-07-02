@@ -142,8 +142,12 @@ export async function* fetchAIResponse(params: {
           value,
         ])
       ),
-      SYSTEM_PROMPT: enhancedSystemPrompt || "",
-      STABLE_SYSTEM_PROMPT: stableSystemPrompt ? buildEnhancedSystemPrompt(stableSystemPrompt) : enhancedSystemPrompt || "",
+      SYSTEM_PROMPT: stableSystemPrompt
+        ? buildEnhancedSystemPrompt(stableSystemPrompt + "\n\n" + (volatileSystemPrompt || ""))
+        : enhancedSystemPrompt || "",
+      STABLE_SYSTEM_PROMPT: stableSystemPrompt
+        ? buildEnhancedSystemPrompt(stableSystemPrompt)
+        : enhancedSystemPrompt || "",
       VOLATILE_SYSTEM_PROMPT: volatileSystemPrompt || "",
     };
 
@@ -163,7 +167,7 @@ export async function* fetchAIResponse(params: {
         } else {
           bodyObj.stream = true;
         }
-        if (typeof bodyObj.stream_options === "undefined") {
+        if (typeof bodyObj.stream_options === "undefined" && bodyObj.messages) {
           bodyObj.stream_options = { include_usage: true };
         }
       }
@@ -275,13 +279,30 @@ export async function* fetchAIResponse(params: {
           if (!trimmed || trimmed === "[DONE]") continue;
           try {
             const parsed = JSON.parse(trimmed);
-            if (parsed.usage && onUsage) {
-              onUsage({
-                prompt_tokens: parsed.usage.prompt_tokens,
-                completion_tokens: parsed.usage.completion_tokens,
-                cache_read_input_tokens: parsed.usage.cache_read_input_tokens,
-              });
+
+            if (onUsage) {
+              // Anthropic message_start — has input + cache info
+              if (parsed.message?.usage) {
+                onUsage({
+                  prompt_tokens: parsed.message.usage.input_tokens,
+                  completion_tokens: parsed.message.usage.output_tokens,
+                  cache_read_input_tokens: parsed.message.usage.cache_read_input_tokens,
+                });
+              }
+              // OpenAI-style final usage chunk
+              if (parsed.usage && !parsed.type) {
+                onUsage({
+                  prompt_tokens: parsed.usage.prompt_tokens ?? parsed.usage.input_tokens,
+                  completion_tokens: parsed.usage.completion_tokens ?? parsed.usage.output_tokens,
+                  cache_read_input_tokens: parsed.usage.prompt_tokens_details?.cached_tokens ?? parsed.usage.cache_read_input_tokens,
+                });
+              }
+              // Anthropic message_delta — output tokens only
+              if (parsed.type === "message_delta" && parsed.usage) {
+                onUsage({ completion_tokens: parsed.usage.output_tokens });
+              }
             }
+
             const delta = getStreamingContent(
               parsed,
               provider?.responseContentPath || ""

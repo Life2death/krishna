@@ -1547,7 +1547,12 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
           userMessage: command,
           imagesBase64: attachedFilesRef.current.map(f => f.base64),
           signal,
-          onUsage: (u) => { usageData = u; },
+          onUsage: (u) => {
+            if (!usageData) usageData = {};
+            if (u.prompt_tokens !== undefined) usageData.prompt_tokens = u.prompt_tokens;
+            if (u.completion_tokens !== undefined) usageData.completion_tokens = u.completion_tokens;
+            if (u.cache_read_input_tokens !== undefined) usageData.cache_read_input_tokens = u.cache_read_input_tokens;
+          },
         })) {
           if (signal.aborted) break;
           if (firstChunk) {
