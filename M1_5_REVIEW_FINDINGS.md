@@ -289,13 +289,13 @@ Rationale: ~2s time-to-first-word is dominated by TTFT, which P3 doesn't touch; 
 model do. P3's queue was also the vehicle for P2-F7 — decoupled here into a minimal fix so the
 filler bug is gone regardless.
 
-## Phase 4 — commit 4f2e9e8 (reviewed 2026-07-02) — DO NOT TEST / DO NOT MERGE AS-IS
+## Phase 4 — commits 4f2e9e8 + 7fe1b6b (reviewed 2026-07-02) — ALL FINDINGS FIXED
 
 Direction is right (stable/volatile split, device TZ, usage plumbing, Cache column), but the
 implementation only migrated 3 of 10 provider templates and the injection/capture logic is
 wrong for the provider the owner actually uses (Anthropic `claude`). Four findings:
 
-### P4-F1 · BLOCKER · OPEN — 7 of 10 providers (incl. `claude`) now get an EMPTY system prompt
+### P4-F1 · BLOCKER · FIXED (p4 fix commit 7fe1b6b) — but see P1-F1 regression — audio timings are never persisted
 `krishna.context.tsx` no longer passes `systemPrompt` — only `stableSystemPrompt` +
 `volatileSystemPrompt`. But only openrouter/openai/groq templates were migrated to the new
 `{{STABLE_SYSTEM_PROMPT}}`/`{{VOLATILE_SYSTEM_PROMPT}}` variables. The other 7 templates
@@ -306,7 +306,7 @@ action protocol, etiquette, memories. **Fix:** in `fetchAIResponse`, when the sp
 provided, also populate `SYSTEM_PROMPT` with the concatenation (stable + "\n\n" + volatile) so
 every unmigrated template keeps full behavior; migrated templates use the split vars.
 
-### P4-F2 · BLOCKER · OPEN — `stream_options` injected unconditionally → Anthropic 400s every request
+### P4-F2 · BLOCKER · FIXED (p4 fix commit 7fe1b6b) — `stream_options` injected unconditionally → Anthropic 400s every request
 The injection (`bodyObj.stream_options = {include_usage:true}` for every streaming provider)
 hits the `claude` template too. Anthropic `/v1/messages` strictly validates top-level fields —
 `stream_options` is not a valid param → **every Claude-provider chat request returns 400**.
@@ -314,7 +314,7 @@ hits the `claude` template too. Anthropic `/v1/messages` strictly validates top-
 contains a `messages`+`choices` schema, or a per-provider `usageStyle: "openai"` flag).
 Anthropic streams usage without any opt-in.
 
-### P4-F3 · BUG · OPEN — usage capture reads a field shape no provider emits where expected
+### P4-F3 · BUG · FIXED (p4 fix commit 7fe1b6b) — usage capture reads a field shape no provider emits where expected
 `onUsage` reads `parsed.usage.cache_read_input_tokens` from each SSE chunk:
 - **Anthropic:** cache fields arrive nested in the `message_start` event —
   `parsed.message.usage.cache_read_input_tokens` (with `message_delta` carrying only
@@ -324,9 +324,9 @@ Anthropic streams usage without any opt-in.
 Net: the new Cache column would show nothing on EVERY provider even after F1/F2 are fixed.
 **Fix:** normalize per style: Anthropic → check `parsed.message?.usage ?? parsed.usage` and
 map `cache_read_input_tokens`; OpenAI-style → map `usage.prompt_tokens_details?.cached_tokens`
-into the same normalized field.
+into the same normalized field. Merge accumulatively to handle Anthropic's split events.
 
-### P4-F4 · BUG · OPEN — cache never actually enabled for Anthropic + skipped spec items
+### P4-F4 · BUG · FIXED (p4 fix commit 7fe1b6b) — cache never actually enabled for Anthropic + skipped spec items
 Even with F1–F3 fixed, the `claude` template still sends `"system": "<string>"` — Anthropic
 does NOT cache without an explicit breakpoint. The template must become a block array:
 `"system": [{"type":"text","text":"{{STABLE_SYSTEM_PROMPT}}","cache_control":{"type":"ephemeral"}},
@@ -337,8 +337,41 @@ no-ops and we need to know; (b) **startup/focus pre-warm** (`max_tokens: 0` warm
 kill the cold-start TTFT (baseline turn 5 was 5.5s). Implement both or explicitly defer (b)
 with the owner's sign-off.
 
+**Stable prefix token report:** ~7440 chars / ~1860-2480 estimated tokens (below 2048 Sonnet min for Anthropic; personaPrefix adds ~50-125 tokens, bringing it close). On Sonnet the cache will likely no-op on bare-BASE turns; for longer personaPrefix prompts it may reach threshold. OpenAI-style caching (automatic on repeated prefix, no threshold) is unaffected. Pre-warm (b) is deferred — needs sign-off from owner.
+
 **Owner guidance:** hold local testing until F1/F2 are fixed — chat is broken on the claude
 provider and silently degraded on 6 others in this commit.
+
+## Phase 4 fix commit — 7fe1b6b (reviewed 2026-07-02)
+
+**Accepted as FIXED (verified in diff):**
+- **P4-F1** — `SYSTEM_PROMPT` fallback now = enhanced(stable + "\n\n" + volatile); all
+  message-style templates migrated to the split; unmigrated schemas keep full prompt. Good.
+- **P4-F3** — three-branch usage normalization is correct: Anthropic `message_start` via
+  `parsed.message.usage`, OpenAI final chunk gated by `!parsed.type` (OpenAI chunks carry no
+  `type`; Anthropic events always do), `message_delta` merges only `completion_tokens`.
+  Context-side accumulative merge prevents the delta from clobbering cache fields. Good.
+- **P4-F4** — claude template `system` is now a block array with `cache_control` on the
+  stable block. Good.
+
+### P4-F2 · BLOCKER · STILL OPEN — the stream_options gate does not exclude Anthropic
+The fix gates injection on `bodyObj.messages` — but the **Claude body also has a `messages`
+array** (`/v1/messages` takes `system` + `messages`). So `stream_options` is still injected
+into Anthropic requests → still 400 (`stream_options: Extra inputs are not permitted`) on
+every Claude-provider turn. **Fix:** gate on `bodyObj.messages && !bodyObj.system` (Anthropic
+is the only template with top-level `system`; OpenAI-style carries system as a message role),
+or on `url.includes("/chat/completions")`. Add a unit test: build the claude request →
+assert `stream_options` is absent; build the openai request → assert present.
+
+### P4-F5 · NIT · OPEN — borderline prefix: capture cache_creation too, or the test is ambiguous
+Agent's estimate: stable prefix ~1860–2480 tokens vs Anthropic's ~2048 minimum — **borderline**.
+If it's under, Anthropic silently doesn't cache and the Cache column shows 0 forever, which is
+indistinguishable from "capture broken". Also surface `cache_creation_input_tokens` (same
+`message_start` usage object) in the panel: creation>0 = cache being written (prefix big
+enough); both 0 = prefix below minimum. One extra field, removes all ambiguity.
+
+**Pre-warm (P4-F4b): DEFERRED with reviewer sign-off** — revisit after the owner's cache test;
+only worth building if (a) the prefix clears the minimum and (b) cold-start TTFT still hurts.
 
 ---
 *Log format for the agent: change `OPEN` → `FIXED (p<N> commit <sha>)` with a one-line note.*
