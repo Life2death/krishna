@@ -1588,10 +1588,14 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
           setLastSpoken(spokenText);
           setKrishnaSpeaking(true);
           try {
+            // Cancel filler immediately instead of awaiting it —
+            // cache_control may have made TTFT faster than the filler's duration, so
+            // awaiting the filler would regress 1st→Audio by ~1s+
             clearTimeout(fillerTimerRef.current!);
             fillerTimerRef.current = null;
             if (fillerPromiseRef.current) {
-              await fillerPromiseRef.current;
+              ttsRef.current.stop();
+              fillerPromiseRef.current = null;
             }
             turnTiming.mark("first_audio");
             await ttsRef.current.speak(spokenText);
