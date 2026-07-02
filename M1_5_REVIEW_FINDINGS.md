@@ -388,5 +388,22 @@ prefix below minimum → fatten stable prefix or accept no Anthropic caching on 
 voice turns ~30s apart. Watch LatencyPanel: turn 1 Cache should show creation>0; turns 2+
 should show read>0 AND a lower Send→1st vs the 1.8–2.0s baseline. Paste the table back.
 
+### P4-F6 · BLOCKER · OPEN — pre-flight validator rejects the new placeholders: ALL providers fail ("Missing required variable: STABLE_SYSTEM_PROMPT")
+Found by owner live test (first turn failed with "AI provider error … please configure it in
+settings"). `fetchAIResponse` pre-flight (both copies, ~line 96-108) treats every extracted
+`{{VAR}}` as user-configurable unless exempted — and the exemption list is still only
+`SYSTEM_PROMPT / TEXT / IMAGE`. Templates now contain `{{STABLE_SYSTEM_PROMPT}}` and
+`{{VOLATILE_SYSTEM_PROMPT}}` → validation throws before any request is sent → **every
+provider is broken at runtime**. Unit tests missed it because their fixture templates don't
+include the new placeholders.
+**Fix:** add `STABLE_SYSTEM_PROMPT` and `VOLATILE_SYSTEM_PROMPT` to the exemption filter in
+BOTH `packages/core/functions/ai-response.function.ts` and `src/lib/functions/ai-response.
+function.ts`. Add a regression test that runs the REAL built-in claude + openrouter templates
+through the pre-flight with only API_KEY/MODEL configured (this class of bug = fixtures
+diverging from real templates; test the real constants). Also check `curl-validator.ts`'s
+`requiredVariables` — if it requires `{{SYSTEM_PROMPT}}` in custom curls, it must now accept
+either `SYSTEM_PROMPT` or the STABLE/VOLATILE pair, else editing/saving a provider with the
+new template form fails validation in Settings.
+
 ---
 *Log format for the agent: change `OPEN` → `FIXED (p<N> commit <sha>)` with a one-line note.*
