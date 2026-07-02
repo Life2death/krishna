@@ -19,18 +19,57 @@ function detectLanguage(text: string): string {
   return "hi";
 }
 
-const INTENT_TABLE: (CannedEntry & { intent: CannedIntent })[] = [
-  // -- Greetings --
-  { intent: "greeting",
-    patterns: [
-      /\b(good\s*)?morning\b/i,
-      /\b(good\s*)?afternoon\b/i,
-      /\b(good\s*)?evening\b/i,
-      /\b(hi|hello|hey|heyy?)\b/i,
-      /(?:^|\s)(नमस्ते|नमस्कार)/u,
-      /(?:^|\s)(सुप्रभात|शुभ\s*प्रभात)/u,
-    ],
-    responses: {
+function stripPunctuation(s: string): string {
+  return s.replace(/[^\w\s\u0900-\u097F]/g, "").trim();
+}
+
+function wordCount(s: string): number {
+  const cleaned = stripPunctuation(s);
+  if (!cleaned) return 0;
+  return cleaned.split(/\s+/).length;
+}
+
+/**
+ * Return true only if the ENTIRE utterance (trimmed, ≤4 words) is
+ * the greeting/thanks/ack. Prevents substring hijack of real commands.
+ */
+function isShortUtterance(text: string): boolean {
+  const wc = wordCount(text);
+  return wc >= 1 && wc <= 4;
+}
+
+const EN_OPTIONAL_SUFFIX = /(?:,\s*krishna|\s+krishna|\s+dude|\s+man|\s+boss|\s+there)?/i;
+
+const GREETING_EN = new RegExp(
+  "^(?:" +
+    "(?:good\\s+)?(morning|afternoon|evening)" +
+    "|" +
+    "hi" + EN_OPTIONAL_SUFFIX.source +
+    "|" +
+    "hello" + EN_OPTIONAL_SUFFIX.source +
+    "|" +
+    "hey" + EN_OPTIONAL_SUFFIX.source +
+    "|" +
+    "heyy?" + EN_OPTIONAL_SUFFIX.source +
+    ")" +
+    "\\s*$", "i"
+);
+
+const GREETING_HI = /^(?:नमस्ते|नमस्कार|सुप्रभात|शुभ\s*प्रभात)\s*$/u;
+const GREETING_MR = /^(?:नमस्कार|सुप्रभात)\s*$/u;
+
+const THANKS_EN = /^(?:thank\s*(?:you|s)|thanks)\s*$/i;
+const THANKS_HI = /^धन्यवाद\s*$/u;
+
+const ACK_EN = /^(?:yes|yeah|yep|sure|okay|ok|alright|got\s*it|on\s*it)\s*$/i;
+const ACK_HI = /^(?:हाँ|हां|ठीक\s*है|अच्छा)\s*$/u;
+const ACK_MR = /^(?:होय|ठीक\s*आहे)\s*$/u;
+
+function matchGreeting(text: string, lang: string): string | null {
+  if (!isShortUtterance(text)) return null;
+  const cleaned = stripPunctuation(text);
+  if (GREETING_EN.test(cleaned)) {
+    const pool: Record<string, string[]> = {
       en: [
         "Good morning, {honorific}!",
         "Hello {honorific}, how can I help?",
@@ -48,70 +87,87 @@ const INTENT_TABLE: (CannedEntry & { intent: CannedIntent })[] = [
         "नमस्ते {honorific}!",
         "सुप्रभात {honorific}!",
       ],
-    },
-  },
-  // -- Thanks --
-  { intent: "thanks",
-    patterns: [
-      /\bthank\s*(you|s)?\b/i,
-      /\bthanks\b/i,
-      /(?:^|\s)धन्यवाद/u,
-    ],
-    responses: {
-      en: [
-        "You're welcome, {honorific}!",
-        "My pleasure, {honorific}!",
-        "Anytime, {honorific}!",
-        "Happy to help, {honorific}!",
-      ],
+    };
+    const p = pool[lang] ?? pool["en"];
+    return p[Math.floor(Math.random() * p.length)];
+  }
+  if (GREETING_HI.test(cleaned)) {
+    const p: Record<string, string[]> = {
       hi: [
-        "आपका स्वागत है {honorific}!",
-        "मेरी खुशी है {honorific}!",
+        "नमस्ते {honorific}! कैसे हैं आप?",
+        "नमस्कार {honorific}!",
+        "सुप्रभात {honorific}!",
       ],
-      mr: [
-        "तुमचं स्वागत आहे {honorific}!",
-      ],
-    },
-  },
-  // -- Acknowledgments (yes/okay/sure fillers) --
-  { intent: "acknowledgment",
-    patterns: [
-      /\b(yes|yeah|yep|sure|okay|ok|alright|got\s*it|on\s*it)\b/i,
-      /(?:^|\s)(हाँ|हां|ठीक\s*है|अच्छा)/u,
-      /(?:^|\s)(होय|ठीक\s*आहे)/u,
+    };
+    return (p[lang] ?? p["hi"])[Math.floor(Math.random() * p[lang in p ? lang : "hi"].length)];
+  }
+  return null;
+}
+
+function matchThanks(text: string, lang: string): string | null {
+  if (!isShortUtterance(text)) return null;
+  const cleaned = stripPunctuation(text);
+  if (!THANKS_EN.test(cleaned) && !THANKS_HI.test(cleaned)) return null;
+  const pool: Record<string, string[]> = {
+    en: [
+      "You're welcome, {honorific}!",
+      "My pleasure, {honorific}!",
+      "Anytime, {honorific}!",
+      "Happy to help, {honorific}!",
     ],
-    responses: {
-      en: [
-        "On it, {honorific}!",
-        "Sure, {honorific}!",
-        "Okay {honorific}, working on it.",
-        "Got it, {honorific}!",
-      ],
-      hi: [
-        "ठीक है {honorific}!",
-        "हाँ {honorific}, कर रहा हूँ।",
-      ],
-      mr: [
-        "ठीक आहे {honorific}!",
-        "होय {honorific}, करतो. ",
-      ],
-    },
-  },
-];
+    hi: [
+      "आपका स्वागत है {honorific}!",
+      "मेरी खुशी है {honorific}!",
+    ],
+    mr: [
+      "तुमचं स्वागत आहे {honorific}!",
+    ],
+  };
+  const p = pool[lang] ?? pool["en"];
+  return p[Math.floor(Math.random() * p.length)];
+}
+
+function matchAcknowledgment(text: string, lang: string): string | null {
+  if (!isShortUtterance(text)) return null;
+  const cleaned = stripPunctuation(text);
+  const matched = ACK_EN.test(cleaned) || ACK_HI.test(cleaned) || ACK_MR.test(cleaned);
+  if (!matched) return null;
+  const pool: Record<string, string[]> = {
+    en: [
+      "Yes, {honorific}?",
+      "I'm listening, {honorific}.",
+    ],
+    hi: [
+      "हाँ {honorific}?",
+      "सुन रहा हूँ {honorific}।",
+    ],
+    mr: [
+      "होय {honorific}?",
+    ],
+  };
+  const p = pool[lang] ?? pool["en"];
+  return p[Math.floor(Math.random() * p.length)];
+}
 
 export function matchCannedResponse(
   text: string,
   honorific: string,
 ): { response: string; intent: CannedIntent } | null {
   const lang = detectLanguage(text);
-  for (const entry of INTENT_TABLE) {
-    for (const pattern of entry.patterns) {
-      if (pattern.test(text)) {
-        const pool = entry.responses[lang] ?? entry.responses["en"];
-        const reply = pool[Math.floor(Math.random() * pool.length)];
-        return { response: reply.replace(/{honorific}/g, honorific), intent: entry.intent };
-      }
+  let reply: string | null;
+  let intent: CannedIntent;
+
+  reply = matchGreeting(text, lang);
+  if (reply) { intent = "greeting"; }
+  else {
+    reply = matchThanks(text, lang);
+    if (reply) { intent = "thanks"; }
+    else {
+      reply = matchAcknowledgment(text, lang);
+      if (reply) { intent = "acknowledgment"; }
+      else return null;
     }
   }
-  return null;
+
+  return { response: reply.replace(/{honorific}/g, honorific), intent };
 }

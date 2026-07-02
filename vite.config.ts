@@ -32,6 +32,8 @@ export default defineConfig(async () => ({
       "@krishna/core/config-constants": path.resolve(__dirname, "packages/core/config-constants.ts"),
       "@krishna/core/chat-constants": path.resolve(__dirname, "packages/core/chat-constants.ts"),
       "@krishna/core/safe-local-storage": path.resolve(__dirname, "packages/core/safe-local-storage.ts"),
+      "@krishna/core/response-settings.constants": path.resolve(__dirname, "packages/core/response-settings.constants.ts"),
+      "@krishna/core/redact": path.resolve(__dirname, "packages/core/redact.ts"),
     },
   },
   test: {

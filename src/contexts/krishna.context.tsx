@@ -89,7 +89,7 @@ interface KrishnaContextType {
 
 const KrishnaContext = createContext<KrishnaContextType | undefined>(undefined);
 
-const BASE_SYSTEM_PROMPT = [
+export const BASE_SYSTEM_PROMPT = [
   'You are Krishna, an AI desktop assistant. You help users by answering questions and performing actions on their computer.',
   '',
   'CRITICAL - Action Protocol:',
@@ -1171,13 +1171,13 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
       const canned = matchCannedResponse(command, cannedHonorific);
       if (canned) {
         const speak = canned.response;
-        turnTiming.mark("first_audio");
         await recordTurn(pendingUserTextRef.current, speak);
         logOutcome(command, "answered", undefined, undefined, speak);
         setLastSpoken(speak);
         setKrishnaSpeaking(true);
         setStatus("speaking");
         try {
+          turnTiming.mark("first_audio");
           await ttsRef.current.speak(speak);
         } finally {
           turnTiming.mark("last_audio");

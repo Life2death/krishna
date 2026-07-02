@@ -78,6 +78,32 @@ describe("matchCannedResponse", () => {
       const r = matchCannedResponse("what is the weather like today", "sir");
       expect(r).toBeNull();
     });
+
+    // P2-F1 regression guards: substring patterns must NOT hijack real commands
+    it("does NOT hijack 'hey Krishna, open Chrome and search flights'", () => {
+      const r = matchCannedResponse("hey Krishna, open Chrome and search flights", "sir");
+      expect(r).toBeNull();
+    });
+
+    it("does NOT hijack 'set an alarm for the morning'", () => {
+      const r = matchCannedResponse("set an alarm for the morning", "sir");
+      expect(r).toBeNull();
+    });
+
+    it("does NOT hijack 'ok now open youtube'", () => {
+      const r = matchCannedResponse("ok now open youtube", "sir");
+      expect(r).toBeNull();
+    });
+
+    it("does NOT hijack 'sure, and also remind me at 5'", () => {
+      const r = matchCannedResponse("sure, and also remind me at 5", "sir");
+      expect(r).toBeNull();
+    });
+
+    it("does NOT hijack Hindi command 'नमस्ते, यूट्यूब खोलो'", () => {
+      const r = matchCannedResponse("नमस्ते, यूट्यूब खोलो", "sir");
+      expect(r).toBeNull();
+    });
   });
 
   describe("honorific interpolation", () => {
