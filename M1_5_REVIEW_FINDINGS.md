@@ -519,7 +519,7 @@ the prefix past 2048. Revisit only if the prompt grows for other reasons.
 
 **P4-F7 diagnosis accepted, fix REJECTED — it reintroduces P2-F7:**
 
-### P4-F9 · BUG · OPEN — `ttsRef.current.stop()` on a playing filler = the "one mo—" garble again
+### P4-F9 · BUG · FIXED (p4 fix commit 5b9f47d) — `ttsRef.current.stop()` on a playing filler = the "one mo—" garble again
 b34e4f4 replaces `await fillerPromiseRef.current` with `ttsRef.current.stop()`. Hard-
 cancelling a mid-utterance filler is EXACTLY the original P2-F7 live bug ("one mo—" chop +
 the Chromium cancel/speak tail-leak garble). The pendulum has now swung both ways: await →
@@ -546,6 +546,30 @@ Scope, in order: (1) **`max_tokens` cap for voice turns** (~150–200 output tok
 conversational replies; keep etiquette line; verify TTS times drop from 15–45s to <10s);
 (2) **chat model as a setting** + Haiku-tier option for owner A/B (no two-model routing);
 (3) **P1-F8** honorific settings UI field; (4) commit `feat(m1.5-p6)`, report, STOP.
+
+### Phase 6 dependency answers (reviewer, verified on branch b34e4f4)
+1. **Settings UI location:** the user-facing Settings page is `src/pages/settings/index.tsx`
+   + `src/pages/settings/components/` (NOT apps/brain — that's retired from the runtime).
+   The honorific field (P1-F8) belongs next to the existing `ResponseLength` /
+   `LanguageSelector` controls (imported there from `src/pages/responses/components`).
+   The **provider config UI** (where API_KEY/MODEL are entered) is separate:
+   `src/pages/dev/components/ai-configs/` (Dev space page).
+2. **MODEL flow:** `{{MODEL}}` in every template is filled from `selectedProvider.variables`
+   (user-configured per provider — your own P4-F6 regression test asserts `api_key`/`model`
+   are the two required vars). So a Haiku switch IS already possible today via Dev space →
+   AI providers → edit model. Phase 6's setting is the convenience layer: add an optional
+   **`voiceModel`** setting (empty = provider default); the VOICE path passes it as a
+   `modelOverride` param to `fetchAIResponse`, which overrides `allVariables.MODEL` for that
+   request only. Do NOT touch provider config or the text-chat path.
+3. **Yes, separate paths.** Voice turns get the cap; text chat keeps the template default
+   (e.g. claude's 1024). Implementation: optional `maxOutputTokens` param on
+   `fetchAIResponse`; when set, find the existing max-tokens-style key in `bodyObj`
+   (`max_tokens` / `max_completion_tokens` / `maxOutputTokens` — same detection pattern as
+   the existing `stream` key search) and override it; if the template has NO such key, skip
+   and `console.warn` (do not inject blind — key name is provider-specific). Voice path
+   passes a `voiceMaxTokens` setting (default ~200). Add unit tests: claude template
+   override, groq (`max_completion_tokens`) override, no-key template skips, chat path
+   (param omitted) untouched.
 
 ---
 *Log format for the agent: change `OPEN` → `FIXED (p<N> commit <sha>)` with a one-line note.*
