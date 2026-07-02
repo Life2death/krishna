@@ -53,7 +53,7 @@ export async function* fetchAIResponse(params: {
   userMessage: string;
   imagesBase64?: string[];
   signal?: AbortSignal;
-  onUsage?: (usage: { prompt_tokens?: number; completion_tokens?: number; cache_read_input_tokens?: number }) => void;
+  onUsage?: (usage: { prompt_tokens?: number; completion_tokens?: number; cache_read_input_tokens?: number; cache_creation_input_tokens?: number }) => void;
 }): AsyncIterable<string> {
   try {
     const {
@@ -167,7 +167,7 @@ export async function* fetchAIResponse(params: {
         } else {
           bodyObj.stream = true;
         }
-        if (typeof bodyObj.stream_options === "undefined" && bodyObj.messages) {
+        if (typeof bodyObj.stream_options === "undefined" && bodyObj.messages && !bodyObj.system) {
           bodyObj.stream_options = { include_usage: true };
         }
       }
@@ -287,6 +287,7 @@ export async function* fetchAIResponse(params: {
                   prompt_tokens: parsed.message.usage.input_tokens,
                   completion_tokens: parsed.message.usage.output_tokens,
                   cache_read_input_tokens: parsed.message.usage.cache_read_input_tokens,
+                  cache_creation_input_tokens: parsed.message.usage.cache_creation_input_tokens,
                 });
               }
               // OpenAI-style final usage chunk

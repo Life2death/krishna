@@ -27,6 +27,13 @@ function formatTokens(n: number | undefined): string {
   return n.toLocaleString();
 }
 
+function formatCachePair(read: number | undefined, created: number | undefined): string {
+  if (read === undefined && created === undefined) return "—";
+  const r = read !== undefined ? (read === 0 ? "0" : read.toLocaleString()) : "—";
+  const c = created !== undefined ? (created === 0 ? "0" : created.toLocaleString()) : "—";
+  return `${r}/${c}`;
+}
+
 export const LatencyPanel = () => {
   const [entries, setEntries] = useState<TimedEntry[]>([]);
 
@@ -103,7 +110,7 @@ export const LatencyPanel = () => {
                     {formatDelta(e.timing.deltas.first_token_to_last_token)}
                   </td>
                   <td className="py-1 pr-2 text-right tabular-nums">
-                    {formatTokens(e.timing.usage?.cache_read_input_tokens)}
+                    {formatCachePair(e.timing.usage?.cache_read_input_tokens, e.timing.usage?.cache_creation_input_tokens)}
                   </td>
                   <td className="py-1 pr-2 text-right tabular-nums">
                     {formatDelta(e.timing.deltas.first_audio_to_last_audio)}

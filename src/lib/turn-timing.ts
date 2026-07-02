@@ -20,13 +20,14 @@ export interface TurnTimingData {
     prompt_tokens?: number;
     completion_tokens?: number;
     cache_read_input_tokens?: number;
+    cache_creation_input_tokens?: number;
   };
 }
 
 export class TurnTiming {
   private _marks: Partial<Record<TimingMark, number>> = {};
   private _frozen = false;
-  private _usage?: { prompt_tokens?: number; completion_tokens?: number; cache_read_input_tokens?: number };
+  private _usage?: { prompt_tokens?: number; completion_tokens?: number; cache_read_input_tokens?: number; cache_creation_input_tokens?: number };
 
   mark(name: TimingMark): void {
     if (this._frozen) return;
@@ -34,7 +35,7 @@ export class TurnTiming {
     this._marks[name] = performance.now();
   }
 
-  setUsage(usage: { prompt_tokens?: number; completion_tokens?: number; cache_read_input_tokens?: number }): void {
+  setUsage(usage: { prompt_tokens?: number; completion_tokens?: number; cache_read_input_tokens?: number; cache_creation_input_tokens?: number }): void {
     this._usage = usage;
   }
 

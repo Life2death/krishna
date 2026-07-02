@@ -1500,7 +1500,7 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
 
         abortRef.current = new AbortController();
       const signal = abortRef.current.signal;
-      let usageData: { prompt_tokens?: number; completion_tokens?: number; cache_read_input_tokens?: number } | undefined;
+      let usageData: { prompt_tokens?: number; completion_tokens?: number; cache_read_input_tokens?: number; cache_creation_input_tokens?: number } | undefined;
 
       try {
         historyRef.current = [...historyRef.current, { role: "user" as const, content: command }].slice(-8);
@@ -1552,6 +1552,7 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
             if (u.prompt_tokens !== undefined) usageData.prompt_tokens = u.prompt_tokens;
             if (u.completion_tokens !== undefined) usageData.completion_tokens = u.completion_tokens;
             if (u.cache_read_input_tokens !== undefined) usageData.cache_read_input_tokens = u.cache_read_input_tokens;
+            if (u.cache_creation_input_tokens !== undefined) usageData.cache_creation_input_tokens = u.cache_creation_input_tokens;
           },
         })) {
           if (signal.aborted) break;

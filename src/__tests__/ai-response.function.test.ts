@@ -11,6 +11,20 @@ const mockTauriFetch = vi.hoisted(() => vi.fn());
 vi.mock("@bany/curl-to-json", () => ({
   default: (curl: string) => {
     if (curl.includes("bad-curl:::")) throw new Error("bad syntax");
+    if (curl.includes("anthropic")) {
+      return {
+        url: "https://api.anthropic.com/v1/messages",
+        method: "POST",
+        header: { "x-api-key": "{{API_KEY}}", "anthropic-version": "2023-06-01" },
+        data: {
+          model: "{{MODEL}}",
+          system: [{"type":"text","text":"{{STABLE_SYSTEM_PROMPT}}","cache_control":{"type":"ephemeral"}},{"type":"text","text":"{{VOLATILE_SYSTEM_PROMPT}}"}],
+          messages: [{ role: "user", content: "{{TEXT}}" }],
+          max_tokens: 1024,
+          stream: true,
+        },
+      };
+    }
     return {
       url: "https://api.openai.com/v1/chat/completions",
       method: "POST",
@@ -265,5 +279,31 @@ describe("fetchAIResponse", () => {
     const roles = body.messages.map((m: any) => m.role);
     expect(roles).toContain("user");
     expect(roles).toContain("assistant");
+  });
+
+  // ── stream_options injection (P4-F2) ──────────────────────────────────────
+  it("injects stream_options for OpenAI-style bodies (messages, no top-level system)", async () => {
+    mockStreamingResponse(["ok"]);
+    await collectChunks(
+      fetchAIResponse({ provider: openAiProvider, selectedProvider, userMessage: "test" })
+    );
+    const body = JSON.parse(mockTauriFetch.mock.calls[0][1].body);
+    expect(body.stream_options).toEqual({ include_usage: true });
+  });
+
+  it("does NOT inject stream_options for Anthropic-style bodies (has top-level system)", async () => {
+    const anthropicProvider: TYPE_PROVIDER = {
+      id: "claude",
+      name: "Claude",
+      curl: `curl -X POST "https://api.anthropic.com/v1/messages" -H "x-api-key: {{API_KEY}}" -d '{"model":"{{MODEL}}","system":"{{SYSTEM_PROMPT}}","messages":[{"role":"user","content":"{{TEXT}}"}],"max_tokens":1024,"stream":true}'`,
+      responseContentPath: "content[0].text",
+      streaming: true,
+    };
+    mockStreamingResponse(["ok"]);
+    await collectChunks(
+      fetchAIResponse({ provider: anthropicProvider, selectedProvider, userMessage: "test" })
+    );
+    const body = JSON.parse(mockTauriFetch.mock.calls[0][1].body);
+    expect(body.stream_options).toBeUndefined();
   });
 });
