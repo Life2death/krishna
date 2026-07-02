@@ -69,7 +69,8 @@ describe("updateCommandTiming — narrow timing write", () => {
     await updateCommandTiming({ id: "test-id", timing: '{"m":{"t":1}}' });
 
     expect(mockExecute).toHaveBeenCalledTimes(1);
-    const [sql, params] = mockExecute.mock.calls[0];
+    const call = mockExecute.mock.calls[0] as unknown as [string, string[]];
+    const [sql, params] = call;
     expect(sql).toContain("SET timing=");
     expect(sql).not.toContain("outcome=");
     expect(sql).not.toContain("detail=");
