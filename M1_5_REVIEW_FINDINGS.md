@@ -199,19 +199,13 @@ path anyway — but don't ship M1 mobile without it.
 
 ## Live testing (owner, 2026-07-02) — two runtime bugs found on dc53d74
 
-### P2-F7 · BUG · OPEN — filler is chopped mid-word ("one mo") and garbles ("one mo… it sir")
-`BrowserTTS.speak()` (`src/lib/tts.ts`) calls `window.speechSynthesis.cancel()` at the start
-of every utterance. When the 700ms filler ("One moment, {honorific}") is playing and the real
-answer arrives, `speak(answer)` cancels the filler mid-word → owner hears "one mo—" then the
-answer. The "one mo… it sir" artifact is the known Chromium/Windows `cancel()`+`speak()` race
-(the cancelled utterance's tail leaks). Net: the filler currently degrades UX vs. no filler.
-**Fix — do this IN Phase 3, not as a throwaway patch (P3 rebuilds this path):** the sequential
-TTS queue must **enqueue** the answer after a playing filler, never hard-cancel it. Rule: if a
-filler is currently speaking, let it finish, then start the first streamed sentence. Only
-barge-in (user speech / tap) may hard-cancel. Also guard the filler-vs-plan-ack overlap: when
-the reply is a plan whose `say` is an acknowledgment ("On it, sir"), don't also fire the
-generic filler — one ack, not two. Add a test for filler→answer ordering (answer waits for
-filler end) and no-double-ack.
+### P2-F7 · BUG · FIXED (P2 commit — filler sequencing)
+**Fix:** `fillerPromiseRef` captures the filler's `speak()` promise. Before calling
+`ttsRef.current.speak(spokenText)`, if the promise is pending, `await` it first (filler
+finishes naturally — no hard-cancel). After `parseActions`, if `plan?.steps.length` is
+truthy, clear the pending timer (the plan-ack is sufficient; don't also fire the generic
+filler). Added 5 BrowserTTS unit tests covering promise resolution, cancel-before-speak,
+and `isSpeaking()` lifecycle. Full suite: 327/327, 22/22 files.
 
 ### P2-F8 · BUG · FIXED (P2 commit fe0ca80)
 **Fix:** changed bare-domain regex from `\b[a-z0-9-]+(?:\.[a-z0-9-]+)+\.[a-z]{2,}`
@@ -286,6 +280,7 @@ P2-F8 FIXED (commit reported by agent; regex now `\b([a-z0-9-]+\.)+[a-z]{2,}(?:\
    playing filler: if the filler is speaking when the answer is ready, await its end then
    speak the answer; and skip the generic filler when the reply is a plan-ack. This removes
    the "one mo… it sir" garble without building the Phase 3 queue.
+   **→ FIXED (P2 commit fe0ca80 + seq fix).**
 4. **Phase 3 (streaming sentence-splitter) — DEFERRED.** Revisit only if (a) replies get long
    enough that generation time grows, or (b) a slower/higher-quality model raises per-token
    time. The `M1_5_PHASE3_SPEC.md` stays valid for that future.
@@ -293,6 +288,57 @@ P2-F8 FIXED (commit reported by agent; regex now `\b([a-z0-9-]+\.)+[a-z]{2,}(?:\
 Rationale: ~2s time-to-first-word is dominated by TTFT, which P3 doesn't touch; P4 + faster
 model do. P3's queue was also the vehicle for P2-F7 — decoupled here into a minimal fix so the
 filler bug is gone regardless.
+
+## Phase 4 — commit 4f2e9e8 (reviewed 2026-07-02) — DO NOT TEST / DO NOT MERGE AS-IS
+
+Direction is right (stable/volatile split, device TZ, usage plumbing, Cache column), but the
+implementation only migrated 3 of 10 provider templates and the injection/capture logic is
+wrong for the provider the owner actually uses (Anthropic `claude`). Four findings:
+
+### P4-F1 · BLOCKER · OPEN — 7 of 10 providers (incl. `claude`) now get an EMPTY system prompt
+`krishna.context.tsx` no longer passes `systemPrompt` — only `stableSystemPrompt` +
+`volatileSystemPrompt`. But only openrouter/openai/groq templates were migrated to the new
+`{{STABLE_SYSTEM_PROMPT}}`/`{{VOLATILE_SYSTEM_PROMPT}}` variables. The other 7 templates
+(claude, grok, gemini, mistral, cohere, perplexity, ollama) still use `{{SYSTEM_PROMPT}}`,
+whose variable is now `enhancedSystemPrompt || ""` with `systemPrompt === undefined` →
+**empty**. On those providers Krishna silently loses its ENTIRE system prompt — identity,
+action protocol, etiquette, memories. **Fix:** in `fetchAIResponse`, when the split params are
+provided, also populate `SYSTEM_PROMPT` with the concatenation (stable + "\n\n" + volatile) so
+every unmigrated template keeps full behavior; migrated templates use the split vars.
+
+### P4-F2 · BLOCKER · OPEN — `stream_options` injected unconditionally → Anthropic 400s every request
+The injection (`bodyObj.stream_options = {include_usage:true}` for every streaming provider)
+hits the `claude` template too. Anthropic `/v1/messages` strictly validates top-level fields —
+`stream_options` is not a valid param → **every Claude-provider chat request returns 400**.
+**Fix:** gate the injection to OpenAI-style endpoints only (e.g. template body already
+contains a `messages`+`choices` schema, or a per-provider `usageStyle: "openai"` flag).
+Anthropic streams usage without any opt-in.
+
+### P4-F3 · BUG · OPEN — usage capture reads a field shape no provider emits where expected
+`onUsage` reads `parsed.usage.cache_read_input_tokens` from each SSE chunk:
+- **Anthropic:** cache fields arrive nested in the `message_start` event —
+  `parsed.message.usage.cache_read_input_tokens` (with `message_delta` carrying only
+  `output_tokens`). The current read misses it.
+- **OpenAI-style (openrouter/openai/groq):** the field is
+  `usage.prompt_tokens_details.cached_tokens` — `cache_read_input_tokens` doesn't exist there.
+Net: the new Cache column would show nothing on EVERY provider even after F1/F2 are fixed.
+**Fix:** normalize per style: Anthropic → check `parsed.message?.usage ?? parsed.usage` and
+map `cache_read_input_tokens`; OpenAI-style → map `usage.prompt_tokens_details?.cached_tokens`
+into the same normalized field.
+
+### P4-F4 · BUG · OPEN — cache never actually enabled for Anthropic + skipped spec items
+Even with F1–F3 fixed, the `claude` template still sends `"system": "<string>"` — Anthropic
+does NOT cache without an explicit breakpoint. The template must become a block array:
+`"system": [{"type":"text","text":"{{STABLE_SYSTEM_PROMPT}}","cache_control":{"type":"ephemeral"}},
+{"type":"text","text":"{{VOLATILE_SYSTEM_PROMPT}}"}]`. Two spec items were also skipped:
+(a) **report the token count of the stable prefix** (spec step 1) — Sonnet-tier minimum
+cacheable prefix is ~2048 tokens; if the stable prefix is below it, Anthropic caching silently
+no-ops and we need to know; (b) **startup/focus pre-warm** (`max_tokens: 0` warm request) to
+kill the cold-start TTFT (baseline turn 5 was 5.5s). Implement both or explicitly defer (b)
+with the owner's sign-off.
+
+**Owner guidance:** hold local testing until F1/F2 are fixed — chat is broken on the claude
+provider and silently degraded on 6 others in this commit.
 
 ---
 *Log format for the agent: change `OPEN` → `FIXED (p<N> commit <sha>)` with a one-line note.*
