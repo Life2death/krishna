@@ -37,6 +37,7 @@ import type { VoiceVerifyResult } from "@/lib/voice-client";
 import { MAX_FILES } from "@/config";
 import { TurnTiming } from "@/lib/turn-timing";
 import { getResponseSettings } from "@krishna/core/settings";
+import { matchCannedResponse } from "@/lib/canned-responses";
 
 export interface ConversationTurn {
   id: string;
@@ -284,6 +285,8 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
   const [conversationHistory, setConversationHistory] = useState<ConversationTurn[]>([]);
   const pendingUserTextRef = useRef<string>("");
   const currentCaptureIdRef = useRef<string | null>(null);
+  const fillerTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const fillerSpokenRef = useRef(false);
   const [voice, setVoiceState] = useState<string>(() => {
     return safeLocalStorage.getItem(STORAGE_KEYS.KRISHNA_VOICE) || "";
   });
@@ -1163,6 +1166,32 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
       );
       emit("command-log-updated").catch(() => {});
 
+      // Phase 2: zero-LLM fast path for greetings/thanks/acknowledgments
+      const cannedHonorific = getResponseSettings().honorific || "sir";
+      const canned = matchCannedResponse(command, cannedHonorific);
+      if (canned) {
+        const speak = canned.response;
+        turnTiming.mark("first_audio");
+        await recordTurn(pendingUserTextRef.current, speak);
+        logOutcome(command, "answered", undefined, undefined, speak);
+        setLastSpoken(speak);
+        setKrishnaSpeaking(true);
+        setStatus("speaking");
+        try {
+          await ttsRef.current.speak(speak);
+        } finally {
+          turnTiming.mark("last_audio");
+          setKrishnaSpeaking(false);
+        }
+        turnTiming.freeze();
+        updateCommandTiming({ id: captureId, timing: turnTiming.toJSON() }).catch((err) =>
+          console.error("Failed to persist turn timing:", err)
+        );
+        emit("command-log-updated").catch(() => {});
+        setStatus("idle");
+        return;
+      }
+
       if (!selectedAIProvider.provider) {
         const errMsg = "No AI provider configured — open Settings › Brain.";
         setLastError(errMsg);
@@ -1489,7 +1518,14 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
           .replace(/\{honorific\}/g, honorific);
         const systemPrompt = buildMemoryPrompt(rawPrompt, memories);
         let fullResponse = "";
+        fillerSpokenRef.current = false;
         turnTiming.mark("request_sent");
+        fillerTimerRef.current = setTimeout(() => {
+          if (!fillerSpokenRef.current) {
+            fillerSpokenRef.current = true;
+            ttsRef.current.speak("One moment, " + honorific).catch(() => {});
+          }
+        }, 700);
         let firstChunk = true;
         for await (const chunk of fetchAIResponse({
           provider,
@@ -1509,6 +1545,8 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
         }
         turnTiming.mark("last_token");
 
+        clearTimeout(fillerTimerRef.current!);
+        fillerTimerRef.current = null;
         if (!fullResponse || signal.aborted) {
           setStatus("idle");
           return;
@@ -1526,6 +1564,8 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
           setLastSpoken(spokenText);
           setKrishnaSpeaking(true);
           try {
+            clearTimeout(fillerTimerRef.current!);
+            fillerTimerRef.current = null;
             turnTiming.mark("first_audio");
             await ttsRef.current.speak(spokenText);
           } finally {
@@ -1636,6 +1676,8 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
             }
           }
       } catch (err) {
+        clearTimeout(fillerTimerRef.current!);
+        fillerTimerRef.current = null;
         if (signal.aborted) {
           setStatus("idle");
           return;
