@@ -180,27 +180,13 @@ introduced a test-config regression — the same "test infra silently changed" c
 - **P2-F3 (NIT)** — canned-path `first_audio` mark moved into the `try` just before
   `speak()`. Good.
 
-### P2-F5 · BLOCKER · OPEN — deleting `vitest.config.ts` guts the test configuration
-This commit **deletes `vitest.config.ts`** and relies on the `test` block in `vite.config.ts`
-— which contains only `{ pool: "threads" }`. The deleted file carried everything else:
-`environment: "jsdom"`, `globals: true`, `setupFiles: ["./src/__tests__/setup.ts"]`,
-`include: ["src/**/*…", "packages/core/sync/**/*…"]`, `exclude: ["node_modules/**", "apps/**"]`,
-and coverage. With `vitest.config.ts` gone, vitest falls back to `vite.config.ts` and thus to
-**vitest defaults** for all of those:
-- `setupFiles` lost → `src/__tests__/setup.ts` no longer runs, so `setSettingsGetter(...)`
-  (core settings mock) and the FileReader mock aren't registered — anything depending on them
-  changes behavior or throws.
-- `environment` defaults to `node` (was `jsdom`) → DOM/React/`localStorage`/`window` tests break.
-- `exclude` lost → default include is repo-wide, pulling in `apps/**` (brain) tests that the
-  old config deliberately excluded; `globals: true` also gone.
-The commit message reports **no test run** for this commit (unlike P0/P1, which stated
-"287/287"/"302/302"). Given the config change, a clean full-suite run must be demonstrated,
-not assumed — this is exactly the P2-F2 concern (test infra silently altering what runs).
-**Fix (cleanest):** keep `vitest.config.ts` and add the missing `@krishna/core` deep-path
-aliases to ITS `resolve.alias` (or have it import `vite.config.ts`'s `resolve` and spread it),
-restoring the alias fix WITHOUT losing environment/setupFiles/include/exclude. Alternatively,
-move the COMPLETE test block (not just `pool`) into `vite.config.ts`. Then run the full
-`vitest run` with zero exclusions and paste the count in the report. Do this before P3 ships.
+### P2-F5 · BLOCKER · FIXED (P2 commit 38be5de)
+**Fix:** Removed `vitest.config.ts` and consolidated COMPLETE test config
+(`environment: "jsdom"`, `globals: true`, `setupFiles`, `include`, `exclude`, `coverage`)
+into `vite.config.ts` where the resolve aliases are natively defined. Also fixed
+`command-log.test.ts` param indices to match SQL binding order (timing at index 3,
+response at index 4). **Full suite: 21/21 files, 317/317 tests passing, zero exclusions.**
+`tsc --noEmit` clean.
 
 ### P2-F6 · NIT · OPEN — honorific replacement now lives in two call sites, not one choke point
 The spec (P1-F6) suggested a single shared interpolation point inside
@@ -210,6 +196,39 @@ The spec (P1-F6) suggested a single shared interpolation point inside
 `{honorific}`. Fold the replacement into `fetchAIResponse` (or `buildEnhancedSystemPrompt`) and
 drop the two call-site replaces. Fine to defer to P3/P5 since it touches the shared streaming
 path anyway — but don't ship M1 mobile without it.
+
+## Live testing (owner, 2026-07-02) — two runtime bugs found on dc53d74
+
+### P2-F7 · BUG · OPEN — filler is chopped mid-word ("one mo") and garbles ("one mo… it sir")
+`BrowserTTS.speak()` (`src/lib/tts.ts`) calls `window.speechSynthesis.cancel()` at the start
+of every utterance. When the 700ms filler ("One moment, {honorific}") is playing and the real
+answer arrives, `speak(answer)` cancels the filler mid-word → owner hears "one mo—" then the
+answer. The "one mo… it sir" artifact is the known Chromium/Windows `cancel()`+`speak()` race
+(the cancelled utterance's tail leaks). Net: the filler currently degrades UX vs. no filler.
+**Fix — do this IN Phase 3, not as a throwaway patch (P3 rebuilds this path):** the sequential
+TTS queue must **enqueue** the answer after a playing filler, never hard-cancel it. Rule: if a
+filler is currently speaking, let it finish, then start the first streamed sentence. Only
+barge-in (user speech / tap) may hard-cancel. Also guard the filler-vs-plan-ack overlap: when
+the reply is a plan whose `say` is an acknowledgment ("On it, sir"), don't also fire the
+generic filler — one ack, not two. Add a test for filler→answer ordering (answer waits for
+filler end) and no-double-ack.
+
+### P2-F8 · BUG · OPEN — spoken domains read literally; single-dot domains slip the sanitizer
+`sanitizeSpeech`'s bare-domain rule is `\b[a-z0-9-]+(?:\.[a-z0-9-]+)+\.[a-z]{2,}` — it requires
+TWO dots after the first label, so the common single-dot hosts ("youtube.com", "weather.com",
+"google.com") don't match and are spoken literally ("weather dot com"). Scheme URLs
+(`https://…`) still convert via the earlier `https?://\S+` rule, which is why it looks
+inconsistent. **Fix:** change the bare-domain rule to `\b([a-z0-9-]+\.)+[a-z]{2,}(\/\S*)?` (or
+equivalent) so single-dot domains convert via `urlToSpokenName`; verify it does NOT eat "3.5",
+"e.g.", "Mr. X", or file extensions in normal prose. Add tests: "youtube.com"→"youtube",
+"weather.com"→"weather", "check e.g. this" unchanged, "it costs 3.5 dollars" unchanged. Also
+confirm the action-open confirmation ("Opening " + target) benefits — a bare-domain target
+should speak the name, not the host.
+
+### Note (not a bug): reply length
+Live weather reply was 2 sentences with a 3-option list — within the "1-3 short sentences"
+etiquette, acceptable. Acknowledge-then-act confirmed working ("can you open Chrome?" →
+"On it, sir."). "sir" honorific present throughout. Persona behavior is landing.
 
 ---
 *Log format for the agent: change `OPEN` → `FIXED (p<N> commit <sha>)` with a one-line note.*
