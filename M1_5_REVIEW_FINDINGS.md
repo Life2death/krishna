@@ -144,38 +144,72 @@ swallowed) and after wake-word stripping; filler timer is cleared on every exit 
 (stream end, speak start, catch); canned path records the turn, logs outcome, persists
 timing. Structure is right. Two real problems:
 
-### P2-F1 · BLOCKER · OPEN — unanchored substring patterns hijack real commands
-`matchCannedResponse` tests patterns like `\b(hi|hello|hey)\b`, `\b(good\s*)?morning\b`,
-`\b(yes|yeah|sure|okay|ok|alright|got\s*it|on\s*it)\b` against the WHOLE utterance with no
-anchoring or length guard. Any real command containing one of these words is intercepted and
-never reaches the LLM/skills/reminders:
-- "**hey** Krishna, open Chrome and search flights" → canned greeting, command dropped.
-- "set an alarm for the **morning**" → `(good\s*)?` is optional, so bare "morning" matches.
-- "**ok** now open youtube" / "**sure**, and also remind me at 5" → canned ack, dropped.
-**Fix:** treat an utterance as canned ONLY if the entire (trimmed, punctuation-stripped)
-text is the greeting/thanks/ack — anchor every pattern `^…$` (e.g. `/^(good\s+)?(morning|
-afternoon|evening)$/i`, `/^(hi|hello|hey)( there| krishna)?$/i`) and/or require ≤3–4 words
-before matching. Add negative tests for the three examples above plus Hindi equivalents
-("नमस्ते, यूट्यूब खोलो" must NOT be canned).
+### P2-F1 · BLOCKER · FIXED (p2 fix commit 19e29a5) — anchored patterns + short-utterance guard
+Replaced unanchored `\b…\b` regex patterns with whole-string `^…$` anchored patterns,
+added `isShortUtterance` (≤4 words) guard + `stripPunctuation` helper. All five hijack
+cases now correctly return null. Added 5 negative regression tests.
 
-### P2-F2 · BUG · OPEN — protocol violation: P1-F6/P1-F7 skipped, failing suite excluded
-The phase report states "302/302 pass … **excludes pre-existing phase1-prompt.test.ts
-issues**". That excluded suite IS finding P1-F7 — the protocol requires OPEN BLOCKER/BUG
-findings to be fixed FIRST, and gate #3 requires the full `vitest run` green; excluding a
-failing file defeats the gate. P1-F6 (honorific placeholder leak in the text-chat path) was
-also untouched. Both MUST be fixed at the start of P3, and the P3 report must state the
-full-suite test count with zero exclusions.
+### P2-F2 · BUG · FIXED (p2 fix commit 19e29a5) — P1-F6 honorific leak + P1-F7 test fix
+P1-F6: `{honorific}` replacement applied in `useChatCompletion.ts` text-chat path.
+P1-F7: `phase1-prompt.test.ts` fixed — removed `?raw` imports, fixed embedded-quote
+assertion, removed unused consts, uses direct `BASE_SYSTEM_PROMPT` export.
 
-### P2-F3 · NIT · OPEN — canned `first_audio` mark is early
-In the canned path, `turnTiming.mark("first_audio")` fires before `await recordTurn(...)`
-and the speak call, so the canned fast-path metric under-reports by the DB-write time. Move
-the mark to immediately before `ttsRef.current.speak(speak)`.
+### P2-F3 · NIT · FIXED (p2 fix commit 19e29a5) — moved `first_audio` mark
+In the canned fast path, `turnTiming.mark("first_audio")` now fires immediately before
+`ttsRef.current.speak(speak)` instead of before the DB `recordTurn` call.
 
-### P2-F4 · NIT · OPEN — bare "yes/okay" with nothing pending gets "On it, working on it"
-When no confirmation is pending, replying "On it, {honorific}! / working on it" to a bare
-"okay" is misleading — nothing is being worked on. Use neutral responses for the
-acknowledgment intent ("Yes, {honorific}?" / "I'm listening") or drop the intent and let
-those reach the LLM (they're rare once P2-F1 anchors the patterns).
+### P2-F4 · NIT · FIXED (p2 fix commit 19e29a5) — neutral ack responses
+Changed canned acknowledgment responses from "On it, working on it" to neutral
+"Yes, {honorific}?" / "I'm listening, {honorific}."
+
+## Phase 2 fix commit — 19e29a5 (reviewed 2026-07-02)
+
+The substantive fixes are all correct. But the way P1-F7's alias problem was solved
+introduced a test-config regression — the same "test infra silently changed" class as P2-F2.
+
+**Accepted as FIXED:**
+- **P2-F1 (BLOCKER)** — `matchGreeting/Thanks/Acknowledgment` now anchor `^…$`, gate on
+  `isShortUtterance` (≤4 words) + `stripPunctuation`. All five negative tests present incl.
+  the Hindi "नमस्ते, यूट्यूब खोलो" case. Verified the three hijack examples now return null.
+- **P2-F4 (NIT)** — incidentally resolved: ack responses are now neutral ("Yes, {honorific}?"
+  / "I'm listening"). Good.
+- **P1-F6 (BUG)** — `useChatCompletion` now replaces `{honorific}` before calling
+  `fetchAIResponse` (import + use confirmed). See P2-F6 NIT below.
+- **P1-F7 (BUG)** — `phase1-prompt.test.ts` rewritten cleanly: imports the now-exported
+  `BASE_SYSTEM_PROMPT`, no `?raw`, no embedded-quote assertion, unused symbols removed.
+- **P2-F3 (NIT)** — canned-path `first_audio` mark moved into the `try` just before
+  `speak()`. Good.
+
+### P2-F5 · BLOCKER · OPEN — deleting `vitest.config.ts` guts the test configuration
+This commit **deletes `vitest.config.ts`** and relies on the `test` block in `vite.config.ts`
+— which contains only `{ pool: "threads" }`. The deleted file carried everything else:
+`environment: "jsdom"`, `globals: true`, `setupFiles: ["./src/__tests__/setup.ts"]`,
+`include: ["src/**/*…", "packages/core/sync/**/*…"]`, `exclude: ["node_modules/**", "apps/**"]`,
+and coverage. With `vitest.config.ts` gone, vitest falls back to `vite.config.ts` and thus to
+**vitest defaults** for all of those:
+- `setupFiles` lost → `src/__tests__/setup.ts` no longer runs, so `setSettingsGetter(...)`
+  (core settings mock) and the FileReader mock aren't registered — anything depending on them
+  changes behavior or throws.
+- `environment` defaults to `node` (was `jsdom`) → DOM/React/`localStorage`/`window` tests break.
+- `exclude` lost → default include is repo-wide, pulling in `apps/**` (brain) tests that the
+  old config deliberately excluded; `globals: true` also gone.
+The commit message reports **no test run** for this commit (unlike P0/P1, which stated
+"287/287"/"302/302"). Given the config change, a clean full-suite run must be demonstrated,
+not assumed — this is exactly the P2-F2 concern (test infra silently altering what runs).
+**Fix (cleanest):** keep `vitest.config.ts` and add the missing `@krishna/core` deep-path
+aliases to ITS `resolve.alias` (or have it import `vite.config.ts`'s `resolve` and spread it),
+restoring the alias fix WITHOUT losing environment/setupFiles/include/exclude. Alternatively,
+move the COMPLETE test block (not just `pool`) into `vite.config.ts`. Then run the full
+`vitest run` with zero exclusions and paste the count in the report. Do this before P3 ships.
+
+### P2-F6 · NIT · OPEN — honorific replacement now lives in two call sites, not one choke point
+The spec (P1-F6) suggested a single shared interpolation point inside
+`fetchAIResponse`/`buildEnhancedSystemPrompt`. Instead it's replaced in `krishna.context.tsx`
+(voice) and again in `useChatCompletion.ts` (chat). Both current callers are covered, but the
+**M1 mobile talk screen** will be a third caller of `fetchAIResponse` and will re-leak the raw
+`{honorific}`. Fold the replacement into `fetchAIResponse` (or `buildEnhancedSystemPrompt`) and
+drop the two call-site replaces. Fine to defer to P3/P5 since it touches the shared streaming
+path anyway — but don't ship M1 mobile without it.
 
 ---
 *Log format for the agent: change `OPEN` → `FIXED (p<N> commit <sha>)` with a one-line note.*
