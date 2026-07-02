@@ -287,6 +287,7 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
   const currentCaptureIdRef = useRef<string | null>(null);
   const fillerTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const fillerSpokenRef = useRef(false);
+  const fillerPromiseRef = useRef<Promise<void> | null>(null);
   const [voice, setVoiceState] = useState<string>(() => {
     return safeLocalStorage.getItem(STORAGE_KEYS.KRISHNA_VOICE) || "";
   });
@@ -1523,7 +1524,11 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
         fillerTimerRef.current = setTimeout(() => {
           if (!fillerSpokenRef.current) {
             fillerSpokenRef.current = true;
-            ttsRef.current.speak("One moment, " + honorific).catch(() => {});
+            fillerPromiseRef.current = ttsRef.current.speak("One moment, " + honorific).then(() => {
+              fillerPromiseRef.current = null;
+            }).catch(() => {
+              fillerPromiseRef.current = null;
+            });
           }
         }, 700);
         let firstChunk = true;
@@ -1545,14 +1550,19 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
         }
         turnTiming.mark("last_token");
 
-        clearTimeout(fillerTimerRef.current!);
-        fillerTimerRef.current = null;
         if (!fullResponse || signal.aborted) {
           setStatus("idle");
           return;
         }
 
         const { spokenText, actions, plan } = parseActions(fullResponse);
+
+        // Suppress generic filler when reply is a plan-ack (the plan.say is sufficient)
+        if (plan?.steps.length) {
+          clearTimeout(fillerTimerRef.current!);
+          fillerTimerRef.current = null;
+        }
+
         historyRef.current = [...historyRef.current, { role: "assistant" as const, content: fullResponse }].slice(-8);
         let spokenTextRecorded = false;
 
@@ -1566,6 +1576,9 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
           try {
             clearTimeout(fillerTimerRef.current!);
             fillerTimerRef.current = null;
+            if (fillerPromiseRef.current) {
+              await fillerPromiseRef.current;
+            }
             turnTiming.mark("first_audio");
             await ttsRef.current.speak(spokenText);
           } finally {
