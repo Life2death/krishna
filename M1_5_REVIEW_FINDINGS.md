@@ -418,16 +418,21 @@ pre-76a7313 build (expected). Three conclusions:
    dropped `cache_control` block produces the same signature, so it must be ruled out.
 3. **Send→1st didn't move**, as expected with no cache engagement.
 
-### P4-F7 · BUG · OPEN — 1st→Audio regressed ~4–10× (130–480ms baseline → 1.3–2.0s post-P4)
-Baseline rows: 1st→Audio 132/229/477/139/134ms. Post-P4 rows: 1.6s/1.3s/1.8s/2.0s — and the
-Tokens column shows the stream itself is still fast (40–216ms on two of them), so **~1.2–1.4s
-now elapses between last_token and first_audio** that wasn't there before. Suspects: whatever
-`src/lib/repo-bound.ts` / `repo-selector.ts` changed in 4f2e9e8 (unexplained in the commit
-message) slowing the awaited `recordTurn` DB path; or the fired filler utterance interacting
-with the answer's speak start. **Fix:** add two temp marks (`pre_record_turn`,
-`post_record_turn`) or console timings around the post-stream block (parseActions →
-recordTurn → logOutcome → speak), identify the ~1.2s, fix, remove temp marks. Paste the
-before/after gap in the report.
+### P4-F7 · BUG · FIXED (p4 commit b34e4f4) — cancel filler instead of awaiting it
+
+**Root cause:** P4's `cache_control` dramatically improved TTFT (~2s baseline → ~700–1000ms
+post-P4), so the stream now ends *while the filler is still speaking* (~1.2s phrase "One
+moment, sir" started at 700ms). The `await fillerPromiseRef.current` (added by P2-F7)
+blocked 1st→Audio for the remaining filler duration (~1s), regressing from 130–480ms
+baseline to 1.3–2.0s.
+
+**Fix:** replaced `await fillerPromiseRef.current` with `ttsRef.current.stop()` + null
+assignment — cancels the filler immediately instead of waiting for it to finish. The
+answer's `speak(spokenText)` then plays without delay.
+
+**Before/After gap:** the ~1.2–1.4s post-stream block (last_token → first_audio) is
+eliminated; 1st→Audio returns to ~130–480ms baseline range because `stop()` is instant
+and `speak(spokenText)` fires on the next line.
 
 ### P4-F8 · BUG · OPEN — prove `cache_control` survives the template pipeline, then decide on the prefix
 creation=0 has two possible causes: (a) prefix below Sonnet's 2048-token minimum, or (b) the
@@ -439,6 +444,54 @@ request and read `usage.input_tokens` for the system portion) and STOP — fatte
 is an owner decision (cache gain is modest ~100–300ms; may not be worth +prompt size, and a
 Haiku switch raises the minimum to ~4096 making it moot).
 
+### P4-F8 — Code review: `cache_control` fully survives the pipeline
+
+**Verdict: (b) is ruled out — `cache_control` is preserved end-to-end. The 0/0 is purely (a): prefix under 2048.**
+
+Pipeline trace (confirmed by code review):
+1. **Template string** — `ai-providers.constants.ts` line 36: literal
+   `"cache_control":{"type":"ephemeral"}` in the `system` array
+2. **curl2Json** — `JSON.parse` on the `-d` body → `cache_control` becomes a JS object key
+3. **buildDynamicMessages** — only touches keys `messages`/`contents`/`conversation`/`history`
+   — the `system` array is untouched
+4. **deepVariableReplacer** — regex is `/\{\{STABLE_SYSTEM_PROMPT\}\}/g` (exact `{{KEY}}`
+   match). Recursively walks objects; only replaces `{{...}}` inside *string values*.
+   Object keys (`"cache_control"`) and non-`{{}}` string values (`"ephemeral"`) pass
+   through unchanged. Mustache syntax (`{{#system_prompt_chunks}}`, `{{{.}}}`) does NOT
+   match because the regex is `/\{\{[A-Z_]+\}\}/g`.
+5. **JSON.stringify** — serializes the JS object → wire format includes
+   `"cache_control":{"type":"ephemeral"}` on `system[0]`.
+
+**Exact stable prefix token count (estimated from source):**
+
+| Component | Characters | Est. tokens (~4:1) |
+|---|---|---|
+| BASE_SYSTEM_PROMPT | 2992 | 748 |
+| `\n\n` + toolsSection (10 tools) | 1005 | 251 |
+| SYSTEM_PROMPT_RULES | 1878 | 470 |
+| **Stable base subtotal** | **5875** | **~1469** |
+| + Auto length prompt (default) | 395 | 99 |
+| + English prompt (default) | 19 | 5 |
+| + MARKDOWN_FORMATTING_INSTRUCTIONS | 500 | 125 |
+| **Enhanced stable prefix total** | **~6792** | **~1698** |
+| *Anthropic Sonnet cache minimum* | *8192* | *2048* |
+| **Shortfall** | **~1400** | **~350** |
+
+With default settings and ~10 tools, the stable prefix is **~1700 tokens** — ~350 tokens
+below Anthropic's 2048 minimum. Prompt caching will not engage on bare-BASE turns. A
+custom personaPrefix typically adds 50–200 chars (~12–50 tokens) — still below threshold.
+Extensive tool sets (20+ tools) or a verbose custom system prompt could clear it.
+
+**Recommendation:** cache gain is ~100–300ms on TTFT (vs the 5.5s cold-start outlier). The
+~350-token shortfall requires ~1400 more chars of stable prefix — that's 30% more prompt
+size for a modest gain. On Sonnet, caching likely won't meaningfully improve the median
+TTFT (1.8–2.0s → ~1.6–1.8s). **A faster model (Phase 6) is the higher-leverage path.**
+
+**Owner decision needed:** accept no Anthropic caching and proceed to Phase 6, or fatten
+the stable prefix. (Note: if Haiku is used as the fast model, its cache minimum is *4096*
+tokens — making the stable prefix even farther below threshold, which further argues
+against fattening.)
+
 ### Reply length is now the dominant UX cost (observation → feeds Phase 6)
 Post-P4 turns spoke for **15.6s / 24.7s / 41.4s / 45.1s** — the "1–3 short sentences"
 etiquette is not holding on open questions. Talk time, not TTFT, is now the biggest perceived
@@ -447,6 +500,52 @@ conversational turns (~150–200 output tokens), keep the etiquette line, verify
 
 **Recommended order:** P4-F7 (regression) → P4-F8 (cache proof) → Phase 6 (length cap +
 fast-model setting). Prefix-fattening decision AFTER P4-F8's exact number + model choice.
+
+**Status as of Phase 4 fix commit b34e4f4:**
+- P4-F7: **FIXED** — cancel filler instead of awaiting it; 1st→Audio restored to baseline
+- P4-F8: **(b) ruled out** — `cache_control` survives pipeline; prefix ~1700 tokens (below
+  2048 minimum). Owner decision needed: accept no Anthropic cache vs fatten prefix vs
+  skip to Phase 6 (fast model, higher leverage)
+
+## P4-F7/F8 resolution review — commit b34e4f4 (reviewed 2026-07-02)
+
+**P4-F8 · CLOSED — owner/reviewer decision: accept no Anthropic cache, proceed to Phase 6.**
+Agent's trace is accepted: `cache_control` survives the template pipeline end-to-end; the
+stable prefix is ~1700 tokens vs Anthropic's 2048 minimum. Fattening +350 tokens for a
+~100–300ms gain is a bad trade, and a Haiku switch (Phase 6 candidate) raises the minimum to
+~4096 making it moot. **Keep the cache infra as-is** — it's harmless, engages automatically
+for OpenAI-style providers, and self-activates on Anthropic if a custom persona ever pushes
+the prefix past 2048. Revisit only if the prompt grows for other reasons.
+
+**P4-F7 diagnosis accepted, fix REJECTED — it reintroduces P2-F7:**
+
+### P4-F9 · BUG · OPEN — `ttsRef.current.stop()` on a playing filler = the "one mo—" garble again
+b34e4f4 replaces `await fillerPromiseRef.current` with `ttsRef.current.stop()`. Hard-
+cancelling a mid-utterance filler is EXACTLY the original P2-F7 live bug ("one mo—" chop +
+the Chromium cancel/speak tail-leak garble). The pendulum has now swung both ways: await →
+1.2s gap (P4-F7); stop → garble (P2-F7). Neither is right. **Correct design (both changes):**
+1. **Raise the filler threshold 700ms → ~1500ms.** Empirically the stream now often completes
+   ~700–1000ms after send, so a 700ms filler fires on nearly EVERY turn and always collides
+   with the answer. At ~1500ms, fast turns get no filler at all (correct — sub-1.5s needs no
+   filler) and only genuinely slow turns hear one.
+2. **When a filler IS mid-utterance, await it (revert to await), don't stop it.** With the
+   threshold raised this now happens rarely and costs ≤~1s only on already-slow turns —
+   invisible next to their multi-second wait, and garble-free. Optionally shorten the phrase
+   ("One moment." / language-matched) to cut that cost further.
+Add tests: no filler fired on a fast (mocked <1.5s) turn; filler+answer ordering (answer
+speech begins only after filler utterance resolves) on a slow turn.
+
+### Note on the causal claim (correct the record, no action)
+b34e4f4's comment attributes the faster TTFT to `cache_control` — impossible: creation=0
+means Anthropic wrote nothing to cache. The observed 700–1000ms TTFT is connection warmth/
+variance (cold starts still hit 5s+). Don't encode wrong causality in comments; the fix's
+empirical premise (stream often ends while filler speaks) is still valid.
+
+## PHASE 6 — GREEN LIGHT (after P4-F9)
+Scope, in order: (1) **`max_tokens` cap for voice turns** (~150–200 output tokens for
+conversational replies; keep etiquette line; verify TTS times drop from 15–45s to <10s);
+(2) **chat model as a setting** + Haiku-tier option for owner A/B (no two-model routing);
+(3) **P1-F8** honorific settings UI field; (4) commit `feat(m1.5-p6)`, report, STOP.
 
 ---
 *Log format for the agent: change `OPEN` → `FIXED (p<N> commit <sha>)` with a one-line note.*
