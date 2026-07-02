@@ -18,17 +18,21 @@ The Eastern Expressway route is faster today at 35. The train takes around 55."
 - **Routing provider abstraction** (mirror the AI-provider philosophy, but code-level is
   fine): `RoutingProvider` interface with `getRoutes({origin, destination, mode,
   alternatives}) → Route[]`.
-  **v1 implements TomTom** (owner decision 2026-07-02 — Google billing friction):
-  `api.tomtom.com/routing/1/calculateRoute/{origin}:{destination}/json` with `traffic=true`,
-  `maxAlternatives=1`, `travelMode` car/motorcycle/pedestrian; geocoding of address strings
-  via TomTom Search API (`/search/2/geocode/{query}.json`) when the input isn't lat,lng.
-  Free tier: 2,500 non-tile req/day, NO credit card. Call via `tauriFetch`, BYOK key
-  (`KRISHNA_MAPS_API_KEY`).
-  **Known gap:** TomTom has no public-transit routing — "by train" answers are OUT of v1;
-  Krishna should say "I can give road times; train schedules need a Maps upgrade" if asked.
-  **Google Routes adapter = later** (adds TRANSIT + India's best traffic) behind the same
-  interface, if/when the owner accepts Google billing. Traffic delta comes from TomTom's
-  `travelTimeInSeconds` vs `noTrafficTravelTimeInSeconds`.
+  **v1 implements Ola Maps (Krutrim)** — owner decision 2026-07-02: India-first data
+  (Google billing rejected; TomTom India coverage weak). Docs: maps.olakrutrim.com/docs +
+  /apidocs. Use the **Directions/Routing API** with traffic-aware directions,
+  `alternatives`, and modes incl. **two-wheeler** (explicitly supported — India-first
+  feature), plus the **Geocoding API** for address strings. Free tier ~500K–5M calls/month
+  (orders of magnitude beyond need); INR/Indian billing; key from the Krutrim cloud console.
+  Call via `tauriFetch`, BYOK key (`KRISHNA_MAPS_API_KEY`).
+  **T1 first step:** agent reads the current Ola docs and pins the exact endpoint/param/
+  response field names (duration-in-traffic vs base duration, alternative route naming) —
+  do NOT guess them from this plan; record them in the code comments + tests.
+  **Public transit ("by train"):** verify what Ola's multi-modal support actually covers in
+  T1; if absent, Krishna answers road modes and says train schedules aren't available yet.
+  **Later adapters behind the same interface:** Google Routes (transit + strongest traffic;
+  requires billed account) or Mappls (best India data, enterprise pricing). TomTom rejected
+  for India coverage.
 - **API key = BYOK in secure storage** (`secure_set("KRISHNA_MAPS_API_KEY")`), entered in
   Settings (same section pattern as ElevenLabs key). Never in code/repo.
 - **Place resolution order:** (1) confirmed memories — look up keys like "home", "work",
@@ -81,11 +85,11 @@ parse; executor arg mapping) with `travel_time` examples:
 6. All suites green; no confirmation prompt for travel queries (read-only).
 
 ## Cost / key setup (owner)
-**TomTom (v1):** register at developer.tomtom.com (no card) → create an API key → done.
-Free tier 2,500 non-tile requests/day (each travel question ≈ 1 geocode + 1 route ≈ 2–3
-requests — hundreds of asks/day headroom). Rate limit 5 req/s — irrelevant at our volume.
-**Google Routes (later, optional):** only if transit ("by train") answers become must-have —
-requires a billed Google Cloud project ($200/mo credit covers personal use).
+**Ola Maps (v1):** sign up at maps.olakrutrim.com (Krutrim cloud console) → create project →
+API key. Free tier ~500K–5M calls/month; each travel question ≈ 1–3 calls — unlimited for
+personal use. Indian company, INR billing if ever needed.
+**Google Routes (later, optional):** only if transit ("by train") answers become must-have
+and Ola's multi-modal doesn't cover it — requires a billed Google Cloud project.
 
 ## Out of scope (v1)
 Turn-by-turn navigation; public-transit ("by train") times — TomTom gap, needs the Google/
