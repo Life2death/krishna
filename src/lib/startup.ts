@@ -60,9 +60,9 @@ export async function initializeCore(): Promise<void> {
       const stored = safeLocalStorage.getItem("response_settings");
       return stored
         ? JSON.parse(stored)
-        : { responseLength: "auto", language: "english", autoScroll: true };
+        : { responseLength: "auto", language: "english", autoScroll: true, honorific: "sir" };
     } catch {
-      return { responseLength: "auto", language: "english", autoScroll: true };
+      return { responseLength: "auto", language: "english", autoScroll: true, honorific: "sir" };
     }
   });
 

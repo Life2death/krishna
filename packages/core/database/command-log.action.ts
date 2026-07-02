@@ -190,6 +190,19 @@ export async function getRecentActivity(opts?: {
   }));
 }
 
+/** Narrow write: only updates the timing column. Use after TTS completes
+ * so that response/failure_reason/detail from the first write survive. */
+export async function updateCommandTiming(e: {
+  id: string;
+  timing: string;
+}): Promise<void> {
+  const db = await getDatabase();
+  await db.execute(
+    "UPDATE command_log SET timing=? WHERE id=?",
+    [e.timing, e.id]
+  );
+}
+
 export async function deleteAllCommandLog(): Promise<void> {
   const db = await getDatabase();
   await db.execute("DELETE FROM command_log");

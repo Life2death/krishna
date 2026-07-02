@@ -27,7 +27,7 @@ import { createReminder, getDueReminders, updateReminder, cancelReminder } from 
 import { createConversation, appendMessages, generateConversationTitle, getMostRecentConversation, deleteConversation } from "@/lib/repo-bound";
 import { isLookCommand, isUndoCommand, isJobExtractionCommand, isJobStatusCommand } from "@/lib/perception";
 import { triggerJobExtractionWorkflow, getJobExtractionStatus } from "@/lib/integrations/github-workflow";
-import { createAuditEntry, getLastReversible, logCommand, insertPendingCommand, updateCommandOutcome } from "@/lib/database";
+import { createAuditEntry, getLastReversible, logCommand, insertPendingCommand, updateCommandOutcome, updateCommandTiming } from "@/lib/database";
 import type { CommandOutcome, FailureReason } from "@/lib/database";
 import { setConfirmAction } from "@krishna/core/tools/mcp-bridge";
 import type { AssistantStatus, StepAction } from "@/types/assistant";
@@ -36,6 +36,7 @@ import type { Message, AttachedFile } from "@/types";
 import type { VoiceVerifyResult } from "@/lib/voice-client";
 import { MAX_FILES } from "@/config";
 import { TurnTiming } from "@/lib/turn-timing";
+import { getResponseSettings } from "@krishna/core/settings";
 
 export interface ConversationTurn {
   id: string;
@@ -146,10 +147,10 @@ const BASE_SYSTEM_PROMPT = [
   '```',
   '',
   'SPOKEN CONVERSATION ETIQUETTE:',
-  '- Address the user with the honorific "sir" (e.g. "Good morning, sir", "On it, sir").',
+  '- Address the user with the honorific "{honorific}" (e.g. "Good morning, {honorific}", "On it, {honorific}").',
   '- Reply in the same language the user used. If they greet in Hindi, reply in Hindi. If they ask in English, reply in English.',
   '- Keep spoken replies to 1-3 short sentences. Never output markdown, bullet lists, or raw URLs in text that will be spoken aloud.',
-  '- ACKNOWLEDGE-THEN-ACT: when the user\'s request requires actions or multiple steps, first speak a one-line acknowledgment with an honest timeline (e.g. "On it, sir — this needs a couple of steps, give me a minute"), then emit the action/plan block. Do not start speaking the action result before acknowledging.',
+  '- ACKNOWLEDGE-THEN-ACT: when the user\'s request requires actions or multiple steps, first speak a one-line acknowledgment with an honest timeline (e.g. "On it, {honorific} — this needs a couple of steps, give me a minute"), then emit the action/plan block. Do not start speaking the action result before acknowledging.',
   '- If something will be slow, say so honestly before proceeding.',
 ].join("\n");
 
@@ -1480,10 +1481,13 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
         const now = new Date();
         const timeContext = `\n\nCurrent date and time: ${now.toLocaleString("en-IN", { timeZone: "Asia/Kolkata", weekday: "long", year: "numeric", month: "long", day: "numeric", hour: "2-digit", minute: "2-digit" })} IST`;
         const toolsSection = buildToolsSection(command);
+        const honorific = getResponseSettings().honorific || "sir";
         const personaPrefix = selectedSystemPrompt && selectedSystemPrompt !== DEFAULT_SYSTEM_PROMPT
-          ? selectedSystemPrompt + "\n\n"
+          ? selectedSystemPrompt.replace(/\{honorific\}/g, honorific) + "\n\n"
           : "";
-        const systemPrompt = buildMemoryPrompt(personaPrefix + BASE_SYSTEM_PROMPT + "\n\n" + toolsSection + SYSTEM_PROMPT_RULES + timeContext, memories);
+        const rawPrompt = (personaPrefix + BASE_SYSTEM_PROMPT + "\n\n" + toolsSection + SYSTEM_PROMPT_RULES + timeContext)
+          .replace(/\{honorific\}/g, honorific);
+        const systemPrompt = buildMemoryPrompt(rawPrompt, memories);
         let fullResponse = "";
         turnTiming.mark("request_sent");
         let firstChunk = true;
@@ -1531,7 +1535,10 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
           const cId = currentCaptureIdRef.current;
           if (cId) {
             turnTiming.freeze();
-            updateCommandOutcome({ id: cId, outcome: "answered", timing: turnTiming.toJSON() });
+            updateCommandTiming({ id: cId, timing: turnTiming.toJSON() }).catch((err) =>
+              console.error("Failed to persist turn timing:", err)
+            );
+            emit("command-log-updated").catch(() => {});
           }
         }
 
@@ -1649,7 +1656,10 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
         const cId = currentCaptureIdRef.current;
         if (cId) {
           turnTiming.freeze();
-          updateCommandOutcome({ id: cId, outcome: "failed", timing: turnTiming.toJSON() });
+          updateCommandTiming({ id: cId, timing: turnTiming.toJSON() }).catch((err) =>
+            console.error("Failed to persist turn timing:", err)
+          );
+          emit("command-log-updated").catch(() => {});
         }
       } finally {
         clearFiles();

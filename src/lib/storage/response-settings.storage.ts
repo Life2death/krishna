@@ -3,18 +3,21 @@ import {
   DEFAULT_RESPONSE_LENGTH,
   DEFAULT_LANGUAGE,
   DEFAULT_AUTO_SCROLL,
+  DEFAULT_HONORIFIC,
 } from "../response-settings.constants";
 
 export interface ResponseSettings {
   responseLength: string;
   language: string;
   autoScroll: boolean;
+  honorific: string;
 }
 
 export const DEFAULT_RESPONSE_SETTINGS: ResponseSettings = {
   responseLength: DEFAULT_RESPONSE_LENGTH,
   language: DEFAULT_LANGUAGE,
   autoScroll: DEFAULT_AUTO_SCROLL,
+  honorific: DEFAULT_HONORIFIC,
 };
 
 /**
@@ -38,6 +41,8 @@ export const getResponseSettings = (): ResponseSettings => {
         parsedSettings.autoScroll !== undefined
           ? parsedSettings.autoScroll
           : DEFAULT_RESPONSE_SETTINGS.autoScroll,
+      honorific:
+        parsedSettings.honorific || DEFAULT_RESPONSE_SETTINGS.honorific,
     };
   } catch (error) {
     console.error("Failed to get response settings:", error);
