@@ -17,11 +17,18 @@ The Eastern Expressway route is faster today at 35. The train takes around 55."
   confirmation-gated (`classifyAction` stays untouched).
 - **Routing provider abstraction** (mirror the AI-provider philosophy, but code-level is
   fine): `RoutingProvider` interface with `getRoutes({origin, destination, mode,
-  alternatives}) → Route[]`. v1 implements **Google Routes API** (`routes.googleapis.com
-  /directions/v2:computeRoutes`, `routingPreference: TRAFFIC_AWARE_OPTIMAL`,
-  `computeAlternativeRoutes: true`, modes: DRIVE / TWO_WHEELER / TRANSIT / WALK — India
-  supports TWO_WHEELER). Call via `tauriFetch` (CORS bypass), BYOK key. TomTom adapter =
-  later, not v1.
+  alternatives}) → Route[]`.
+  **v1 implements TomTom** (owner decision 2026-07-02 — Google billing friction):
+  `api.tomtom.com/routing/1/calculateRoute/{origin}:{destination}/json` with `traffic=true`,
+  `maxAlternatives=1`, `travelMode` car/motorcycle/pedestrian; geocoding of address strings
+  via TomTom Search API (`/search/2/geocode/{query}.json`) when the input isn't lat,lng.
+  Free tier: 2,500 non-tile req/day, NO credit card. Call via `tauriFetch`, BYOK key
+  (`KRISHNA_MAPS_API_KEY`).
+  **Known gap:** TomTom has no public-transit routing — "by train" answers are OUT of v1;
+  Krishna should say "I can give road times; train schedules need a Maps upgrade" if asked.
+  **Google Routes adapter = later** (adds TRANSIT + India's best traffic) behind the same
+  interface, if/when the owner accepts Google billing. Traffic delta comes from TomTom's
+  `travelTimeInSeconds` vs `noTrafficTravelTimeInSeconds`.
 - **API key = BYOK in secure storage** (`secure_set("KRISHNA_MAPS_API_KEY")`), entered in
   Settings (same section pattern as ElevenLabs key). Never in code/repo.
 - **Place resolution order:** (1) confirmed memories — look up keys like "home", "work",
@@ -74,12 +81,14 @@ parse; executor arg mapping) with `travel_time` examples:
 6. All suites green; no confirmation prompt for travel queries (read-only).
 
 ## Cost / key setup (owner)
-Google Cloud project → enable **Routes API** → API key restricted to Routes API. $200/month
-free credit ≈ thousands of requests at personal volume — effectively free, but requires a
-billing card on the Google Cloud project. No-card alternative for later: TomTom (≈2.5k
-req/day free tier) as a second `RoutingProvider` adapter.
+**TomTom (v1):** register at developer.tomtom.com (no card) → create an API key → done.
+Free tier 2,500 non-tile requests/day (each travel question ≈ 1 geocode + 1 route ≈ 2–3
+requests — hundreds of asks/day headroom). Rate limit 5 req/s — irrelevant at our volume.
+**Google Routes (later, optional):** only if transit ("by train") answers become must-have —
+requires a billed Google Cloud project ($200/mo credit covers personal use).
 
 ## Out of scope (v1)
-Turn-by-turn navigation; proactive "leave now" alerts (natural M2/M3 reminder+worker feature
-later — "leave by 8:20, traffic is heavy" push); multi-stop routes; TomTom adapter; scraping
-Google Maps via browser (brittle + ToS — rejected).
+Turn-by-turn navigation; public-transit ("by train") times — TomTom gap, needs the Google/
+HERE adapter later; proactive "leave now" alerts (natural M2/M3 reminder+worker feature
+later — "leave by 8:20, traffic is heavy" push); multi-stop routes; scraping Google Maps via
+browser (brittle + ToS — rejected).
