@@ -1536,7 +1536,7 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
               fillerPromiseRef.current = null;
             });
           }
-        }, 700);
+        }, 1500);
         let firstChunk = true;
         for await (const chunk of fetchAIResponse({
           provider,
@@ -1588,14 +1588,11 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
           setLastSpoken(spokenText);
           setKrishnaSpeaking(true);
           try {
-            // Cancel filler immediately instead of awaiting it —
-            // cache_control may have made TTFT faster than the filler's duration, so
-            // awaiting the filler would regress 1st→Audio by ~1s+
+            // Wait for filler to finish naturally (rare with 1500ms threshold)
             clearTimeout(fillerTimerRef.current!);
             fillerTimerRef.current = null;
             if (fillerPromiseRef.current) {
-              ttsRef.current.stop();
-              fillerPromiseRef.current = null;
+              await fillerPromiseRef.current;
             }
             turnTiming.mark("first_audio");
             await ttsRef.current.speak(spokenText);
