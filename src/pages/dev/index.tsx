@@ -1,4 +1,4 @@
-import { AIProviders, STTProviders } from "./components";
+import { AIProviders, STTProviders, LatencyPanel } from "./components";
 import Contribute from "@/components/Contribute";
 import { useSettings } from "@/hooks";
 import { PageLayout } from "@/layouts";
@@ -14,6 +14,11 @@ const DevSpace = () => {
 
       {/* STT Providers */}
       <STTProviders {...settings} />
+
+      {/* Latency Instrumentation (Phase 0) */}
+      <div className="mt-6">
+        <LatencyPanel />
+      </div>
     </PageLayout>
   );
 };

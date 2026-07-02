@@ -35,6 +35,7 @@ import type { Skill } from "@/types/skill";
 import type { Message, AttachedFile } from "@/types";
 import type { VoiceVerifyResult } from "@/lib/voice-client";
 import { MAX_FILES } from "@/config";
+import { TurnTiming } from "@/lib/turn-timing";
 
 export interface ConversationTurn {
   id: string;
@@ -1142,6 +1143,9 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
       setPendingCommand(command);
       setStatus("thinking");
 
+      const turnTiming = new TurnTiming();
+      turnTiming.mark("end_of_speech");
+
       // INSERT pending row immediately so it's visible in the Dashboard live view
       const captureId = crypto.randomUUID();
       currentCaptureIdRef.current = captureId;
@@ -1473,6 +1477,8 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
           : "";
         const systemPrompt = buildMemoryPrompt(personaPrefix + BASE_SYSTEM_PROMPT + "\n\n" + toolsSection + SYSTEM_PROMPT_RULES + timeContext, memories);
         let fullResponse = "";
+        turnTiming.mark("request_sent");
+        let _firstChunk = true;
         for await (const chunk of fetchAIResponse({
           provider,
           selectedProvider: selectedAIProvider,
@@ -1483,8 +1489,13 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
           signal,
         })) {
           if (signal.aborted) break;
+          if (_firstChunk) {
+            _firstChunk = false;
+            turnTiming.mark("first_token");
+          }
           fullResponse += chunk;
         }
+        turnTiming.mark("last_token");
 
         if (!fullResponse || signal.aborted) {
           setStatus("idle");
@@ -1497,14 +1508,17 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
 
         if (spokenText) {
           await recordTurn(pendingUserTextRef.current, spokenText);
-          logOutcome(command, "answered", undefined, undefined, spokenText);
+          const timingJSON = turnTiming.toJSON();
+          logOutcome(command, "answered", undefined, timingJSON, spokenText);
           spokenTextRecorded = true;
           setStatus("speaking");
           setLastSpoken(spokenText);
           setKrishnaSpeaking(true);
           try {
+            turnTiming.mark("first_audio");
             await ttsRef.current.speak(spokenText);
           } finally {
+            turnTiming.mark("last_audio");
             setKrishnaSpeaking(false);
           }
         }
@@ -1609,12 +1623,15 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
         }
         const msg = err instanceof Error ? err.message : "Something went wrong";
         setLastError(msg);
-        logOutcome(command, "failed", "ai_error", msg);
+        turnTiming.mark("last_token");
+        logOutcome(command, "failed", "ai_error", turnTiming.toJSON(), msg);
         setStatus("speaking");
         setKrishnaSpeaking(true);
         try {
+          turnTiming.mark("first_audio");
           await ttsRef.current.speak("I had trouble: " + msg);
         } finally {
+          turnTiming.mark("last_audio");
           setKrishnaSpeaking(false);
         }
       } finally {
