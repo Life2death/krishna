@@ -406,5 +406,47 @@ constants). curl-validator.ts's `requiredVariables` is called with `['TEXT']` on
 change needed for the custom-provider save path. Full suite: 22 files, 333/333 tests green
 + tsc clean.
 
+## Phase 4 LIVE TEST RESULT (owner run on 76a7313, 2026-07-02) — cache NOT engaging + new regression
+
+Post-P4 turns (newest 4): Cache column rendered **0/0 (read/creation) on every turn**;
+Send→1st unchanged (1.9–2.5s, one 5.7s cold start); rows 5–7 were failures from the broken
+pre-76a7313 build (expected). Three conclusions:
+
+1. **Capture pipeline works** (0/0 rendered, not "—") — usage fields arrive and persist.
+2. **Anthropic wrote NOTHING to cache (creation=0)** — consistent with the stable prefix
+   (~1860–2480 est. tokens) being under Sonnet's ~2048-token minimum… but see P4-F8: a
+   dropped `cache_control` block produces the same signature, so it must be ruled out.
+3. **Send→1st didn't move**, as expected with no cache engagement.
+
+### P4-F7 · BUG · OPEN — 1st→Audio regressed ~4–10× (130–480ms baseline → 1.3–2.0s post-P4)
+Baseline rows: 1st→Audio 132/229/477/139/134ms. Post-P4 rows: 1.6s/1.3s/1.8s/2.0s — and the
+Tokens column shows the stream itself is still fast (40–216ms on two of them), so **~1.2–1.4s
+now elapses between last_token and first_audio** that wasn't there before. Suspects: whatever
+`src/lib/repo-bound.ts` / `repo-selector.ts` changed in 4f2e9e8 (unexplained in the commit
+message) slowing the awaited `recordTurn` DB path; or the fired filler utterance interacting
+with the answer's speak start. **Fix:** add two temp marks (`pre_record_turn`,
+`post_record_turn`) or console timings around the post-stream block (parseActions →
+recordTurn → logOutcome → speak), identify the ~1.2s, fix, remove temp marks. Paste the
+before/after gap in the report.
+
+### P4-F8 · BUG · OPEN — prove `cache_control` survives the template pipeline, then decide on the prefix
+creation=0 has two possible causes: (a) prefix below Sonnet's 2048-token minimum, or (b) the
+`cache_control` block being mangled/dropped by curl2Json → deepVariableReplacer. Rule (b) out
+first: extend the existing claude-template unit test to assert the parsed body has
+`system[0].cache_control === {type:"ephemeral"}` AND log/inspect one real request body in dev.
+If (b) is clean → it's (a): report the EXACT token count (use the tokenizer or send one
+request and read `usage.input_tokens` for the system portion) and STOP — fattening the prefix
+is an owner decision (cache gain is modest ~100–300ms; may not be worth +prompt size, and a
+Haiku switch raises the minimum to ~4096 making it moot).
+
+### Reply length is now the dominant UX cost (observation → feeds Phase 6)
+Post-P4 turns spoke for **15.6s / 24.7s / 41.4s / 45.1s** — the "1–3 short sentences"
+etiquette is not holding on open questions. Talk time, not TTFT, is now the biggest perceived
+cost. Phase 6's `max_tokens` enforcement for voice turns moves up in priority: cap
+conversational turns (~150–200 output tokens), keep the etiquette line, verify with TTS times.
+
+**Recommended order:** P4-F7 (regression) → P4-F8 (cache proof) → Phase 6 (length cap +
+fast-model setting). Prefix-fattening decision AFTER P4-F8's exact number + model choice.
+
 ---
 *Log format for the agent: change `OPEN` → `FIXED (p<N> commit <sha>)` with a one-line note.*
