@@ -144,6 +144,13 @@ const BASE_SYSTEM_PROMPT = [
   '  ]',
   '}',
   '```',
+  '',
+  'SPOKEN CONVERSATION ETIQUETTE:',
+  '- Address the user with the honorific "sir" (e.g. "Good morning, sir", "On it, sir").',
+  '- Reply in the same language the user used. If they greet in Hindi, reply in Hindi. If they ask in English, reply in English.',
+  '- Keep spoken replies to 1-3 short sentences. Never output markdown, bullet lists, or raw URLs in text that will be spoken aloud.',
+  '- ACKNOWLEDGE-THEN-ACT: when the user\'s request requires actions or multiple steps, first speak a one-line acknowledgment with an honest timeline (e.g. "On it, sir — this needs a couple of steps, give me a minute"), then emit the action/plan block. Do not start speaking the action result before acknowledging.',
+  '- If something will be slow, say so honestly before proceeding.',
 ].join("\n");
 
 const SYSTEM_PROMPT_RULES = [
@@ -395,9 +402,10 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
     response?: string,
     _source: "voice" | "text" | "mobile" = "voice",
     captureId?: string,
+    timing?: string,
   ) => {
     const id = captureId ?? currentCaptureIdRef.current ?? crypto.randomUUID();
-    updateCommandOutcome({ id, outcome, failureReason, detail, response }).catch((err) =>
+    updateCommandOutcome({ id, outcome, failureReason, detail, response, timing }).catch((err) =>
       console.error("Failed to update command outcome:", err)
     );
     emit("command-log-updated").catch(() => {});
@@ -1478,7 +1486,7 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
         const systemPrompt = buildMemoryPrompt(personaPrefix + BASE_SYSTEM_PROMPT + "\n\n" + toolsSection + SYSTEM_PROMPT_RULES + timeContext, memories);
         let fullResponse = "";
         turnTiming.mark("request_sent");
-        let _firstChunk = true;
+        let firstChunk = true;
         for await (const chunk of fetchAIResponse({
           provider,
           selectedProvider: selectedAIProvider,
@@ -1489,8 +1497,8 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
           signal,
         })) {
           if (signal.aborted) break;
-          if (_firstChunk) {
-            _firstChunk = false;
+          if (firstChunk) {
+            firstChunk = false;
             turnTiming.mark("first_token");
           }
           fullResponse += chunk;
@@ -1508,8 +1516,7 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
 
         if (spokenText) {
           await recordTurn(pendingUserTextRef.current, spokenText);
-          const timingJSON = turnTiming.toJSON();
-          logOutcome(command, "answered", undefined, timingJSON, spokenText);
+          logOutcome(command, "answered", undefined, undefined, spokenText);
           spokenTextRecorded = true;
           setStatus("speaking");
           setLastSpoken(spokenText);
@@ -1520,6 +1527,11 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
           } finally {
             turnTiming.mark("last_audio");
             setKrishnaSpeaking(false);
+          }
+          const cId = currentCaptureIdRef.current;
+          if (cId) {
+            turnTiming.freeze();
+            updateCommandOutcome({ id: cId, outcome: "answered", timing: turnTiming.toJSON() });
           }
         }
 
@@ -1624,7 +1636,7 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
         const msg = err instanceof Error ? err.message : "Something went wrong";
         setLastError(msg);
         turnTiming.mark("last_token");
-        logOutcome(command, "failed", "ai_error", turnTiming.toJSON(), msg);
+        logOutcome(command, "failed", "ai_error", msg);
         setStatus("speaking");
         setKrishnaSpeaking(true);
         try {
@@ -1633,6 +1645,11 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
         } finally {
           turnTiming.mark("last_audio");
           setKrishnaSpeaking(false);
+        }
+        const cId = currentCaptureIdRef.current;
+        if (cId) {
+          turnTiming.freeze();
+          updateCommandOutcome({ id: cId, outcome: "failed", timing: turnTiming.toJSON() });
         }
       } finally {
         clearFiles();

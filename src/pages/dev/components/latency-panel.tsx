@@ -26,11 +26,11 @@ export const LatencyPanel = () => {
 
   useEffect(() => {
     const load = async () => {
-      const rows = await getRecentCommands({ limit: 20 });
+      const rows = await getRecentCommands({ limit: 50 });
       const timed: TimedEntry[] = [];
       for (const row of rows) {
-        if (!row.detail) continue;
-        const data = TurnTiming.fromJSON(row.detail);
+        if (!row.timing) continue;
+        const data = TurnTiming.fromJSON(row.timing);
         if (data?.marks && Object.keys(data.marks).length > 0) {
           timed.push({
             transcript: row.transcript,

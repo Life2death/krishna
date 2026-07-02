@@ -13,6 +13,7 @@ export interface CommandLogEntry {
   outcome: CommandOutcome;
   failureReason?: FailureReason | null;
   detail?: string | null;
+  timing?: string | null;
   response?: string | null;
   source?: "voice" | "text" | "mobile";
   createdAt: number;
@@ -24,6 +25,7 @@ interface DbCommandLog {
   outcome: string;
   failure_reason: string | null;
   detail: string | null;
+  timing: string | null;
   response: string | null;
   source: string;
   created_at: number;
@@ -34,14 +36,15 @@ const redact = (s?: string | null) => (s ? redactText(s).text : null);
 export async function logCommand(e: CommandLogEntry): Promise<void> {
   const db = await getDatabase();
   await db.execute(
-    `INSERT INTO command_log (id, transcript, outcome, failure_reason, detail, response, source, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO command_log (id, transcript, outcome, failure_reason, detail, timing, response, source, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       e.id,
       redact(e.transcript) ?? "",
       e.outcome,
       e.failureReason ?? null,
       redact(e.detail),
+      e.timing ?? null,
       e.response ? redact(e.response)!.slice(0, 500) : null,
       e.source ?? "voice",
       e.createdAt,
@@ -57,8 +60,8 @@ export async function insertPendingCommand(e: {
 }): Promise<void> {
   const db = await getDatabase();
   await db.execute(
-    `INSERT INTO command_log (id, transcript, outcome, failure_reason, detail, response, source, created_at)
-     VALUES (?, ?, 'pending', NULL, NULL, NULL, ?, ?)`,
+    `INSERT INTO command_log (id, transcript, outcome, failure_reason, detail, timing, response, source, created_at)
+     VALUES (?, ?, 'pending', NULL, NULL, NULL, NULL, ?, ?)`,
     [e.id, redact(e.transcript) ?? "", e.source ?? "voice", e.createdAt]
   );
 }
@@ -68,15 +71,17 @@ export async function updateCommandOutcome(e: {
   outcome: CommandOutcome;
   failureReason?: FailureReason | null;
   detail?: string | null;
+  timing?: string | null;
   response?: string | null;
 }): Promise<void> {
   const db = await getDatabase();
   const result = await db.execute(
-    `UPDATE command_log SET outcome=?, failure_reason=?, detail=?, response=? WHERE id=?`,
+    `UPDATE command_log SET outcome=?, failure_reason=?, detail=?, timing=?, response=? WHERE id=?`,
     [
       e.outcome,
       e.failureReason ?? null,
       redact(e.detail),
+      e.timing ?? null,
       e.response ? redact(e.response)!.slice(0, 500) : null,
       e.id,
     ]
@@ -84,13 +89,14 @@ export async function updateCommandOutcome(e: {
   // Upsert fallback: if no row was updated (e.g. non-voice/edge path), INSERT so nothing is lost.
   if (result.rowsAffected === 0) {
     await db.execute(
-      `INSERT INTO command_log (id, transcript, outcome, failure_reason, detail, response, source, created_at)
-       VALUES (?, 'unknown', ?, ?, ?, ?, 'voice', ?)`,
+      `INSERT INTO command_log (id, transcript, outcome, failure_reason, detail, timing, response, source, created_at)
+       VALUES (?, 'unknown', ?, ?, ?, ?, ?, 'voice', ?)`,
       [
         e.id,
         e.outcome,
         e.failureReason ?? null,
         redact(e.detail),
+        e.timing ?? null,
         e.response ? redact(e.response)!.slice(0, 500) : null,
         Date.now(),
       ]
@@ -156,6 +162,7 @@ export async function getRecentCommands(opts?: {
     outcome: r.outcome as CommandOutcome,
     failureReason: r.failure_reason as FailureReason | null,
     detail: r.detail,
+    timing: r.timing,
     response: r.response,
     source: r.source as "voice" | "text" | "mobile",
     createdAt: r.created_at,
@@ -176,6 +183,7 @@ export async function getRecentActivity(opts?: {
     outcome: r.outcome as CommandOutcome,
     failureReason: r.failure_reason as FailureReason | null,
     detail: r.detail,
+    timing: r.timing,
     response: r.response,
     source: r.source as "voice" | "text" | "mobile",
     createdAt: r.created_at,
