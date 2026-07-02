@@ -289,7 +289,7 @@ Rationale: ~2s time-to-first-word is dominated by TTFT, which P3 doesn't touch; 
 model do. P3's queue was also the vehicle for P2-F7 — decoupled here into a minimal fix so the
 filler bug is gone regardless.
 
-## Phase 4 — commits 4f2e9e8 + 7fe1b6b (reviewed 2026-07-02) — ALL FINDINGS FIXED
+## Phase 4 — commits 4f2e9e8, 7fe1b6b, be4bad8 (reviewed 2026-07-02) — ALL FINDINGS FIXED
 
 Direction is right (stable/volatile split, device TZ, usage plumbing, Cache column), but the
 implementation only migrated 3 of 10 provider templates and the injection/capture logic is
@@ -306,13 +306,16 @@ action protocol, etiquette, memories. **Fix:** in `fetchAIResponse`, when the sp
 provided, also populate `SYSTEM_PROMPT` with the concatenation (stable + "\n\n" + volatile) so
 every unmigrated template keeps full behavior; migrated templates use the split vars.
 
-### P4-F2 · BLOCKER · FIXED (p4 fix commit 7fe1b6b) — `stream_options` injected unconditionally → Anthropic 400s every request
+### P4-F2 · BLOCKER · FIXED (p4 fix commit be4bad8) — `stream_options` injected unconditionally → Anthropic 400s every request
 The injection (`bodyObj.stream_options = {include_usage:true}` for every streaming provider)
 hits the `claude` template too. Anthropic `/v1/messages` strictly validates top-level fields —
 `stream_options` is not a valid param → **every Claude-provider chat request returns 400**.
 **Fix:** gate the injection to OpenAI-style endpoints only (e.g. template body already
 contains a `messages`+`choices` schema, or a per-provider `usageStyle: "openai"` flag).
 Anthropic streams usage without any opt-in.
+
+**Fix applied:** gate is now `bodyObj.messages && !bodyObj.system` — Claude body has both,
+OpenAI-style has only `messages`. Two-way unit test added (14 tests in file, up from 12).
 
 ### P4-F3 · BUG · FIXED (p4 fix commit 7fe1b6b) — usage capture reads a field shape no provider emits where expected
 `onUsage` reads `parsed.usage.cache_read_input_tokens` from each SSE chunk:
@@ -354,7 +357,7 @@ provider and silently degraded on 6 others in this commit.
 - **P4-F4** — claude template `system` is now a block array with `cache_control` on the
   stable block. Good.
 
-### P4-F2 · BLOCKER · STILL OPEN — the stream_options gate does not exclude Anthropic
+### P4-F2 · BLOCKER · FIXED (p4 commit be4bad8; gate `messages && !system` + two-way unit test verified) — the stream_options gate does not exclude Anthropic
 The fix gates injection on `bodyObj.messages` — but the **Claude body also has a `messages`
 array** (`/v1/messages` takes `system` + `messages`). So `stream_options` is still injected
 into Anthropic requests → still 400 (`stream_options: Extra inputs are not permitted`) on
@@ -363,7 +366,7 @@ is the only template with top-level `system`; OpenAI-style carries system as a m
 or on `url.includes("/chat/completions")`. Add a unit test: build the claude request →
 assert `stream_options` is absent; build the openai request → assert present.
 
-### P4-F5 · NIT · OPEN — borderline prefix: capture cache_creation too, or the test is ambiguous
+### P4-F5 · NIT · FIXED (p4 commit be4bad8; creation captured from message_start, shown as read/creation pair) — borderline prefix: capture cache_creation too, or the test is ambiguous
 Agent's estimate: stable prefix ~1860–2480 tokens vs Anthropic's ~2048 minimum — **borderline**.
 If it's under, Anthropic silently doesn't cache and the Cache column shows 0 forever, which is
 indistinguishable from "capture broken". Also surface `cache_creation_input_tokens` (same
@@ -372,6 +375,18 @@ enough); both 0 = prefix below minimum. One extra field, removes all ambiguity.
 
 **Pre-warm (P4-F4b): DEFERRED with reviewer sign-off** — revisit after the owner's cache test;
 only worth building if (a) the prefix clears the minimum and (b) cold-start TTFT still hurts.
+
+## Phase 4 — CLEARED FOR OWNER TEST (as of be4bad8)
+
+All P4 findings resolved (F1/F3/F4 in 7fe1b6b; F2/F5 in be4bad8, gate + two-way test
+verified in diff). Pre-warm deferred by sign-off. Known open question the test answers:
+stable prefix is ~1860–2480 est. tokens vs Anthropic's ~2048 minimum — the Cache column's
+creation/read pair tells us which side we're on (creation>0 = caching engaged; both 0 =
+prefix below minimum → fatten stable prefix or accept no Anthropic caching on bare BASE).
+
+**Owner test protocol:** run `npm run tauri dev` in the worktree (agent paused), then 3–4
+voice turns ~30s apart. Watch LatencyPanel: turn 1 Cache should show creation>0; turns 2+
+should show read>0 AND a lower Send→1st vs the 1.8–2.0s baseline. Paste the table back.
 
 ---
 *Log format for the agent: change `OPEN` → `FIXED (p<N> commit <sha>)` with a one-line note.*
