@@ -1625,41 +1625,6 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
 
         // Handle plan (multi-step)
         if (plan && plan.steps.length > 0) {
-          // Read-only plans with needsConfirmation: false execute immediately
-          if (plan.needsConfirmation === false) {
-            setStatus("thinking");
-            planAbortRef.current = new AbortController();
-            const result = await executePlan(plan.steps, { signal: planAbortRef.current.signal });
-            planAbortRef.current = null;
-            const msg = result.success
-              ? result.finalOutput || "Done."
-              : result.error || "Plan execution failed.";
-            await recordTurn(command, msg);
-            logOutcome(command, result.success ? "answered" : "failed", result.success ? undefined : "plan_failed", undefined, msg);
-            setLastSpoken(msg);
-            setKrishnaSpeaking(true);
-            setStatus("speaking");
-            try {
-              clearTimeout(fillerTimerRef.current!);
-              fillerTimerRef.current = null;
-              if (fillerPromiseRef.current) {
-                await fillerPromiseRef.current;
-              }
-              await ttsRef.current.speak(msg);
-            } finally {
-              setKrishnaSpeaking(false);
-            }
-            setStatus("idle");
-            const cId = currentCaptureIdRef.current;
-            if (cId) {
-              if (usageData) turnTiming.setUsage(usageData);
-              turnTiming.freeze();
-              updateCommandTiming({ id: cId, timing: turnTiming.toJSON() }).catch(() => {});
-              emit("command-log-updated").catch(() => {});
-            }
-            return;
-          }
-
           pendingConfirmationRef.current = {
             type: "plan",
             spokenResponse: plan.say,

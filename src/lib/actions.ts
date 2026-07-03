@@ -99,7 +99,7 @@ export async function executeAction(
     }
 
     return {
-      spokenResponse: result.output || (result.success ? "Got it, " + (getResponseSettings().honorific || "sir") + "." : "I couldn't find a route, " + (getResponseSettings().honorific || "sir") + "."),
+      spokenResponse: result.output || "I couldn't find a route.",
     };
   }
 

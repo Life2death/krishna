@@ -10,6 +10,7 @@ import {
   Integrations,
   BrainConnection,
   VoiceIdSettings,
+  MapsSettings,
 } from "./components";
 import {
   ResponseLength,
@@ -96,6 +97,9 @@ const Settings = () => {
 
       {/* Krishna Assistant */}
       <KrishnaSettings />
+
+      {/* Maps */}
+      <MapsSettings />
 
       {/* Integrations (GitHub, etc.) */}
       <Integrations />

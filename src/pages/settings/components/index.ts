@@ -9,3 +9,4 @@ export * from "./CreateSkillDialog";
 export * from "./PersonaSelector";
 export * from "./ComputerControlToggle";
 export * from "./VoiceIdSettings";
+export * from "./MapsSettings";
