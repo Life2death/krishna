@@ -5,7 +5,8 @@
 > Follow the usual protocol: one phase per commit `feat(voiceid-status-pN)` /
 > `fix(voiceid-status-pN)`, `tsc` clean + tests green each phase, then **STOP and
 > report** for review before the next phase. Do NOT push (releases fire on tags;
-> owner pushes manually).
+> owner pushes manually). Findings ledger: `VOICE_ID_STATUS_REVIEW_FINDINGS.md` —
+> read it before starting each new phase and fix any OPEN `BLOCKER`/`BUG` first.
 
 ## 1. Goal
 
