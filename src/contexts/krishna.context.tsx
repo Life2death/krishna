@@ -20,14 +20,14 @@ import { parseYesNo } from "@/lib/parse-yes-no";
 import { saveAndConfirm } from "@/lib/resolver";
 import { getAllSkills, getSkillByName, createSkill, updateSkillUseCount } from "@/lib/repo-bound";
 import { getAllMemories, createMemory } from "@/lib/repo-bound";
-import { parseRememberCommand, buildMemoryPrompt } from "@/lib/memory";
+import { parseRememberCommand } from "@/lib/memory";
 import { detectWakeWord } from "@/lib/wake-word";
 import { parseReminderCommand } from "@/lib/reminders";
 import { createReminder, getDueReminders, updateReminder, cancelReminder } from "@/lib/repo-bound";
 import { createConversation, appendMessages, generateConversationTitle, getMostRecentConversation, deleteConversation } from "@/lib/repo-bound";
 import { isLookCommand, isUndoCommand, isJobExtractionCommand, isJobStatusCommand } from "@/lib/perception";
 import { triggerJobExtractionWorkflow, getJobExtractionStatus } from "@/lib/integrations/github-workflow";
-import { createAuditEntry, getLastReversible, logCommand, insertPendingCommand, updateCommandOutcome } from "@/lib/database";
+import { createAuditEntry, getLastReversible, logCommand, insertPendingCommand, updateCommandOutcome, updateCommandTiming } from "@/lib/database";
 import type { CommandOutcome, FailureReason } from "@/lib/database";
 import { setConfirmAction } from "@krishna/core/tools/mcp-bridge";
 import type { AssistantStatus, StepAction } from "@/types/assistant";
@@ -35,6 +35,9 @@ import type { Skill } from "@/types/skill";
 import type { Message, AttachedFile } from "@/types";
 import type { VoiceVerifyResult } from "@/lib/voice-client";
 import { MAX_FILES } from "@/config";
+import { TurnTiming } from "@/lib/turn-timing";
+import { getResponseSettings } from "@krishna/core/settings";
+import { matchCannedResponse } from "@/lib/canned-responses";
 
 export interface ConversationTurn {
   id: string;
@@ -86,7 +89,7 @@ interface KrishnaContextType {
 
 const KrishnaContext = createContext<KrishnaContextType | undefined>(undefined);
 
-const BASE_SYSTEM_PROMPT = [
+export const BASE_SYSTEM_PROMPT = [
   'You are Krishna, an AI desktop assistant. You help users by answering questions and performing actions on their computer.',
   '',
   'CRITICAL - Action Protocol:',
@@ -116,6 +119,15 @@ const BASE_SYSTEM_PROMPT = [
   '- NEVER claim you cannot remember or that memory only lasts this session. The save is confirmed with the user before storing.',
   '- Already-known facts are listed under "Things I know about the user" in each prompt — do not re-save them.',
   '',
+  'TRAVEL TIME:',
+  '- "how long to work?" → Check the user\'s confirmed memories for a known "work" / "work address". If known, emit:',
+  '```action',
+  '{"action":"travel_time","from":"home","to":"work","mode":"car"}',
+  '```',
+  '- `from` defaults to "home" when omitted; `mode` defaults to "car".',
+  '- "how long to the airport by bike?" → mode "two_wheeler". "by train" → mode "transit".',
+  '- If the place address is NOT known from memories, ask ONCE: "I don\'t have your {place} address — tell me and I\'ll remember it." Then use the existing remember action to store it. Do NOT retry the travel_time call with an unknown place.',
+  '',
   'MULTI-STEP TASK PLANNING (Phase 4):',
   'For complex requests like "play this song on YouTube" or "type opencode in command prompt", you can output a multi-step plan instead of a single action.',
   'Use the ```plan JSON block:',
@@ -143,6 +155,13 @@ const BASE_SYSTEM_PROMPT = [
   '  ]',
   '}',
   '```',
+  '',
+  'SPOKEN CONVERSATION ETIQUETTE:',
+  '- Address the user with the honorific "{honorific}" (e.g. "Good morning, {honorific}", "On it, {honorific}").',
+  '- Reply in the same language the user used. If they greet in Hindi, reply in Hindi. If they ask in English, reply in English.',
+  '- Spoken reply: at most 2 sentences. NEVER use markdown, headings, bullet lists, or numbered lists — this is read aloud. If the question is broad, give a one-sentence answer and offer to elaborate.',
+  '- ACKNOWLEDGE-THEN-ACT: when the user\'s request requires actions or multiple steps, first speak a one-line acknowledgment with an honest timeline (e.g. "On it, {honorific} — this needs a couple of steps, give me a minute"), then emit the action/plan block. Do not start speaking the action result before acknowledging.',
+  '- If something will be slow, say so honestly before proceeding.',
 ].join("\n");
 
 const SYSTEM_PROMPT_RULES = [
@@ -275,6 +294,9 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
   const [conversationHistory, setConversationHistory] = useState<ConversationTurn[]>([]);
   const pendingUserTextRef = useRef<string>("");
   const currentCaptureIdRef = useRef<string | null>(null);
+  const fillerTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const fillerSpokenRef = useRef(false);
+  const fillerPromiseRef = useRef<Promise<void> | null>(null);
   const [voice, setVoiceState] = useState<string>(() => {
     return safeLocalStorage.getItem(STORAGE_KEYS.KRISHNA_VOICE) || "";
   });
@@ -394,9 +416,10 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
     response?: string,
     _source: "voice" | "text" | "mobile" = "voice",
     captureId?: string,
+    timing?: string,
   ) => {
     const id = captureId ?? currentCaptureIdRef.current ?? crypto.randomUUID();
-    updateCommandOutcome({ id, outcome, failureReason, detail, response }).catch((err) =>
+    updateCommandOutcome({ id, outcome, failureReason, detail, response, timing }).catch((err) =>
       console.error("Failed to update command outcome:", err)
     );
     emit("command-log-updated").catch(() => {});
@@ -1143,6 +1166,9 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
       setPendingCommand(command);
       setStatus("thinking");
 
+      const turnTiming = new TurnTiming();
+      turnTiming.mark("end_of_speech");
+
       // INSERT pending row immediately so it's visible in the Dashboard live view
       const captureId = crypto.randomUUID();
       currentCaptureIdRef.current = captureId;
@@ -1150,6 +1176,32 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
         console.error("Failed to insert pending command:", err)
       );
       emit("command-log-updated").catch(() => {});
+
+      // Phase 2: zero-LLM fast path for greetings/thanks/acknowledgments
+      const cannedHonorific = getResponseSettings().honorific || "sir";
+      const canned = matchCannedResponse(command, cannedHonorific);
+      if (canned) {
+        const speak = canned.response;
+        await recordTurn(pendingUserTextRef.current, speak);
+        logOutcome(command, "answered", undefined, undefined, speak);
+        setLastSpoken(speak);
+        setKrishnaSpeaking(true);
+        setStatus("speaking");
+        try {
+          turnTiming.mark("first_audio");
+          await ttsRef.current.speak(speak);
+        } finally {
+          turnTiming.mark("last_audio");
+          setKrishnaSpeaking(false);
+        }
+        turnTiming.freeze();
+        updateCommandTiming({ id: captureId, timing: turnTiming.toJSON() }).catch((err) =>
+          console.error("Failed to persist turn timing:", err)
+        );
+        emit("command-log-updated").catch(() => {});
+        setStatus("idle");
+        return;
+      }
 
       if (!selectedAIProvider.provider) {
         const errMsg = "No AI provider configured — open Settings › Brain.";
@@ -1458,6 +1510,7 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
 
         abortRef.current = new AbortController();
       const signal = abortRef.current.signal;
+      let usageData: { prompt_tokens?: number; completion_tokens?: number; cache_read_input_tokens?: number; cache_creation_input_tokens?: number } | undefined;
 
       try {
         historyRef.current = [...historyRef.current, { role: "user" as const, content: command }].slice(-8);
@@ -1467,25 +1520,62 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
           APP_ALIASES.filter(a => a.type === "url"),
         );
         const now = new Date();
-        const timeContext = `\n\nCurrent date and time: ${now.toLocaleString("en-IN", { timeZone: "Asia/Kolkata", weekday: "long", year: "numeric", month: "long", day: "numeric", hour: "2-digit", minute: "2-digit" })} IST`;
+        const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+        const timeContext = `\n\nCurrent date and time: ${now.toLocaleString("en-IN", { timeZone, weekday: "long", year: "numeric", month: "long", day: "numeric", hour: "2-digit", minute: "2-digit" })}`;
         const toolsSection = buildToolsSection(command);
+        const honorific = getResponseSettings().honorific || "sir";
         const personaPrefix = selectedSystemPrompt && selectedSystemPrompt !== DEFAULT_SYSTEM_PROMPT
-          ? selectedSystemPrompt + "\n\n"
+          ? selectedSystemPrompt.replace(/\{honorific\}/g, honorific) + "\n\n"
           : "";
-        const systemPrompt = buildMemoryPrompt(personaPrefix + BASE_SYSTEM_PROMPT + "\n\n" + toolsSection + SYSTEM_PROMPT_RULES + timeContext, memories);
+        const stableBase = (personaPrefix + BASE_SYSTEM_PROMPT + "\n\n" + toolsSection + SYSTEM_PROMPT_RULES)
+          .replace(/\{honorific\}/g, honorific);
+        const confirmedMemories = memories.filter(m => m.confirmed && m.value);
+        const memoryBlock = confirmedMemories.length > 0
+          ? "\n\nThings I know about the user:\n" + confirmedMemories.map(m => "- " + (m.key ? m.key + ": " : "") + m.value).join("\n") + "\n\nUse these facts when relevant."
+          : "";
+        const volatilePrompt = timeContext + memoryBlock;
         let fullResponse = "";
+        fillerSpokenRef.current = false;
+        turnTiming.mark("request_sent");
+        fillerTimerRef.current = setTimeout(() => {
+          if (!fillerSpokenRef.current) {
+            fillerSpokenRef.current = true;
+            fillerPromiseRef.current = ttsRef.current.speak("One moment, " + honorific).then(() => {
+              fillerPromiseRef.current = null;
+            }).catch(() => {
+              fillerPromiseRef.current = null;
+            });
+          }
+        }, 1500);
+        let firstChunk = true;
+        const voiceSettings = getResponseSettings();
         for await (const chunk of fetchAIResponse({
           provider,
           selectedProvider: selectedAIProvider,
-          systemPrompt,
+          stableSystemPrompt: stableBase,
+          volatileSystemPrompt: volatilePrompt,
           history: historyRef.current,
           userMessage: command,
           imagesBase64: attachedFilesRef.current.map(f => f.base64),
           signal,
+          maxOutputTokens: voiceSettings.voiceMaxTokens,
+          modelOverride: voiceSettings.voiceModel || undefined,
+          onUsage: (u) => {
+            if (!usageData) usageData = {};
+            if (u.prompt_tokens !== undefined) usageData.prompt_tokens = u.prompt_tokens;
+            if (u.completion_tokens !== undefined) usageData.completion_tokens = u.completion_tokens;
+            if (u.cache_read_input_tokens !== undefined) usageData.cache_read_input_tokens = u.cache_read_input_tokens;
+            if (u.cache_creation_input_tokens !== undefined) usageData.cache_creation_input_tokens = u.cache_creation_input_tokens;
+          },
         })) {
           if (signal.aborted) break;
+          if (firstChunk) {
+            firstChunk = false;
+            turnTiming.mark("first_token");
+          }
           fullResponse += chunk;
         }
+        turnTiming.mark("last_token");
 
         if (!fullResponse || signal.aborted) {
           setStatus("idle");
@@ -1493,6 +1583,13 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
         }
 
         const { spokenText, actions, plan } = parseActions(fullResponse);
+
+        // Suppress generic filler when reply is a plan-ack (the plan.say is sufficient)
+        if (plan?.steps.length) {
+          clearTimeout(fillerTimerRef.current!);
+          fillerTimerRef.current = null;
+        }
+
         historyRef.current = [...historyRef.current, { role: "assistant" as const, content: fullResponse }].slice(-8);
         let spokenTextRecorded = false;
 
@@ -1504,9 +1601,26 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
           setLastSpoken(spokenText);
           setKrishnaSpeaking(true);
           try {
+            // Wait for filler to finish naturally (rare with 1500ms threshold)
+            clearTimeout(fillerTimerRef.current!);
+            fillerTimerRef.current = null;
+            if (fillerPromiseRef.current) {
+              await fillerPromiseRef.current;
+            }
+            turnTiming.mark("first_audio");
             await ttsRef.current.speak(spokenText);
           } finally {
+            turnTiming.mark("last_audio");
             setKrishnaSpeaking(false);
+          }
+          const cId = currentCaptureIdRef.current;
+          if (cId) {
+            if (usageData) turnTiming.setUsage(usageData);
+            turnTiming.freeze();
+            updateCommandTiming({ id: cId, timing: turnTiming.toJSON() }).catch((err) =>
+              console.error("Failed to persist turn timing:", err)
+            );
+            emit("command-log-updated").catch(() => {});
           }
         }
 
@@ -1604,19 +1718,33 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
             }
           }
       } catch (err) {
+        clearTimeout(fillerTimerRef.current!);
+        fillerTimerRef.current = null;
         if (signal.aborted) {
           setStatus("idle");
           return;
         }
         const msg = err instanceof Error ? err.message : "Something went wrong";
         setLastError(msg);
+        turnTiming.mark("last_token");
         logOutcome(command, "failed", "ai_error", msg);
         setStatus("speaking");
         setKrishnaSpeaking(true);
         try {
+          turnTiming.mark("first_audio");
           await ttsRef.current.speak("I had trouble: " + msg);
         } finally {
+          turnTiming.mark("last_audio");
           setKrishnaSpeaking(false);
+        }
+        const cId = currentCaptureIdRef.current;
+        if (cId) {
+          if (usageData) turnTiming.setUsage(usageData);
+          turnTiming.freeze();
+          updateCommandTiming({ id: cId, timing: turnTiming.toJSON() }).catch((err) =>
+            console.error("Failed to persist turn timing:", err)
+          );
+          emit("command-log-updated").catch(() => {});
         }
       } finally {
         clearFiles();

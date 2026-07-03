@@ -97,10 +97,15 @@ export interface ChatRepo {
     provider?: unknown;
     selectedProvider?: unknown;
     systemPrompt?: string;
+    stableSystemPrompt?: string;
+    volatileSystemPrompt?: string;
     history?: Message[];
     userMessage: string;
     imagesBase64?: string[];
     signal?: AbortSignal;
+    maxOutputTokens?: number;
+    modelOverride?: string;
+    onUsage?: (usage: { prompt_tokens?: number; completion_tokens?: number; cache_read_input_tokens?: number }) => void;
   }): AsyncIterable<string>;
 }
 
@@ -167,10 +172,15 @@ const localRepo: Repo = {
       provider?: any;
       selectedProvider?: any;
       systemPrompt?: string;
+      stableSystemPrompt?: string;
+      volatileSystemPrompt?: string;
       history?: Message[];
       userMessage: string;
       imagesBase64?: string[];
       signal?: AbortSignal;
+      maxOutputTokens?: number;
+      modelOverride?: string;
+      onUsage?: (usage: { prompt_tokens?: number; completion_tokens?: number; cache_read_input_tokens?: number; cache_creation_input_tokens?: number }) => void;
     }): AsyncIterable<string> {
       const { fetchAIResponse: fn } = await import("@/lib/functions");
       yield* fn(params as Parameters<typeof fn>[0]);

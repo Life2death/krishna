@@ -10,11 +10,15 @@ import {
   Integrations,
   BrainConnection,
   VoiceIdSettings,
+  MapsSettings,
 } from "./components";
 import {
   ResponseLength,
   LanguageSelector,
   AutoScrollToggle,
+  HonorificInput,
+  VoiceMaxTokensInput,
+  VoiceModelInput,
 } from "@/pages/responses/components";
 import { CreateSkillDialog, PersonaSelector } from "./components";
 import { PageLayout } from "@/layouts";
@@ -94,6 +98,9 @@ const Settings = () => {
       {/* Krishna Assistant */}
       <KrishnaSettings />
 
+      {/* Maps */}
+      <MapsSettings />
+
       {/* Integrations (GitHub, etc.) */}
       <Integrations />
 
@@ -129,6 +136,15 @@ const Settings = () => {
 
       {/* Auto-Scroll Toggle */}
       <AutoScrollToggle />
+
+      {/* Honorific */}
+      <HonorificInput />
+
+      {/* Voice Max Tokens */}
+      <VoiceMaxTokensInput />
+
+      {/* Voice Model */}
+      <VoiceModelInput />
 
     </PageLayout>
   );

@@ -57,8 +57,9 @@ describe("updateCommandOutcome", () => {
     expect(params[0]).toBe("answered");
     expect(params[1]).toBeNull();
     expect(params[2]).toBeNull();
-    expect(params[3]).toContain("Opening Chrome");
-    expect(params[4]).toBe("test-id-1");
+    expect(params[3]).toBeNull();
+    expect(params[4]).toContain("Opening Chrome");
+    expect(params[5]).toBe("test-id-1");
   });
 
   it("updates a pending row to failed with reason", async () => {

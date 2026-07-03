@@ -2,6 +2,9 @@ export interface ResponseSettings {
   responseLength: string;
   language: string;
   autoScroll: boolean;
+  honorific: string;
+  voiceMaxTokens: number;
+  voiceModel: string;
 }
 
 export type SettingsGetter = () => ResponseSettings;

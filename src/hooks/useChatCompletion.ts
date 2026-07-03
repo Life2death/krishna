@@ -219,10 +219,14 @@ export const useChatCompletion = (
         let fullResponse = "";
 
         try {
+          const appliedSystemPrompt = (systemPrompt || "").replace(
+            /\{honorific\}/g,
+            getResponseSettings().honorific || "sir"
+          ) || undefined;
           const aiIterable = localFetchAIResponse({
             provider: provider!,
             selectedProvider: selectedAIProvider,
-            systemPrompt: systemPrompt || undefined,
+            systemPrompt: appliedSystemPrompt,
             history: messageHistory,
             userMessage: input,
             imagesBase64,

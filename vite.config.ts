@@ -24,6 +24,8 @@ export default defineConfig(async () => ({
       "@krishna/core/secrets": path.resolve(__dirname, "packages/core/secrets.ts"),
       "@krishna/core/tools/mcp-bridge": path.resolve(__dirname, "packages/core/tools/mcp-bridge.ts"),
       "@krishna/core/tools/computer": path.resolve(__dirname, "packages/core/tools/computer.ts"),
+      "@krishna/core/tools/get-travel-time": path.resolve(__dirname, "packages/core/tools/get-travel-time.ts"),
+      "@krishna/core/tools/place-resolver": path.resolve(__dirname, "packages/core/tools/place-resolver.ts"),
       "@krishna/core/tools": path.resolve(__dirname, "packages/core/tools/index.ts"),
       "@krishna/core/functions": path.resolve(__dirname, "packages/core/functions/index.ts"),
       "@krishna/core/executor": path.resolve(__dirname, "packages/core/executor.ts"),
@@ -32,10 +34,23 @@ export default defineConfig(async () => ({
       "@krishna/core/config-constants": path.resolve(__dirname, "packages/core/config-constants.ts"),
       "@krishna/core/chat-constants": path.resolve(__dirname, "packages/core/chat-constants.ts"),
       "@krishna/core/safe-local-storage": path.resolve(__dirname, "packages/core/safe-local-storage.ts"),
+      "@krishna/core/response-settings.constants": path.resolve(__dirname, "packages/core/response-settings.constants.ts"),
+      "@krishna/core/redact": path.resolve(__dirname, "packages/core/redact.ts"),
     },
   },
   test: {
+    environment: "jsdom",
+    globals: true,
+    setupFiles: ["./src/__tests__/setup.ts"],
+    include: ["src/**/*.{test,spec}.{ts,tsx}", "packages/core/sync/**/*.{test,spec}.{ts,tsx}"],
+    exclude: ["node_modules/**", "apps/**"],
     pool: "threads",
+    coverage: {
+      provider: "v8",
+      reporter: ["text", "json", "html"],
+      include: ["src/lib/**/*.ts", "src/lib/**/*.tsx"],
+      exclude: ["src/lib/database/**", "node_modules/**"],
+    },
   } satisfies UserConfig["test"],
   // Vite options tailored for Tauri development and only applied in `tauri dev` or `tauri build`
   //

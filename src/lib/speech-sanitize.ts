@@ -69,7 +69,7 @@ export function sanitizeSpeech(text: string): string {
     .replace(/>\s/g, "")
     .replace(/https?:\/\/\S+/gi, (m) => urlToSpokenName(m))
     .replace(/\bwww\.\S+/gi, (m) => urlToSpokenName(m))
-    .replace(/\b[a-z0-9-]+(?:\.[a-z0-9-]+)+\.[a-z]{2,}(?:\/\S*)?/gi, (m) => urlToSpokenName(m))
+    .replace(/\b([a-z0-9-]+\.)+[a-z]{2,}(?:\/\S*)?/gi, (m) => urlToSpokenName(m))
     .replace(/[ \t]{2,}/g, " ")
     .trim();
 }

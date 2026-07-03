@@ -57,6 +57,9 @@ export async function initCore(): Promise<Client> {
     responseLength: "auto",
     language: "english",
     autoScroll: true,
+    honorific: "sir",
+    voiceMaxTokens: 100,
+    voiceModel: "",
   }));
 
   setSecretGetter(async () => null);

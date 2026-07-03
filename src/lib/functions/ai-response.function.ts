@@ -47,20 +47,30 @@ export async function* fetchAIResponse(params: {
     variables: Record<string, string>;
   };
   systemPrompt?: string;
+  stableSystemPrompt?: string;
+  volatileSystemPrompt?: string;
   history?: Message[];
   userMessage: string;
   imagesBase64?: string[];
   signal?: AbortSignal;
+  maxOutputTokens?: number;
+  modelOverride?: string;
+  onUsage?: (usage: { prompt_tokens?: number; completion_tokens?: number; cache_read_input_tokens?: number; cache_creation_input_tokens?: number }) => void;
 }): AsyncIterable<string> {
   try {
     const {
       provider,
       selectedProvider,
       systemPrompt,
+      stableSystemPrompt,
+      volatileSystemPrompt,
       history = [],
       userMessage,
       imagesBase64 = [],
       signal,
+      maxOutputTokens,
+      modelOverride,
+      onUsage,
     } = params;
 
     // Check if already aborted
@@ -90,7 +100,7 @@ export async function* fetchAIResponse(params: {
 
     const extractedVariables = extractVariables(provider.curl);
     const requiredVars = extractedVariables.filter(
-      ({ key }) => key !== "SYSTEM_PROMPT" && key !== "TEXT" && key !== "IMAGE"
+      ({ key }) => key !== "SYSTEM_PROMPT" && key !== "STABLE_SYSTEM_PROMPT" && key !== "VOLATILE_SYSTEM_PROMPT" && key !== "TEXT" && key !== "IMAGE"
     );
     for (const { key } of requiredVars) {
       if (
@@ -136,7 +146,14 @@ export async function* fetchAIResponse(params: {
           value,
         ])
       ),
-      SYSTEM_PROMPT: enhancedSystemPrompt || "",
+      ...(modelOverride ? { MODEL: modelOverride } : {}),
+      SYSTEM_PROMPT: stableSystemPrompt
+        ? buildEnhancedSystemPrompt(stableSystemPrompt + "\n\n" + (volatileSystemPrompt || ""))
+        : enhancedSystemPrompt || "",
+      STABLE_SYSTEM_PROMPT: stableSystemPrompt
+        ? buildEnhancedSystemPrompt(stableSystemPrompt)
+        : enhancedSystemPrompt || "",
+      VOLATILE_SYSTEM_PROMPT: volatileSystemPrompt || "",
     };
 
     bodyObj = deepVariableReplacer(bodyObj, allVariables);
@@ -155,6 +172,22 @@ export async function* fetchAIResponse(params: {
         } else {
           bodyObj.stream = true;
         }
+        if (typeof bodyObj.stream_options === "undefined" && bodyObj.messages && !bodyObj.system) {
+          bodyObj.stream_options = { include_usage: true };
+        }
+      }
+    }
+
+    // Override max_tokens when voice path provides a cap
+    if (maxOutputTokens !== undefined) {
+      const maxTokensKey = Object.keys(bodyObj).find(
+        (k) => ["max_tokens", "max_completion_tokens", "maxoutputtokens"].includes(k.toLowerCase())
+      );
+      console.log("[fetchAIResponse] overriding max-tokens key:", maxTokensKey, "→", maxOutputTokens);
+      if (maxTokensKey) {
+        bodyObj[maxTokensKey] = maxOutputTokens;
+      } else {
+        console.warn("fetchAIResponse: maxOutputTokens set but no max-tokens key found in body");
       }
     }
 
@@ -264,6 +297,31 @@ export async function* fetchAIResponse(params: {
           if (!trimmed || trimmed === "[DONE]") continue;
           try {
             const parsed = JSON.parse(trimmed);
+
+            if (onUsage) {
+              // Anthropic message_start — has input + cache info
+              if (parsed.message?.usage) {
+                onUsage({
+                  prompt_tokens: parsed.message.usage.input_tokens,
+                  completion_tokens: parsed.message.usage.output_tokens,
+                  cache_read_input_tokens: parsed.message.usage.cache_read_input_tokens,
+                  cache_creation_input_tokens: parsed.message.usage.cache_creation_input_tokens,
+                });
+              }
+              // OpenAI-style final usage chunk
+              if (parsed.usage && !parsed.type) {
+                onUsage({
+                  prompt_tokens: parsed.usage.prompt_tokens ?? parsed.usage.input_tokens,
+                  completion_tokens: parsed.usage.completion_tokens ?? parsed.usage.output_tokens,
+                  cache_read_input_tokens: parsed.usage.prompt_tokens_details?.cached_tokens ?? parsed.usage.cache_read_input_tokens,
+                });
+              }
+              // Anthropic message_delta — output tokens only
+              if (parsed.type === "message_delta" && parsed.usage) {
+                onUsage({ completion_tokens: parsed.usage.output_tokens });
+              }
+            }
+
             const delta = getStreamingContent(
               parsed,
               provider?.responseContentPath || ""

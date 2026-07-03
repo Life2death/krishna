@@ -99,12 +99,39 @@ describe("sanitizeSpeech", () => {
     expect(result).toBe("See the docs");
   });
 
-  it("leaves non-URL text unchanged", () => {
-    const result = sanitizeSpeech("I prefer Node.js for that");
-    expect(result).toBe("I prefer Node.js for that");
+  it("replaces bare 2-label hostname with SLD (new: youtube.com)", () => {
+    const result = sanitizeSpeech("I can open youtube.com");
+    expect(result).toContain("youtube");
+    expect(result).not.toContain("youtube.com");
   });
 
-  it("leaves single-label host with port unchanged (regex requires ≥3 labels)", () => {
+  it("replaces bare 2-label weather.com with SLD", () => {
+    const result = sanitizeSpeech("check weather.com");
+    expect(result).toContain("weather");
+    expect(result).not.toContain("weather.com");
+  });
+
+  it("converts 'Node.js' to SLD 'node' (acceptable false positive)", () => {
+    const result = sanitizeSpeech("I prefer Node.js for that");
+    expect(result).toBe("I prefer node for that");
+  });
+
+  it("leaves '3.5' untouched (single-digit TLD)", () => {
+    const result = sanitizeSpeech("it costs 3.5 dollars");
+    expect(result).toBe("it costs 3.5 dollars");
+  });
+
+  it("leaves 'e.g.' untouched (single-char label after dot)", () => {
+    const result = sanitizeSpeech("check e.g. this");
+    expect(result).toBe("check e.g. this");
+  });
+
+  it("leaves 'Mr.' untouched (single-char label after dot)", () => {
+    const result = sanitizeSpeech("call Mr. X");
+    expect(result).toBe("call Mr. X");
+  });
+
+  it("leaves single-label host with port unchanged", () => {
     const result = sanitizeSpeech("check localhost:3000");
     expect(result).toBe("check localhost:3000");
   });

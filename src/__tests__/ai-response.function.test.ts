@@ -11,6 +11,33 @@ const mockTauriFetch = vi.hoisted(() => vi.fn());
 vi.mock("@bany/curl-to-json", () => ({
   default: (curl: string) => {
     if (curl.includes("bad-curl:::")) throw new Error("bad syntax");
+    if (curl.includes("anthropic")) {
+      return {
+        url: "https://api.anthropic.com/v1/messages",
+        method: "POST",
+        header: { "x-api-key": "{{API_KEY}}", "anthropic-version": "2023-06-01" },
+        data: {
+          model: "{{MODEL}}",
+          system: [{"type":"text","text":"{{STABLE_SYSTEM_PROMPT}}","cache_control":{"type":"ephemeral"}},{"type":"text","text":"{{VOLATILE_SYSTEM_PROMPT}}"}],
+          messages: [{ role: "user", content: "{{TEXT}}" }],
+          max_tokens: 1024,
+          stream: true,
+        },
+      };
+    }
+    if (curl.includes("groq")) {
+      return {
+        url: "https://api.groq.com/v1/chat/completions",
+        method: "POST",
+        header: { Authorization: "Bearer {{API_KEY}}" },
+        data: {
+          model: "{{MODEL}}",
+          messages: [{ role: "user", content: "{{TEXT}}" }],
+          max_completion_tokens: 1024,
+          stream: true,
+        },
+      };
+    }
     return {
       url: "https://api.openai.com/v1/chat/completions",
       method: "POST",
@@ -265,5 +292,100 @@ describe("fetchAIResponse", () => {
     const roles = body.messages.map((m: any) => m.role);
     expect(roles).toContain("user");
     expect(roles).toContain("assistant");
+  });
+
+  // ── stream_options injection (P4-F2) ──────────────────────────────────────
+  it("injects stream_options for OpenAI-style bodies (messages, no top-level system)", async () => {
+    mockStreamingResponse(["ok"]);
+    await collectChunks(
+      fetchAIResponse({ provider: openAiProvider, selectedProvider, userMessage: "test" })
+    );
+    const body = JSON.parse(mockTauriFetch.mock.calls[0][1].body);
+    expect(body.stream_options).toEqual({ include_usage: true });
+  });
+
+  it("does NOT inject stream_options for Anthropic-style bodies (has top-level system)", async () => {
+    const anthropicProvider: TYPE_PROVIDER = {
+      id: "claude",
+      name: "Claude",
+      curl: `curl -X POST "https://api.anthropic.com/v1/messages" -H "x-api-key: {{API_KEY}}" -d '{"model":"{{MODEL}}","system":"{{SYSTEM_PROMPT}}","messages":[{"role":"user","content":"{{TEXT}}"}],"max_tokens":1024,"stream":true}'`,
+      responseContentPath: "content[0].text",
+      streaming: true,
+    };
+    mockStreamingResponse(["ok"]);
+    await collectChunks(
+      fetchAIResponse({ provider: anthropicProvider, selectedProvider, userMessage: "test" })
+    );
+    const body = JSON.parse(mockTauriFetch.mock.calls[0][1].body);
+    expect(body.stream_options).toBeUndefined();
+  });
+
+  // ── Phase 6: maxOutputTokens ────────────────────────────────────────────────
+
+  it("overrides max_tokens when maxOutputTokens is set (claude-style)", async () => {
+    const anthropicProvider: TYPE_PROVIDER = {
+      id: "claude",
+      name: "Claude",
+      curl: `curl -X POST "https://api.anthropic.com/v1/messages" -H "x-api-key: {{API_KEY}}" -d '{"model":"{{MODEL}}","system":"{{SYSTEM_PROMPT}}","messages":[{"role":"user","content":"{{TEXT}}"}],"max_tokens":1024,"stream":true}'`,
+      responseContentPath: "content[0].text",
+      streaming: true,
+    };
+    mockStreamingResponse(["ok"]);
+    await collectChunks(
+      fetchAIResponse({ provider: anthropicProvider, selectedProvider, userMessage: "test", maxOutputTokens: 200 })
+    );
+    const body = JSON.parse(mockTauriFetch.mock.calls[0][1].body);
+    expect(body.max_tokens).toBe(200);
+  });
+
+  it("overrides max_completion_tokens when maxOutputTokens is set (groq-style)", async () => {
+    const groqProvider: TYPE_PROVIDER = {
+      id: "groq",
+      name: "Groq",
+      curl: `curl -X POST "https://api.groq.com/v1/chat/completions" -H "Authorization: Bearer {{API_KEY}}" -d '{"model":"{{MODEL}}","messages":[{"role":"user","content":"{{TEXT}}"}],"max_completion_tokens":1024,"stream":true}'`,
+      responseContentPath: "choices[0].message.content",
+      streaming: true,
+    };
+    mockStreamingResponse(["ok"]);
+    await collectChunks(
+      fetchAIResponse({ provider: groqProvider, selectedProvider, userMessage: "test", maxOutputTokens: 150 })
+    );
+    const body = JSON.parse(mockTauriFetch.mock.calls[0][1].body);
+    expect(body.max_completion_tokens).toBe(150);
+  });
+
+  it("warns but does not crash when maxOutputTokens is set but body has no max-tokens key", async () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const noMaxTokensProvider: TYPE_PROVIDER = {
+      id: "custom",
+      name: "Custom",
+      curl: `curl -X POST "https://api.example.com/v1/chat" -H "Authorization: Bearer {{API_KEY}}" -d '{"model":"{{MODEL}}","messages":[{"role":"user","content":"{{TEXT}}"}],"stream":true}'`,
+      responseContentPath: "content",
+      streaming: true,
+    };
+    mockStreamingResponse(["ok"]);
+    await collectChunks(
+      fetchAIResponse({ provider: noMaxTokensProvider, selectedProvider, userMessage: "test", maxOutputTokens: 200 })
+    );
+    const body = JSON.parse(mockTauriFetch.mock.calls[0][1].body);
+    expect(body.max_tokens).toBeUndefined();
+    expect(warnSpy).toHaveBeenCalled();
+    warnSpy.mockRestore();
+  });
+
+  it("does not override max_tokens when maxOutputTokens is omitted (chat path)", async () => {
+    const anthropicProvider: TYPE_PROVIDER = {
+      id: "claude",
+      name: "Claude",
+      curl: `curl -X POST "https://api.anthropic.com/v1/messages" -H "x-api-key: {{API_KEY}}" -d '{"model":"{{MODEL}}","system":"{{SYSTEM_PROMPT}}","messages":[{"role":"user","content":"{{TEXT}}"}],"max_tokens":1024,"stream":true}'`,
+      responseContentPath: "content[0].text",
+      streaming: true,
+    };
+    mockStreamingResponse(["ok"]);
+    await collectChunks(
+      fetchAIResponse({ provider: anthropicProvider, selectedProvider, userMessage: "test" })
+    );
+    const body = JSON.parse(mockTauriFetch.mock.calls[0][1].body);
+    expect(body.max_tokens).toBe(1024);
   });
 });

@@ -41,6 +41,9 @@ setSettingsGetter(() => ({
   responseLength: "auto",
   language: "english",
   autoScroll: true,
+  honorific: "sir",
+  voiceMaxTokens: 100,
+  voiceModel: "",
 }));
 
 // Mock FileReader for blobToBase64 tests

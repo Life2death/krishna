@@ -110,5 +110,12 @@ pub fn migrations() -> Vec<Migration> {
             sql: include_str!("migrations/normalize-updated-at.sql"),
             kind: MigrationKind::Up,
         },
+        // Migration 17: Add timing TEXT column to command_log for M1.5 latency instrumentation
+        Migration {
+            version: 17,
+            description: "add_timing_to_command_log",
+            sql: include_str!("migrations/add-timing-to-command-log.sql"),
+            kind: MigrationKind::Up,
+        },
     ]
 }
