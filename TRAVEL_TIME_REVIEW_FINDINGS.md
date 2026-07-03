@@ -269,5 +269,40 @@ were spoken) was replaced with an explicit routing system:
 T4-F4 is the only T4 finding addressed in this pass. T4-F1 (phantom saves), T4-F2 (crash),
 and T4-F3 (network errors) remain OPEN for their respective phases.
 
+### Reviewer verdict on P1 (checked against the real diff)
+**Core fix is correct — T4-F4 is genuinely resolved.** The `kind`-based routing is sound:
+`answer` always speaks + records + logs (ack and answer both spoken, as required); `status`
+preserves the `!spokenTextRecorded` gate; the no-`kind` legacy branch is byte-preserving. But
+three items, one of which the agent's own summary got backwards:
+
+#### P1-R1 · BUG (test coverage) · OPEN — the new tests are at the SAME shallow layer that let T4-F4 through
+The commit note claims the 9 tests cover "the layer T2/T3 tests missed." That's inverted:
+all 9 assert on `executeAction`'s **return value** (`result.kind`/`result.ok`) — which is
+*exactly* the layer T2/T3 already tested. The layer that actually missed T4-F4 is the
+**context's speak decision** in `krishna.context.tsx` (does `ttsRef.current.speak` fire for a
+`kind:"answer"` result?). Nothing added here would fail if that routing regressed again — so
+the specific bug we just fixed is still unguarded. **Fix:** add at least one test that
+exercises the context routing (or extract the "given a result, should it speak?" decision
+into a pure, unit-testable helper and test that a `kind:"answer"` result → speak, a
+`kind:"status"` result with a prior ack → no speak). This was the primary test requirement of
+P1; it isn't met yet. Not a merge-blocker for proceeding to P2, but MUST close before
+`fix/travel-t4` merges.
+
+#### P1-R2 · NIT · OPEN — "couldn't find app" behavior changed (agent claimed "byte-for-byte")
+`{ kind: "status", spokenResponse: "I couldn't find an app named X" }`: under the OLD filter
+this string started with neither "Opening" nor "Failed", so it was **silently dropped and not
+logged**. Now, as `status`, it gets **spoken and logged as `answered`**. The speaking part is
+a genuine UX improvement (silence on a missing app was bad) — keep it — but logging a
+not-found as `answered` mis-inflates the insights success count (the very thing the old
+inline comment guarded against). Consider a `kind:"status"` + `ok:false` → log `tool_failed`
+for the not-found path.
+
+#### P1-R3 · NIT · OPEN — travel clarification logged as a failure
+`travel_time` with no destination returns `kind:"answer", ok:false` → logged
+`failed`/`tool_failed`. But "Where would you like to go?" is a clarifying question, not a tool
+failure — it shouldn't count against the failure stats. Minor insight noise; a third
+`kind:"prompt"` (speak, log neither answered nor failed) would be cleaner if this pattern
+recurs.
+
 ---
 *Log format for the agent: change `OPEN` → `FIXED (p<N> commit <sha>)` with a one-line note.*
