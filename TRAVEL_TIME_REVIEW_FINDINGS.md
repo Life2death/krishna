@@ -227,5 +227,29 @@ assistant's reply. Ties into `NETWORK_RESILIENCE_PLAN.md` (new doc, same date): 
 map to a human sentence ("I'm having network trouble, {honorific} — check the connection")
 and offline state should be announced once, not per-turn.
 
+### T4-F4 · BLOCKER · OPEN — travel answers are never spoken: the action-result speech filter drops them
+Owner report: "how much time to travel to work?" → Krishna spoke only the ack, then silently
+opened the Maps page. Root cause in `src/contexts/krishna.context.tsx` (~line 1691, legacy
+single-action path):
+```ts
+const isStatus = result.spokenResponse.startsWith("Opening") || result.spokenResponse.startsWith("Failed");
+if (isStatus && !spokenTextRecorded) { ...speak... }
+```
+Action results are ONLY spoken when they start with "Opening" or "Failed" — a prefix
+heuristic built for the old `open` action. Every travel_time response ("By car it's about 40
+minutes, {honorific}." / "I've opened the route on Maps — the live traffic lookup didn't go
+through this time, {honorific}.") matches neither prefix and is **silently discarded**. This
+means even a fully successful Google call would never be heard — the tool's core deliverable
+(spoken travel times) is unreachable on the voice path. T4 acceptance item 2 cannot pass
+until this is fixed. The T2/T3 unit tests missed it because they stop at
+`executeAction`'s return value; nothing tests the context's speak decision.
+**Fix:** stop inferring "should this be spoken" from string prefixes. Have `executeAction`
+return an explicit flag (e.g. `speak: true` / `kind: "answer" | "status"`) and speak
+whenever `spokenResponse` is a user-facing answer. At minimum: travel_time results must
+always be spoken (and recorded via recordTurn + logOutcome "answered"/"tool_failed" like the
+status path does). Also decide the interaction with a prior ack (`spokenTextRecorded`) —
+for travel_time the ack ("I'll check…") and the answer ("By car…") are complementary and
+BOTH should be spoken.
+
 ---
 *Log format for the agent: change `OPEN` → `FIXED (p<N> commit <sha>)` with a one-line note.*
