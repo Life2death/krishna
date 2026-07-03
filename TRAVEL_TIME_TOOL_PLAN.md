@@ -1,14 +1,18 @@
 # Travel-time tool — "how long from home to work?" — implementation plan
 
-> **For the implementing agent.** Owner-priority feature. **Provider order updated
-> 2026-07-03: Google Routes = primary, Ola Maps = secondary/fallback** (flipped from the
-> original Ola-first plan). Worktree + checkpoints; commit prefix `feat(travel)`; findings
-> loop as usual via `M1_5_REVIEW_FINDINGS.md`-style review (reviewer opens a section per
-> commit).
+> **For the implementing agent.** Owner-priority feature. **v1 = Google Routes ONLY, English
+> only** (updated 2026-07-03). Ola Maps is NOT a provider this tool depends on, automatically
+> falls back to, or needs to exist at all — nothing in T1 should assume Ola is present. If
+> ever built, Ola is a separate, explicitly user-invoked "second opinion" check (e.g. "what
+> does Ola say about this route?"), never a silent substitute for a Google answer. See
+> "Ola Maps — optional future comparison check" below; it's reference material, not a task on
+> the checklist. Worktree + checkpoints; commit prefix `feat(travel)`; findings loop as usual
+> via `M1_5_REVIEW_FINDINGS.md`-style review (reviewer opens a section per commit).
 >
-> ⚠️ **Owner prerequisite before T4 live test:** the Google Routes key was exposed in chat
-> and MUST be regenerated in Google Cloud console, then re-vaulted. The app reads it from
-> secure storage (Settings), not the repo.
+> ✅ **Key prerequisite CLEARED 2026-07-03:** the previously exposed Google Routes key was
+> regenerated, re-vaulted (`GOOGLE_MAPS_API_KEY`, resource `Krishna`), and live-tested with
+> traffic data. The app reads it from secure storage (Settings), not the repo. T4 is
+> unblocked on the key front.
 
 ## Goal
 Spoken, real-time-traffic answers to travel questions: "how long to work?", "home to airport
@@ -20,40 +24,35 @@ The Eastern Expressway route is faster today at 35. The train takes around 55."
 - **New read-only client-side tool `get_travel_time`** in `packages/core/tools/` registered
   like `webSearchTool` (`packages/core/tools/index.ts:36-64`). Read-only ⇒ NOT
   confirmation-gated (`classifyAction` stays untouched).
-- **Routing provider abstraction** — an ordered **failover chain** (mirror the AI-provider
-  philosophy): `RoutingProvider` interface with `getRoutes({origin, destination, mode,
-  alternatives, languageCode}) → Route[]`. The tool tries providers in priority order and falls through
-  on quota / error / missing-key; if every provider fails it degrades to the URL-open
-  fallback (below). Feature degrades, never errors (Principle 4).
-  **v1 order: (1) Google Routes = primary, (2) Ola Maps (Krutrim) = secondary.** Owner
-  decision 2026-07-03 (flipped from Ola-first). Rationale: the Google Routes key is already
-  live-tested and working (Gateway→CST, traffic-aware), Google covers car + two-wheeler +
-  **transit** in India, and Ola's key isn't provisioned yet. Ola slots in behind the same
-  interface as an India-first / large-free-tier cost secondary once its key is vaulted.
-  - **Google Routes (PRIMARY):** Routes API v2 `computeRoutes`
+- **Routing provider abstraction** — keep the small `RoutingProvider` interface
+  (`getRoutes({origin, destination, mode, alternatives}) → Route[]`) so the Google adapter
+  isn't welded to the tool, but **v1 registers exactly ONE provider: Google Routes.** There
+  is NO failover chain and NO secondary provider — if Google fails (quota / error /
+  missing key), the tool degrades directly to the URL-open fallback (below). Feature
+  degrades, never errors (Principle 4). Do not add Ola to any chain, registry, stub, or
+  config path; nothing in the tool may depend on Ola existing.
+  - **Google Routes (the provider):** Routes API v2 `computeRoutes`
     (`routes.googleapis.com/directions/v2:computeRoutes`, POST). **T1 first step —** read the
     live Routes v2 docs and pin the exact request body + the required `X-Goog-FieldMask`
     header, `routingPreference: TRAFFIC_AWARE`, the `travelMode` enum used for each mode
     (`DRIVE` / `TWO_WHEELER` / `TRANSIT`), `duration` vs `staticDuration` (traffic delta),
-    how alternative routes + route labels/`description` come back, **and the request's
-    `languageCode` field** (BCP-47, e.g. `en-IN`/`hi-IN`) — pin its exact name/behavior too,
-    don't assume. Do NOT guess these from this plan; record them in code comments + tests.
-    Key: `GOOGLE_MAPS_API_KEY`.
-  - **Language passthrough (owner decision 2026-07-03):** the tool must speak Indian
-    languages when the user is conversing in one, matching Krishna's existing "reply in the
-    same language the user used" behavior (`BASE_SYSTEM_PROMPT`,
-    `src/contexts/krishna.context.tsx`). Map the app's current language context to a BCP-47
-    code and pass it as `languageCode` on the Google request so any Google-sourced strings
-    (road/place names, transit line names) come back localized; default `en-IN` if
-    undetermined. **Note (separate, do not fix here):** the app's `LANGUAGES` settings list
-    (`packages/core/response-settings.constants.ts`) currently has zero Indian-language
-    entries (English through Filipino) — Hindi replies already work today only via the LLM's
-    general instruction-following, not via that explicit list. Out of scope for this tool;
-    flagging for a future pass.
-  - **Ola Maps (SECONDARY, added later):** Directions API at maps.olakrutrim.com
-    (+ Geocoding API for address strings). Adds India-first two-wheeler routing and a
-    ~500K–5M/mo free tier for cost. Key: `OLA_MAPS_API_KEY`. Wire the adapter now (behind
-    the interface) but it stays dormant until T1b — do not block T1 on it.
+    and how alternative routes + route labels/`description` come back. Do NOT guess these
+    from this plan; record them in code comments + tests. Key: `GOOGLE_MAPS_API_KEY`
+    (vaulted + live-tested 2026-07-03: Gateway→CST, traffic-aware, working).
+  - **English only (owner decision 2026-07-03):** no `languageCode` plumbing, no
+    Indian-language localization in this tool — discarded from scope. Don't send a
+    `languageCode` field at all; Google's default English strings are fine. (If the app
+    grows real multi-language support later, that's a separate pass — noting for the
+    record that `LANGUAGES` in `packages/core/response-settings.constants.ts` has zero
+    Indian-language entries today.)
+
+### Ola Maps — optional future comparison check (REFERENCE ONLY, not a v1 task)
+**Role (owner decision 2026-07-03):** Ola is *not* a fallback and must never silently
+substitute for a Google answer. Its only possible future use is an **explicitly user-invoked
+second opinion** — e.g. the owner asks "what does Ola Maps say about this journey?" to
+sanity-check Google. That would be a separate tool/verb wired up only if ever requested;
+treat everything in this subsection as pinned reference material for that day, not work.
+Key (if ever needed): `OLA_MAPS_API_KEY` (already vaulted + probe-tested 2026-07-03).
     **Full spec confirmed from Ola's OpenAPI JSON (2026-07-03) — no longer guesswork:**
     `POST https://api.olamaps.io/routing/v1/directions`, query params `origin`/`destination`
     (`lat,lng`, required), `waypoints` (**pipe-`|`-separated** `lat,lng` pairs, up to 25 —
@@ -71,28 +70,28 @@ The Eastern Expressway route is faster today at 35. The train takes around 55."
     **Known gap — no clean traffic delta:** unlike Google's `duration` vs `staticDuration`
     pair, Ola has **no `duration_in_traffic` field**. `traffic_metadata=true` (+
     `overview=full`) only adds a `travel_advisory` string of encoded per-segment congestion
-    codes (e.g. `"0,1,0 | 1,3,15"`, format undocumented in the spec — schema is silent). T1b
-    must reverse-engineer or find further docs for `travel_advisory` before Ola can produce
-    a "X minutes slower than usual" style delta; until then, Ola-sourced answers should skip
-    the traffic-delta clause entirely rather than guess at decoding it.
+    codes (e.g. `"0,1,0 | 1,3,15"`, format undocumented in the spec — schema is silent). Any
+    future comparison check must skip the traffic-delta clause for Ola rather than guess at
+    decoding it — compare total duration/distance/route only.
     **Known routing-quality risk:** live-probed 2026-07-03 (Gateway of India → CST, default
     `mode=driving`) returned a bizarre 58 km ferry detour instead of the ~5 km direct route —
     not explained by any missing param (driving was already the default). May be a road-graph
-    gap specific to that coastal pair. T1b should test several origin/destination pairs before
-    trusting default output, and try `route_preference=fastest` as a mitigation.
-  - **Transit ("by train"):** now IN scope via Google `TRANSIT` mode (this is the main win
-    of going Google-primary). Ola secondary need not cover transit.
-  Call via `tauriFetch`, BYOK keys.
-- **API keys = BYOK in secure storage**, per provider (`secure_set("GOOGLE_MAPS_API_KEY")`,
-  `secure_set("OLA_MAPS_API_KEY")`), entered in Settings (same section pattern as the
-  ElevenLabs key). Never in code/repo. The tool uses whichever keys are present, Google
-  first.
+    gap for that coastal pair. This is exactly why Ola is a *comparison* check and not a
+    fallback: an answer that wrong, spoken silently in Google's place, would be worse than
+    the URL-open fallback. Test several pairs + `route_preference=fastest` if ever built.
+    **No transit:** Ola has no transit mode — a comparison check covers road modes only.
+
+- **Transit ("by train"):** IN scope via Google `TRANSIT` mode.
+- Call via `tauriFetch`, BYOK key.
+- **API key = BYOK in secure storage** (`secure_set("GOOGLE_MAPS_API_KEY")`), entered in
+  Settings (same section pattern as the ElevenLabs key). Never in code/repo.
+  (`OLA_MAPS_API_KEY` is also vaulted but nothing in v1 reads it.)
 - **Place resolution order:** (1) confirmed memories — look up keys like "home", "work",
   "home address", "office" via the existing memories repo (strip "address" noise like
   `speech-sanitize.ts` KEY_NOISE does); (2) else pass the raw string as a text query — the
   Routes API accepts address strings, no separate geocoding step needed.
-- **No-provider fallback:** if no provider key is configured, OR every configured provider
-  fails (quota/error), build
+- **No-provider fallback:** if the Google key is missing, OR the Google call fails
+  (quota/error), build
   `https://www.google.com/maps/dir/?api=1&origin=…&destination=…&travelmode=…`, run the
   existing `open_target`, and speak "I've opened the route on Maps, {honorific}. Add a Maps
   API key in Settings and I can read out times with live traffic." Feature degrades, never
@@ -115,16 +114,11 @@ parse; executor arg mapping) with `travel_time` examples:
   tell me and I'll remember it"), then use the existing remember flow to store it.
 
 ## Tasks (each a commit checkpoint)
-- [ ] **T1 — Tool + provider chain + Google adapter + tests.** `get_travel_time` tool,
-  `RoutingProvider` interface, the ordered failover chain, the **Google Routes adapter**
-  (primary) with request/response mapping incl. `languageCode` passthrough, spoken-formatting
-  helper. Stub/register the Ola adapter slot behind the interface (dormant without key). Unit
-  tests with mocked fetch: happy path, traffic delta, alternatives, transit, non-English
-  `languageCode` request, API error → chain fallthrough, all-fail → no-provider URL fallback.
-  No UI yet.
-- [ ] **T1b — Ola adapter (secondary), later.** Implement the Ola Maps adapter behind the
-  same interface once the owner vaults `OLA_MAPS_API_KEY`. Pin exact Ola endpoint/fields
-  from live docs; tests: Ola used when Google key absent/failing, two-wheeler mapping.
+- [ ] **T1 — Tool + Google adapter + tests.** `get_travel_time` tool, `RoutingProvider`
+  interface, the **Google Routes adapter** (sole provider) with request/response mapping,
+  spoken-formatting helper. NO Ola stub, NO failover chain, NO languageCode. Unit tests with
+  mocked fetch: happy path, traffic delta, alternatives, transit, API error → URL fallback,
+  no-key → URL fallback. No UI yet.
 - [ ] **T2 — Prompt + executor wiring + place resolution.** Action vocabulary, tools section
   text, memories lookup ("home"/"work" + noise-stripped variants), ask-then-remember flow for
   unknown places. Tests for place resolution incl. Devanagari place names passing through.
@@ -138,28 +132,24 @@ parse; executor arg mapping) with `travel_time` examples:
 1. "Remember that my home address is X" / "…work address is Y" → stored (existing flow).
 2. "How long to work?" → spoken car time with live traffic + delta + one alternative,
    within ~3s of normal turn latency.
-3. "By bike?" → TWO_WHEELER time. "By train?" → TRANSIT time (via Google — now in scope).
-4. Remove ALL provider keys in Settings → same question opens Maps URL + spoken fallback.
-5. (When Ola key is vaulted) invalid/absent Google key but valid Ola key → answer still
-   comes back via the Ola secondary — silent failover, no error spoken.
-6. Unknown place ("how long to Rahul's place?") → Krishna asks once, remembers, answers.
-7. Ask "how long to work?" in Hindi → spoken reply comes back in Hindi (existing LLM
-   language-following) and the Google request's `languageCode` reflects it, not hardcoded
-   `en`.
-8. All suites green; no confirmation prompt for travel queries (read-only).
+3. "By bike?" → TWO_WHEELER time. "By train?" → TRANSIT time (via Google).
+4. Remove the Google key in Settings → same question opens Maps URL + spoken fallback.
+5. Unknown place ("how long to Rahul's place?") → Krishna asks once, remembers, answers.
+6. All suites green; no confirmation prompt for travel queries (read-only).
 
 ## Cost / key setup (owner)
-**Google Routes (v1 primary):** billed Google Cloud project with the Routes API enabled →
-API key. Already live-tested and working. **⚠️ Regenerate the exposed key** before the T4
-live test and re-vault it, then enter it in Settings. Routes API is pay-as-you-go with a
-monthly free credit; each travel question ≈ 1 call — trivial for personal use. Restrict the
-key (API + optionally referrer/IP) in the console.
-**Ola Maps (v1 secondary, optional):** sign up at maps.olakrutrim.com (Krutrim cloud
-console) → create project → API key → vault as `OLA_MAPS_API_KEY`. Free tier ~500K–5M
-calls/month, INR billing. Enables India-first two-wheeler routing + a cheap fallback; the
-tool works without it (Google-only).
+**Google Routes (the v1 provider):** billed Google Cloud project with the Routes API
+enabled → API key. **DONE 2026-07-03:** exposed key regenerated, re-vaulted
+(`GOOGLE_MAPS_API_KEY`, resource `Krishna`), and live-tested with traffic data. Routes API
+is pay-as-you-go with a monthly free credit; each travel question ≈ 1 call — trivial for
+personal use. Restrict the key (API + optionally referrer/IP) in the console.
+**Ola Maps:** key already vaulted (`OLA_MAPS_API_KEY`) and probe-tested; unused by v1. Kept
+only for the possible future user-invoked comparison check.
 
 ## Out of scope (v1)
-Turn-by-turn navigation; proactive "leave now" alerts (natural M2/M3 reminder+worker feature
-later — "leave by 8:20, traffic is heavy" push); multi-stop routes; scraping Google Maps via
-browser (brittle + ToS — rejected). *(Transit/"by train" is now IN scope via Google TRANSIT.)*
+Ola Maps in any automatic role (fallback/failover/secondary — comparison check only, and
+only if the owner asks for it later); Indian-language / any non-English localization
+(discarded 2026-07-03 — English only); turn-by-turn navigation; proactive "leave now"
+alerts (natural M2/M3 reminder+worker feature later — "leave by 8:20, traffic is heavy"
+push); multi-stop routes; scraping Google Maps via browser (brittle + ToS — rejected).
+*(Transit/"by train" IS in scope via Google TRANSIT.)*
