@@ -1768,15 +1768,34 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
           setStatus("idle");
           return;
         }
-        const msg = err instanceof Error ? err.message : "Something went wrong";
-        setLastError(msg);
+        const rawMsg = err instanceof Error ? err.message : "Something went wrong";
+        const hon = getResponseSettings().honorific || "sir";
+        let humanMsg: string;
+        let logDetail: string;
+        if (rawMsg.includes("__KRNET__:")) {
+          humanMsg = `I'm having network trouble, ${hon} — give me a moment and try again.`;
+          logDetail = rawMsg.slice(rawMsg.indexOf("__KRNET__:") + 10);
+        } else if (rawMsg.includes("__KRAPI__:")) {
+          humanMsg = `The AI service had a problem, ${hon}.`;
+          logDetail = rawMsg.slice(rawMsg.indexOf("__KRAPI__:") + 10);
+        } else if (rawMsg.includes("__KRPARSE__:")) {
+          humanMsg = `I had trouble processing the response, ${hon}.`;
+          logDetail = rawMsg.slice(rawMsg.indexOf("__KRPARSE__:") + 12);
+        } else if (rawMsg.includes("__KRSTREAM__:")) {
+          humanMsg = `I had trouble processing the response, ${hon}.`;
+          logDetail = rawMsg.slice(rawMsg.indexOf("__KRSTREAM__:") + 13);
+        } else {
+          humanMsg = `I had trouble: ${rawMsg}`;
+          logDetail = rawMsg;
+        }
+        setLastError(logDetail);
         turnTiming.mark("last_token");
-        logOutcome(command, "failed", "ai_error", msg);
+        logOutcome(command, "failed", "ai_error", logDetail);
         setStatus("speaking");
         setKrishnaSpeaking(true);
         try {
           turnTiming.mark("first_audio");
-          await ttsRef.current.speak("I had trouble: " + msg);
+          await ttsRef.current.speak(humanMsg);
         } finally {
           turnTiming.mark("last_audio");
           setKrishnaSpeaking(false);
