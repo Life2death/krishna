@@ -14,7 +14,18 @@ provider, matches the plan's field-pinning discipline for the fields it does req
 tests, `tsc` clean. Landed on the correct branch this time (`feature/m1-5-voice` only, no
 repeat of the P1/P2 branch mixup). Four real findings, ranked by impact.
 
-### T1-F1 · BLOCKER (process, not code) · OPEN — the vaulted key is invisible to the app
+## T1 fix pass — commit 50e3dce (verified 2026-07-03)
+F2/F3/N1/N2 all genuinely fixed, not just claimed — checked the real diff. F3 in particular is
+a substantive fix: `deriveTransitSummary()` now walks real
+`legs[].steps[].transitDetails.transitLine.vehicle.type` data (matches Google's documented
+`RouteTravelMode` enum) instead of relying on a hand-picked mock string; new tests explicitly
+assert the two fallback messages differ (one test asserts the API-error case does NOT say
+"add key"). 6 new tests (30 total), 378/378 suite green, `tsc` clean. T1-F1 correctly left
+open — it's a process/deployment issue (key-store mismatch), not something a code commit
+fixes; still needs a `secure_set` seed or T3 before any live call can succeed. **T1 approved
+— proceed to T2.**
+
+### T1-F1 · BLOCKER (process, not code) · See note — the vaulted key is invisible to the app
 The Google Maps key was vaulted via PowerShell/WinRT directly into **Windows Credential
 Manager, resource `"Krishna"`** — that's how the owner's earlier live-tests (via PowerShell,
 outside the app) confirmed the key itself is valid. But the app's real secret store is a
@@ -34,7 +45,7 @@ once — e.g. from the app's dev console: `await window.__TAURI__.core.invoke("s
 assume T1 "works" from the earlier PowerShell live-tests; those only proved the key is valid,
 not that the app can find it.
 
-### T1-F2 · BUG · OPEN — fallback message misleads when a key IS configured but the call failed
+### T1-F2 · BUG · FIXED (commit 50e3dce) — fallback message misleads when a key IS configured but the call failed
 `getTravelTimeTool.run()`: both the "no key" path and the "key present but `callGoogleRoutes`
 threw" path (`packages/core/tools/get-travel-time.ts`, the `catch` block falls through to the
 same code) produce the **identical** message: *"I've opened the route on Maps. Add a Maps API
@@ -47,7 +58,7 @@ cases. **Fix:** distinguish the two cases — at minimum, when `apiKey` was pres
 threw, use a message that doesn't claim the key is missing (e.g. "I've opened the route on
 Maps — the live traffic lookup didn't go through this time.").
 
-### T1-F3 · BUG · OPEN — transit "primary leg" isn't implemented against real Google fields
+### T1-F3 · BUG · FIXED (commit 50e3dce) — transit "primary leg" isn't implemented against real Google fields
 The plan requires "Transit answer: total time + primary leg ('mostly by train')." The field
 mask sent to Google is `routes.duration, routes.staticDuration, routes.distanceMeters,
 routes.routeLabels, routes.description` — **none of these are transit-composition fields.**
@@ -62,7 +73,7 @@ mask and derive "mostly by X" from real vehicle-type data, or run one live trans
 (once T1-F1 is resolved) to see what `description` actually contains for a transit route
 before deciding whether the current approach is sufficient.
 
-### T1-N1 · NIT · OPEN — honorific is hardcoded, never threaded from real settings
+### T1-N1 · NIT · FIXED (commit 50e3dce) — honorific is hardcoded, never threaded from real settings
 `run()` calls `formatTravelOutput(routes, mode)` — only 2 args, so `honorific` always
 defaults to `"sir"` regardless of the user's configured honorific (`getResponseSettings().
 honorific`, used everywhere else per `BASE_SYSTEM_PROMPT`). `ToolContext` (`packages/core/
@@ -71,7 +82,7 @@ ctx-plumbing question, it's a missing import. **Fix:** import `getResponseSettin
 source `ai-response.function.ts` uses) inside `get-travel-time.ts` and pass the real
 honorific through.
 
-### T1-N2 · NIT · OPEN — `vite.config.ts` indentation broke on the pre-existing alias line
+### T1-N2 · NIT · FIXED (commit 50e3dce) — `vite.config.ts` indentation broke on the pre-existing alias line
 The diff's second `+` line (`"@krishna/core/tools": path.resolve(...)`) lost its leading
 6-space indent — cosmetic only, `tsc`/bundler don't care, but run the formatter next commit.
 
