@@ -227,7 +227,7 @@ assistant's reply. Ties into `NETWORK_RESILIENCE_PLAN.md` (new doc, same date): 
 map to a human sentence ("I'm having network trouble, {honorific} — check the connection")
 and offline state should be announced once, not per-turn.
 
-### T4-F4 · BLOCKER · OPEN — travel answers are never spoken: the action-result speech filter drops them
+### T4-F4 · BLOCKER · FIXED (commit 40c3a55) — travel answers are never spoken: the action-result speech filter drops them
 Owner report: "how much time to travel to work?" → Krishna spoke only the ack, then silently
 opened the Maps page. Root cause in `src/contexts/krishna.context.tsx` (~line 1691, legacy
 single-action path):
@@ -250,6 +250,24 @@ always be spoken (and recorded via recordTurn + logOutcome "answered"/"tool_fail
 status path does). Also decide the interaction with a prior ack (`spokenTextRecorded`) —
 for travel_time the ack ("I'll check…") and the answer ("By car…") are complementary and
 BOTH should be spoken.
+
+## T4 fix pass — P1 (commit 40c3a55, reviewed 2026-07-03)
+
+**T4-F4 verified fixed.** The prefix-sniffing speech filter (only "Opening"/"Failed" responses
+were spoken) was replaced with an explicit routing system:
+
+1. **`ExecuteActionResult`** now has `kind?: "answer" | "status"` and `ok?: boolean`.
+2. **travel_time** returns `kind: "answer"` on every path — the action loop always speaks it,
+   records the turn, and logs outcome. `ok` matches the tool's `result.success` flag.
+3. **open** returns `kind: "status"` on all paths — spoken only if `!spokenTextRecorded`
+   (byte-for-byte same legacy behavior).
+4. **No `kind` (legacy/undefined)** falls back to the original prefix heuristic unchanged.
+5. **9 new unit tests** verify kind/ok values for travel_time (success, fallback, missing
+   args, tool failure, URL open, URL-open failure) and open (URL success, URL failure,
+   unknown app). Tested at the `executeAction` level — the layer T2/T3 tests missed.
+
+T4-F4 is the only T4 finding addressed in this pass. T4-F1 (phantom saves), T4-F2 (crash),
+and T4-F3 (network errors) remain OPEN for their respective phases.
 
 ---
 *Log format for the agent: change `OPEN` → `FIXED (p<N> commit <sha>)` with a one-line note.*
