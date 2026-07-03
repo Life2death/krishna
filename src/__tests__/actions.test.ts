@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { parseActions, executeAction, decideActionResponse } from "@/lib/actions";
+import { parseActions, executeAction, decideActionResponse, detectPhantomSave } from "@/lib/actions";
 import { invoke } from "@tauri-apps/api/core";
 import type { ExecuteActionResult } from "@/lib/actions";
 
@@ -331,5 +331,68 @@ describe("executeAction — open", () => {
     expect(result.kind).toBe("status");
     expect(result.ok).toBe(false);
     expect(result.spokenResponse).toContain("couldn't find an app");
+  });
+});
+
+// ── detectPhantomSave (T4-F1 grounding) ──────────────────────────────────
+// Tests the REAL exported helper (userCommand + spokenText + actions → boolean),
+// not a re-declared regex — this is the layer the grounding logic actually runs at.
+
+describe("detectPhantomSave", () => {
+  const REMEMBER_CMD = "can you remember my home address is in Kanda colony sector 6";
+  const REMEMBER_CMD_TYPO = "rember this as office adress -Plot No…";
+
+  // Phantom saves observed verbatim in the failed T4 live test (2026-07-03):
+  // save claim spoken, no remember action → must be caught.
+  it('catches "Your home address is now saved" with no action', () => {
+    expect(detectPhantomSave(REMEMBER_CMD, "Your home address is now saved", [])).toBe(true);
+  });
+
+  it('catches "Your office address is now saved" with no action', () => {
+    expect(detectPhantomSave(REMEMBER_CMD, "Your office address is now saved", [])).toBe(true);
+  });
+
+  it('catches "Got it, sir. I\'ll save that for you." with no action', () => {
+    expect(detectPhantomSave(REMEMBER_CMD, "Got it, sir. I'll save that for you.", [])).toBe(true);
+  });
+
+  it("catches a phantom save even when the user's remember word is misspelled", () => {
+    expect(detectPhantomSave(REMEMBER_CMD_TYPO, "Your office address is now saved", [])).toBe(true);
+  });
+
+  // A real remember action present → NOT a phantom save (the save actually happens).
+  it("does not fire when a remember action IS present", () => {
+    const actions = [{ action: "remember", key: "home address", value: "123 Main St" } as const];
+    expect(detectPhantomSave(REMEMBER_CMD, "I'll save that for you, sir.", actions)).toBe(false);
+  });
+
+  // False-positive guards: the save-word appears but the USER wasn't asking to remember.
+  it('does not fire on "Ronaldo saved the match" when user did not ask to remember', () => {
+    expect(detectPhantomSave("what a goal by Ronaldo", "Ronaldo saved the match", [])).toBe(false);
+  });
+
+  it("does not fire when there is no spoken text", () => {
+    expect(detectPhantomSave(REMEMBER_CMD, "", [])).toBe(false);
+  });
+
+  // The intended correct model behavior — "Saving that now" alongside the action —
+  // must NOT be flagged (present-tense "Saving" is not a completed-save claim).
+  it('does not fire on "Saving that now" (present tense, not a completed-save claim)', () => {
+    const actions = [{ action: "remember", key: "home address", value: "X" } as const];
+    expect(detectPhantomSave(REMEMBER_CMD, "Saving that now, sir.", actions)).toBe(false);
+    // even without an action, "Saving that now" is not a claimed-save phrase:
+    expect(detectPhantomSave(REMEMBER_CMD, "Saving that now, sir.", [])).toBe(false);
+  });
+
+  // End-to-end through parseActions: phantom vs. grounded.
+  it("end-to-end: claim without action block → phantom", () => {
+    const { spokenText, actions } = parseActions("Your home address is now saved.");
+    expect(detectPhantomSave(REMEMBER_CMD, spokenText, actions)).toBe(true);
+  });
+
+  it("end-to-end: claim WITH action block → not phantom", () => {
+    const reply = "I'll save that for you, sir.\n```action\n{\"action\":\"remember\",\"key\":\"home address\",\"value\":\"123 Main St\"}\n```";
+    const { spokenText, actions } = parseActions(reply);
+    expect(detectPhantomSave(REMEMBER_CMD, spokenText, actions)).toBe(false);
   });
 });

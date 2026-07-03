@@ -129,6 +129,30 @@ export function decideActionResponse(
   };
 }
 
+// A "save claim" in the spoken reply (e.g. "saved", "I'll save that", "noted").
+const CLAIMED_SAVE_RE = /\b(saved|save (that|this|it)|I('|')ll (remember|save)|remembered|noted)\b/i;
+// Remember-intent in the USER's turn — deliberately typo-tolerant ("rember", "remmber").
+const USER_REMEMBER_INTENT_RE = /\b(rem+e?m?ber|save|note|keep in mind|address is)\b/i;
+
+/**
+ * T4-F1 grounding: detect a "phantom save" — the model spoke a save claim
+ * ("your address is now saved") WITHOUT emitting a remember action, so nothing
+ * was actually persisted. The user-intent guard prevents false positives on
+ * incidental uses of "saved"/"save" (e.g. "Ronaldo saved the match").
+ */
+export function detectPhantomSave(
+  userCommand: string,
+  spokenText: string,
+  actions: Action[],
+): boolean {
+  if (!spokenText) return false;
+  return (
+    USER_REMEMBER_INTENT_RE.test(userCommand) &&
+    CLAIMED_SAVE_RE.test(spokenText) &&
+    !actions.some((a) => a.action === "remember")
+  );
+}
+
 type LlmFallbackFn = (input: string) => Promise<string | null>;
 
 export async function executeAction(
