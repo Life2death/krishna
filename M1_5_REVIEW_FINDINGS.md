@@ -615,7 +615,18 @@ target — the `setSettingsGetter` literal — now typechecks). `apps/brain` is 
 runtime path, so this is not a milestone blocker. Confirm it predates 9b5cf12 only if the
 brain workspace ever needs to build again.
 
-*(Credit: P6-F1/P6-N1 from the mobile Claude review session; P6-N2/P6-F2 from desktop
+### P6-N3 · NIT · OPEN — `voiceModel` has storage + updater but NO Settings UI control
+`updateVoiceModel`/`voiceModel` exist in response-settings storage and the voice path reads
+them, but there is no UI input to set `voiceModel` (only `HonorificInput` was added). So the
+Phase-6 scope item "chat model as a setting + Haiku-tier option for owner A/B" is only
+half-delivered — the owner can't switch the voice model from the app. **For the acceptance
+test now**, the Haiku pass can instead change the provider's `MODEL` in Dev space → AI
+providers (global switch — affects all turns, fine for a latency A/B). **Fix (small):** add a
+voice-model text/select input next to HonorificInput (empty = provider default), same
+storage pattern. Also give `voiceMaxTokens` a field while there (currently only settable via
+storage). Fold into the travel-tool commit or a quick `feat(m1.5-p6)` follow-up.
+
+*(Credit: P6-F1/P6-N1 from the mobile Claude review session; P6-N2/P6-F2/P6-N3 from desktop
 verification of the fix commit.)*
 
 ---
