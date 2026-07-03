@@ -66,11 +66,11 @@ export async function initializeCore(): Promise<void> {
         language: base.language ?? "english",
         autoScroll: base.autoScroll ?? true,
         honorific: base.honorific ?? "sir",
-        voiceMaxTokens: base.voiceMaxTokens ?? 160,
+        voiceMaxTokens: base.voiceMaxTokens ?? 100,
         voiceModel: base.voiceModel ?? "",
       };
     } catch {
-      return { responseLength: "auto", language: "english", autoScroll: true, honorific: "sir", voiceMaxTokens: 160, voiceModel: "" };
+      return { responseLength: "auto", language: "english", autoScroll: true, honorific: "sir", voiceMaxTokens: 100, voiceModel: "" };
     }
   });
 

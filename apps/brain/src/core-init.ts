@@ -58,7 +58,7 @@ export async function initCore(): Promise<Client> {
     language: "english",
     autoScroll: true,
     honorific: "sir",
-    voiceMaxTokens: 160,
+    voiceMaxTokens: 100,
     voiceModel: "",
   }));
 
