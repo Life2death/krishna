@@ -227,17 +227,30 @@ the DB. The subsequent "how much time to travel to work?" then had no memory to 
    either re-ask or at minimum never speak the model's "saved" claim. Persistence claims must
    be grounded in an actual `addMemory` result, not model prose.
 
-### T4-F2 · BUG · OPEN — hard process crash (exit 0xcfffffff) during the address-save turn
+### T4-F2 · BUG · NEEDS-REPRO — hard process crash (exit 0xcfffffff) during the address-save turn
 `target\debug\krishna.exe` exited with 0xcfffffff mid-conversation (owner report; terminal
-scrollback lost after auto-restart). Rust-side crash, plausibly in a network-failure path
-(the same turn produced "Network error during API request: Unknown error"). Needs repro with
-terminal capture; treat any panic reachable from a failed HTTP request as the prime suspect.
+scrollback lost after auto-restart). The same turn produced "Network error during API
+request: Unknown error" (now fixed by P3 — code path changed).
 
-### T4-F3 · BUG · OPEN — raw network errors are spoken verbatim to the user
-"Network error during API request: Unknown error" was stored (and likely spoken) as the
-assistant's reply. Ties into `NETWORK_RESILIENCE_PLAN.md` (new doc, same date): errors must
-map to a human sentence ("I'm having network trouble, {honorific} — check the connection")
-and offline state should be announced once, not per-turn.
+**Audit (2026-07-03, P4 phase):** All network paths in `api.rs`/`mobile_bridge.rs`/`tts.rs`
+use `?`/`map_err` — zero panic sources. 6 HIGH-risk unwraps found in `speaker/*.rs` (audio
+device init + CoreAudio IOProc callbacks) and 25 MEDIUM-risk lock `.unwrap()`s across speaker
+modules. The crash was likely in audio/speaker code triggered downstream of error handling,
+not directly in the HTTP request path. P3's error-path change (thrown error → catch block
+instead of yielding into fullResponse) changes the control flow and may avoid the trigger.
+
+**Panic hook already present** in `lib.rs:68-79` — writes to `krishna-crash.txt` in temp dir.
+**P3's fix changes the error path** — the crash may no longer reproduce. Owner to re-test;
+if it recurs, share the `krishna-crash.txt` content for targeted fix. Full candidate list
+(42 unwrap/expect sites across 6 files) available in the P4 phase report.
+
+### T4-F3 · BUG · FIXED (fix/travel-t4-p3 commit 3132a3c) — raw network errors are spoken verbatim to the user
+fetchAIResponse now throws classified errors (__KRNET__/__KRAPI__/__KRPARSE__/__KRSTREAM__)
+instead of yielding raw strings into the response stream. The context maps each to a human
+sentence: network → "I'm having network trouble, {honorific} — give me a moment and try
+again."; API → "The AI service had a problem, {honorific}."; parse/stream → "I had trouble
+processing the response, {honorific}." Technical detail goes to logOutcome as ai_error.
+Raw errors NEVER enter fullResponse or parseActions. 3 new tests, full suite 421 green.
 
 ### T4-F4 · BLOCKER · FIXED (commit 40c3a55) — travel answers are never spoken: the action-result speech filter drops them
 Owner report: "how much time to travel to work?" → Krishna spoke only the ack, then silently
