@@ -697,6 +697,51 @@ still ran 27–30s. Reviewer took over with owner's sign-off:
   prior run — the new 160 default won't apply automatically. Set it via the new
   VoiceMaxTokens field in Settings during the retest.
 
+## PROCESS NOTES (reviewer, 2026-07-03) — read before continuing the pipeline
+
+**1. Revert `fca491a`** undid the reviewer-authored `348f2e0` brevity hardening (few-shot
+example, rule 11, no-raw-URL clause, cap 100→160), citing "owner request." **Vikram: please
+confirm this was your call and why** (what didn't work about it?) — if so, the broad-question
+rambling (27–30s replies) is unresolved and needs a different fix; if the agent reverted this
+on its own initiative citing a request that didn't happen, that's a protocol break worth
+correcting (reviewer-authored + owner-authorized commits shouldn't be silently undone).
+
+**2. Two unplanned tracks landed** (`voiceid-status-p1/p2`, commits `20c8d1d`/`ff69d55`/
+`dfb5be2`): a Voice ID status refactor + training-meter UI. Not part of M1.5 or any queued
+plan doc. If Vikram requested this directly with the agent, fine — just flag it here so the
+paper trail matches reality; reviewed briefly below, no blockers found. If it wasn't
+requested, it's scope drift worth naming.
+
+**3. Travel tool provider scope changed via `TRAVEL_TIME_TOOL_PLAN.md` edits** (commits
+`85fc31f`/`9326f37`/`f0e3636`, all doc-only): v1 is now **Google-only, English-only**; Ola is
+demoted to an optional future user-invoked "second opinion," never a fallback. This reads as
+tracked, deliberate owner decisions (dated, rationale given, Ola's spec still pinned for
+later) — consistent with how this file records decisions. Noted for the record, not a
+concern, provided Vikram confirms these were in fact made with him.
+
+## Travel tool T1–T3 review (commits d598051/50e3dce/80dbc7a/1922f38, reviewed 2026-07-03)
+
+Overall well-built: live Google Routes v2 fields pinned correctly (traffic-aware DRIVE/
+TWO_WHEELER, routingPreference omitted for TRANSIT, duration/staticDuration for the delta),
+transit vehicle-type derivation from real response fields, honorific threaded through tool
+output, and the agent caught+fixed its own confirmation-gate bypass (T2-F1) before I even
+looked — good instinct. One real bug found:
+
+### T1-F4 · BLOCKER · OPEN — `callGoogleRoutes` uses plain `fetch()`, not the app's CORS-bypass transport
+`packages/core/tools/get-travel-time.ts` calls `fetch(GOOGLE_ROUTES_BASE, ...)` directly. Every
+other outbound API call in this codebase (`ai-response.function.ts:194`) goes through
+`getHttpFetch()` from `packages/core/http.ts` specifically because the Tauri **webview's
+plain `fetch()` hits CORS** calling external APIs — that's the documented reason `tauriFetch`
+exists at all (see `local-first-architecture` memory / `ai-response.function.ts`). The plan
+doc says "Call via `tauriFetch`" explicitly (line 85) — this wasn't followed. **Consequence:
+the tool will likely fail with a network/CORS error in the actual desktop app**, even though
+unit tests pass (mocked `fetch` never exercises real browser CORS). **Fix:** replace
+`fetch(...)` with `getHttpFetch()(...)` (same call shape, per `ai-response.function.ts`'s
+usage) in `callGoogleRoutes`. **This must be verified live** — Tauri's CSP/capabilities may
+also need `routes.googleapis.com` allow-listed (check `src-tauri/capabilities/*.json` /
+`tauri.conf.json` `http` scope) alongside the fetch-transport fix. Do this before the T4
+owner acceptance test — otherwise "how long to work?" will error on first live try.
+
 ### P6-F4 · BUG · NEEDS-REPRO — TTS occasionally speaks too fast to understand
 Owner: one reply "spoke so fast no one would understand," hypothesized to correlate with a URL
 in the sentence. Not reproducible from the table alone. **To diagnose, capture:** the exact
