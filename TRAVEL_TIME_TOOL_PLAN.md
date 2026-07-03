@@ -37,11 +37,36 @@ The Eastern Expressway route is faster today at 35. The train takes around 55."
     (`DRIVE` / `TWO_WHEELER` / `TRANSIT`), `duration` vs `staticDuration` (traffic delta),
     and how alternative routes + route labels/`description` come back. Do NOT guess these
     from this plan; record them in code comments + tests. Key: `GOOGLE_MAPS_API_KEY`.
-  - **Ola Maps (SECONDARY, added later):** Directions/Routing API at maps.olakrutrim.com
+  - **Ola Maps (SECONDARY, added later):** Directions API at maps.olakrutrim.com
     (+ Geocoding API for address strings). Adds India-first two-wheeler routing and a
-    ~500K–5M/mo free tier for cost. Same T1 doc-pinning discipline when built. Key:
-    `OLA_MAPS_API_KEY`. Wire the adapter now (behind the interface) but it stays dormant
-    until the key is present — do not block T1 on obtaining it.
+    ~500K–5M/mo free tier for cost. Key: `OLA_MAPS_API_KEY`. Wire the adapter now (behind
+    the interface) but it stays dormant until T1b — do not block T1 on it.
+    **Full spec confirmed from Ola's OpenAPI JSON (2026-07-03) — no longer guesswork:**
+    `POST https://api.olamaps.io/routing/v1/directions`, query params `origin`/`destination`
+    (`lat,lng`, required), `waypoints` (**pipe-`|`-separated** `lat,lng` pairs, up to 25 —
+    corrects the earlier comma-encoded guess), `mode` (`driving`|`walking`|`bike`|`auto`,
+    default `driving` — maps to our `car`/`two_wheeler`; no direct `transit`, matching the
+    earlier assumption that Ola doesn't cover trains), `alternatives` (bool), `steps` (bool,
+    default true), `overview` (`full`|`simplified`|`false`, default `full`), `route_preference`
+    (`fastest`|`shortest`), `language` (`en`/`hi`/9 more Indian languages), `traffic_metadata`
+    (bool — **only returns congestion data when `overview=full`**). Headers `x-request-id` /
+    `x-correlation-id` (both optional per the spec, despite earlier examples showing
+    `X-Request-Id` — send it anyway for tracing). Response: OSRM/Mapbox-shaped
+    `routes[].legs[].steps[]` with `instructions`/`maneuver`/`distance`/`duration`/
+    `readable_distance`/`readable_duration`, plus leg-level `distance`/`duration` and an
+    `overview_polyline`.
+    **Known gap — no clean traffic delta:** unlike Google's `duration` vs `staticDuration`
+    pair, Ola has **no `duration_in_traffic` field**. `traffic_metadata=true` (+
+    `overview=full`) only adds a `travel_advisory` string of encoded per-segment congestion
+    codes (e.g. `"0,1,0 | 1,3,15"`, format undocumented in the spec — schema is silent). T1b
+    must reverse-engineer or find further docs for `travel_advisory` before Ola can produce
+    a "X minutes slower than usual" style delta; until then, Ola-sourced answers should skip
+    the traffic-delta clause entirely rather than guess at decoding it.
+    **Known routing-quality risk:** live-probed 2026-07-03 (Gateway of India → CST, default
+    `mode=driving`) returned a bizarre 58 km ferry detour instead of the ~5 km direct route —
+    not explained by any missing param (driving was already the default). May be a road-graph
+    gap specific to that coastal pair. T1b should test several origin/destination pairs before
+    trusting default output, and try `route_preference=fastest` as a mitigation.
   - **Transit ("by train"):** now IN scope via Google `TRANSIT` mode (this is the main win
     of going Google-primary). Ola secondary need not cover transit.
   Call via `tauriFetch`, BYOK keys.
