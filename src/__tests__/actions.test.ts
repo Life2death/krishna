@@ -1,5 +1,21 @@
-import { describe, it, expect } from "vitest";
-import { parseActions } from "@/lib/actions";
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import { parseActions, executeAction } from "@/lib/actions";
+import { invoke } from "@tauri-apps/api/core";
+
+const mockTravelToolRun = vi.hoisted(() => vi.fn());
+const mockResolveTarget = vi.hoisted(() => vi.fn());
+
+vi.mock("@krishna/core/tools/get-travel-time", () => ({
+  getTravelTimeTool: {
+    run: mockTravelToolRun,
+  },
+}));
+
+vi.mock("@/lib/resolver", () => ({
+  resolveTarget: mockResolveTarget,
+  saveAndConfirm: vi.fn(),
+  needsConfirmation: vi.fn().mockReturnValue(false),
+}));
 
 describe("parseActions", () => {
   it("parses open action from action block", () => {
@@ -81,5 +97,165 @@ describe("parseActions", () => {
     const result = parseActions('```json\n{"action":"travel_time","from":"home","to":"work"}\n```');
     expect(result.actions).toHaveLength(1);
     expect(result.actions[0]).toEqual({ action: "travel_time", from: "home", to: "work" });
+  });
+});
+
+// ── executeAction ─────────────────────────────────────────────────────────
+
+describe("executeAction — travel_time", () => {
+  beforeEach(() => {
+    mockTravelToolRun.mockReset();
+    vi.mocked(invoke).mockReset();
+  });
+
+  it("returns kind:answer with ok:true on tool success", async () => {
+    mockTravelToolRun.mockResolvedValue({
+      success: true,
+      output: "By car it's about 40 minutes, sir.",
+      data: { fallback: "false", duration: "2400" },
+    });
+
+    const result = await executeAction({
+      action: "travel_time",
+      from: "home",
+      to: "work",
+      mode: "car",
+    });
+
+    expect(result.kind).toBe("answer");
+    expect(result.ok).toBe(true);
+    expect(result.spokenResponse).toContain("40 minutes");
+  });
+
+  it("returns kind:answer with ok:true on fallback (no key)", async () => {
+    mockTravelToolRun.mockResolvedValue({
+      success: true,
+      output: "I've opened the route on Maps. Add a Maps API key in Settings and I can read out times with live traffic, sir.",
+      data: { url: "https://google.com/maps/dir/", fallback: "true" },
+    });
+
+    const result = await executeAction({
+      action: "travel_time",
+      from: "home",
+      to: "work",
+      mode: "car",
+    });
+
+    expect(result.kind).toBe("answer");
+    expect(result.ok).toBe(true);
+    expect(result.spokenResponse).toContain("Add a Maps API key");
+  });
+
+  it("returns kind:answer with ok:false on missing destination", async () => {
+    const result = await executeAction({
+      action: "travel_time",
+      from: "home",
+      to: "",
+      mode: "car",
+    });
+
+    expect(result.kind).toBe("answer");
+    expect(result.ok).toBe(false);
+    expect(result.spokenResponse).toBe("Where would you like to go?");
+  });
+
+  it("returns kind:answer with ok matching tool's success flag", async () => {
+    mockTravelToolRun.mockResolvedValue({
+      success: false,
+      output: "I couldn't find a route.",
+    });
+
+    const result = await executeAction({
+      action: "travel_time",
+      from: "home",
+      to: "nowhere",
+    });
+
+    expect(result.kind).toBe("answer");
+    expect(result.ok).toBe(false);
+  });
+
+  it("opens the URL when tool returns a data.url", async () => {
+    mockTravelToolRun.mockResolvedValue({
+      success: true,
+      output: "Opened route.",
+      data: { url: "https://google.com/maps/dir/", fallback: "true" },
+    });
+
+    await executeAction({
+      action: "travel_time",
+      from: "home",
+      to: "work",
+    });
+
+    expect(invoke).toHaveBeenCalledWith("open_target", {
+      target: "https://google.com/maps/dir/",
+    });
+  });
+
+  it("does not crash if URL open fails", async () => {
+    mockTravelToolRun.mockResolvedValue({
+      success: true,
+      output: "Opened route.",
+      data: { url: "https://google.com/maps/dir/", fallback: "true" },
+    });
+    vi.mocked(invoke).mockRejectedValue(new Error("open failed"));
+
+    const result = await executeAction({
+      action: "travel_time",
+      from: "home",
+      to: "work",
+    });
+
+    expect(result.kind).toBe("answer");
+    expect(result.ok).toBe(true);
+  });
+});
+
+describe("executeAction — open", () => {
+  beforeEach(() => {
+    vi.mocked(invoke).mockReset();
+    mockResolveTarget.mockReset();
+  });
+
+  it("returns kind:status for URL open success", async () => {
+    vi.mocked(invoke).mockResolvedValue("OK");
+
+    const result = await executeAction({
+      action: "open",
+      target: "https://youtube.com",
+    });
+
+    expect(result.kind).toBe("status");
+    expect(result.spokenResponse).toBe("Opening https://youtube.com");
+  });
+
+  it("returns kind:status for URL open failure", async () => {
+    vi.mocked(invoke).mockRejectedValue(new Error("fail"));
+
+    const result = await executeAction({
+      action: "open",
+      target: "https://example.com",
+    });
+
+    expect(result.kind).toBe("status");
+    expect(result.spokenResponse).toBe("Failed to open https://example.com");
+  });
+
+  it("returns kind:status for unknown app", async () => {
+    mockResolveTarget.mockResolvedValue({
+      found: false,
+      target: null,
+      displayName: "xyznonexistentapp12345",
+      source: "search" as const,
+    });
+
+    const result = await executeAction({
+      action: "open",
+      target: "xyznonexistentapp12345",
+    });
+
+    expect(result.kind).toBe("status");
+    expect(result.spokenResponse).toContain("couldn't find an app");
   });
 });

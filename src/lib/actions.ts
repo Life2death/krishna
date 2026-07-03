@@ -66,11 +66,13 @@ export function parseActions(reply: string): ParsedReply {
 }
 
 export interface ExecuteActionResult {
+  kind?: "answer" | "status";
   spokenResponse: string;
   needsConfirmation?: boolean;
   pendingResult?: ResolveResult;
   learnedActionId?: string;
   input?: string;
+  ok?: boolean;
 }
 
 type LlmFallbackFn = (input: string) => Promise<string | null>;
@@ -85,7 +87,7 @@ export async function executeAction(
     const mode = action.mode || "car";
 
     if (!to) {
-      return { spokenResponse: "Where would you like to go?" };
+      return { kind: "answer", ok: false, spokenResponse: "Where would you like to go?" };
     }
 
     const result = await getTravelTimeTool.run({ from, to, mode }, { vars: {} });
@@ -99,7 +101,9 @@ export async function executeAction(
     }
 
     return {
+      kind: "answer",
       spokenResponse: result.output || "I couldn't find a route.",
+      ok: result.success,
     };
   }
 
@@ -111,18 +115,18 @@ export async function executeAction(
       const url = rawTarget.startsWith("http") ? rawTarget : "https://" + rawTarget;
       try {
         await invoke("open_target", { target: url });
-        return { spokenResponse: "Opening " + rawTarget };
+        return { kind: "status", spokenResponse: "Opening " + rawTarget };
       } catch {
-        return { spokenResponse: "Failed to open " + rawTarget };
+        return { kind: "status", spokenResponse: "Failed to open " + rawTarget };
       }
     }
 
     if (isFilePath(rawTarget)) {
       try {
         await invoke("open_target", { target: rawTarget });
-        return { spokenResponse: "Opening file path" };
+        return { kind: "status", spokenResponse: "Opening file path" };
       } catch {
-        return { spokenResponse: "Failed to open path" };
+        return { kind: "status", spokenResponse: "Failed to open path" };
       }
     }
 
@@ -130,9 +134,9 @@ export async function executeAction(
     if (alias) {
       try {
         await invoke("open_target", { target: alias.launchCommand });
-        return { spokenResponse: "Opening " + alias.name };
+        return { kind: "status", spokenResponse: "Opening " + alias.name };
       } catch {
-        return { spokenResponse: "Failed to open " + alias.name };
+        return { kind: "status", spokenResponse: "Failed to open " + alias.name };
       }
     }
 
@@ -148,10 +152,10 @@ export async function executeAction(
       }
       await saveAndConfirm(result, rawTarget);
       await invoke("open_target", { target: result.target });
-      return { spokenResponse: "Opening " + result.displayName };
+      return { kind: "status", spokenResponse: "Opening " + result.displayName };
     }
 
-    return { spokenResponse: "I couldn't find an app named \"" + rawTarget + "\"" };
+    return { kind: "status", spokenResponse: "I couldn't find an app named \"" + rawTarget + "\"" };
   }
 
   return { spokenResponse: "Unknown action" };

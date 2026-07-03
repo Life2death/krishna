@@ -1689,11 +1689,25 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
             return;
           }
             if (result.spokenResponse) {
-              const isStatus = result.spokenResponse.startsWith("Opening") || result.spokenResponse.startsWith("Failed");
-              if (isStatus && !spokenTextRecorded) {
+              if (result.kind === "answer") {
                 await recordTurn(pendingUserTextRef.current, result.spokenResponse);
-                // A "Failed…" status is a tool failure, not an answer — capture it as such
-                // so it shows up in command insights instead of inflating the success count.
+                logOutcome(
+                  command,
+                  result.ok !== false ? "answered" : "failed",
+                  result.ok !== false ? undefined : "tool_failed",
+                  result.ok !== false ? undefined : result.spokenResponse,
+                  result.spokenResponse,
+                );
+                setStatus("speaking");
+                setLastSpoken(result.spokenResponse);
+                setKrishnaSpeaking(true);
+                try {
+                  await ttsRef.current.speak(result.spokenResponse);
+                } finally {
+                  setKrishnaSpeaking(false);
+                }
+              } else if (result.kind === "status" && !spokenTextRecorded) {
+                await recordTurn(pendingUserTextRef.current, result.spokenResponse);
                 const toolFailed = result.spokenResponse.startsWith("Failed");
                 logOutcome(
                   command,
@@ -1709,6 +1723,27 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
                   await ttsRef.current.speak(result.spokenResponse);
                 } finally {
                   setKrishnaSpeaking(false);
+                }
+              } else if (!result.kind && !spokenTextRecorded) {
+                const isStatus = result.spokenResponse.startsWith("Opening") || result.spokenResponse.startsWith("Failed");
+                if (isStatus) {
+                  await recordTurn(pendingUserTextRef.current, result.spokenResponse);
+                  const toolFailed = result.spokenResponse.startsWith("Failed");
+                  logOutcome(
+                    command,
+                    toolFailed ? "failed" : "answered",
+                    toolFailed ? "tool_failed" : undefined,
+                    toolFailed ? result.spokenResponse : undefined,
+                    result.spokenResponse,
+                  );
+                  setStatus("speaking");
+                  setLastSpoken(result.spokenResponse);
+                  setKrishnaSpeaking(true);
+                  try {
+                    await ttsRef.current.speak(result.spokenResponse);
+                  } finally {
+                    setKrishnaSpeaking(false);
+                  }
                 }
               }
             } else {
