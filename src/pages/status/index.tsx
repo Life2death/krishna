@@ -9,6 +9,7 @@ import {
 import moment from "moment";
 import { useState } from "react";
 import type { FailureReason } from "@/lib/database";
+import { VoiceIdCard } from "./components";
 
 const FAILURE_LABELS: Record<FailureReason, string> = {
   stt_failed: "Speech recognition failed",
@@ -150,6 +151,11 @@ const Status = () => {
             )}
           </div>
         )}
+
+        {/* Voice ID card */}
+        <div className="mb-6">
+          <VoiceIdCard />
+        </div>
 
         {/* System Health section */}
         <div className="rounded-lg border p-4">
