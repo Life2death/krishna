@@ -20,3 +20,5 @@ export * from "./useMcpTools";
 export * from "./useDevicePresence";
 export * from "./useMobileSpeech";
 export * from "./useSystemHealth";
+export * from "./useVoiceStatus";
+export * from "./useVoiceEnroll";
