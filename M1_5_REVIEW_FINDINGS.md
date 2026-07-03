@@ -669,6 +669,22 @@ lost that clause. The sanitizer converts domains at speak-time (P2-F8), so impac
 but the prompt nudge kept URLs out of replies entirely. **Fix (one line, fold into any next
 commit):** append "Never speak raw URLs — say the site's name instead." to the etiquette line.
 
+## P6 brevity hardening — commit 348f2e0 (REVIEWER-authored, owner-authorized, 2026-07-03)
+Live retest showed the abstract rule holds on simple questions (7.6s TTS) but broad questions
+still ran 27–30s. Reviewer took over with owner's sign-off:
+- **P6-F3 → HARDENED (348f2e0):** few-shot example in the etiquette (the "what can you help
+  me with?" answer, marked as MAXIMUM length), "even for broad questions", and a new final
+  rule 11 at the END of SYSTEM_PROMPT_RULES (recency binds hardest on weak models).
+- **P6-N4 → FIXED (348f2e0):** no-raw-URLs clause restored.
+- **P6-F5 (identified + mitigated in same commit):** the voice cap is passed UNCONDITIONALLY
+  (krishna.context.tsx:1551), so 100 tokens could truncate a multi-step plan's JSON mid-block
+  → silently broken commands. Cap raised to 160 at all 5 sites — brevity is prompt-enforced;
+  the cap is the runaway guard. Watch item: a >3-step plan may still exceed 160; the retest
+  must include a command turn.
+- **Owner gotcha:** his install has `voiceMaxTokens: 100` persisted in localStorage from the
+  prior run — the new 160 default won't apply automatically. Set it via the new
+  VoiceMaxTokens field in Settings during the retest.
+
 ### P6-F4 · BUG · NEEDS-REPRO — TTS occasionally speaks too fast to understand
 Owner: one reply "spoke so fast no one would understand," hypothesized to correlate with a URL
 in the sentence. Not reproducible from the table alone. **To diagnose, capture:** the exact
