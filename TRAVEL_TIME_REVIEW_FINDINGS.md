@@ -3,7 +3,8 @@
 > Written by the reviewer (Claude). Agent: before starting each phase, fix any OPEN
 > `BLOCKER`/`BUG` items below and mark them `FIXED (p<N> commit <sha>)` in this file. `NIT`
 > items may wait for a convenient phase. This file lives in the MAIN checkout
-> (`D:\Learning\krishna`) on `feature/local-first-p1` — read it from there. Companion spec:
+> (`D:\Learning\krishna`) on **`main`** (branch model updated 2026-07-03 — `main` is now the
+> single consolidated hub; `feature/local-first-p1` is archived). Companion spec:
 > `TRAVEL_TIME_TOOL_PLAN.md`. One combined file for both process findings and code review —
 > do not split into separate documents for this track.
 
@@ -81,6 +82,23 @@ tools/index.ts`) only carries `vars`/`signal`, no settings access — so this is
 ctx-plumbing question, it's a missing import. **Fix:** import `getResponseSettings` (same
 source `ai-response.function.ts` uses) inside `get-travel-time.ts` and pass the real
 honorific through.
+
+### T1-F4 · BLOCKER · OPEN — `callGoogleRoutes` uses plain `fetch()`, not the app's CORS-bypass transport
+`packages/core/tools/get-travel-time.ts:119` calls `fetch(GOOGLE_ROUTES_BASE, ...)` directly.
+Confirmed still present on `main` and on `fix/travel-t4` tip (`5369faf`) as of 2026-07-03.
+Every other outbound API call in this codebase (`ai-response.function.ts:194`, both `src/lib`
+and `packages/core` copies) goes through `getHttpFetch()` from `packages/core/http.ts`
+specifically because the Tauri **webview's plain `fetch()` hits CORS** calling external APIs —
+that's the documented reason this transport exists at all. `TRAVEL_TIME_TOOL_PLAN.md` says
+"Call via `tauriFetch`" explicitly — not followed. **Consequence: the tool will very likely
+fail with a network/CORS error in the live desktop app**, even though unit tests pass (mocked
+`fetch` never exercises real browser CORS — this is why T1's "378/378 passed" claim didn't
+catch it). **Fix:** replace `fetch(...)` with `getHttpFetch()(...)` in `callGoogleRoutes`
+(same call shape as `ai-response.function.ts`'s usage). **Must be verified live** — also check
+whether Tauri's CSP/capabilities need `routes.googleapis.com` allow-listed
+(`src-tauri/capabilities/*.json` / `tauri.conf.json` `http` scope). Fix this before Vikram's
+T4/acceptance retest — otherwise "how long to work?" errors on first live try, and it will
+look like a false negative on top of the still-open T4-F2 crash investigation.
 
 ### T1-N2 · NIT · FIXED (commit 50e3dce) — `vite.config.ts` indentation broke on the pre-existing alias line
 The diff's second `+` line (`"@krishna/core/tools": path.resolve(...)`) lost its leading
@@ -227,17 +245,30 @@ the DB. The subsequent "how much time to travel to work?" then had no memory to 
    either re-ask or at minimum never speak the model's "saved" claim. Persistence claims must
    be grounded in an actual `addMemory` result, not model prose.
 
-### T4-F2 · BUG · OPEN — hard process crash (exit 0xcfffffff) during the address-save turn
+### T4-F2 · BUG · NEEDS-REPRO — hard process crash (exit 0xcfffffff) during the address-save turn
 `target\debug\krishna.exe` exited with 0xcfffffff mid-conversation (owner report; terminal
-scrollback lost after auto-restart). Rust-side crash, plausibly in a network-failure path
-(the same turn produced "Network error during API request: Unknown error"). Needs repro with
-terminal capture; treat any panic reachable from a failed HTTP request as the prime suspect.
+scrollback lost after auto-restart). The same turn produced "Network error during API
+request: Unknown error" (now fixed by P3 — code path changed).
 
-### T4-F3 · BUG · OPEN — raw network errors are spoken verbatim to the user
-"Network error during API request: Unknown error" was stored (and likely spoken) as the
-assistant's reply. Ties into `NETWORK_RESILIENCE_PLAN.md` (new doc, same date): errors must
-map to a human sentence ("I'm having network trouble, {honorific} — check the connection")
-and offline state should be announced once, not per-turn.
+**Audit (2026-07-03, P4 phase):** All network paths in `api.rs`/`mobile_bridge.rs`/`tts.rs`
+use `?`/`map_err` — zero panic sources. 6 HIGH-risk unwraps found in `speaker/*.rs` (audio
+device init + CoreAudio IOProc callbacks) and 25 MEDIUM-risk lock `.unwrap()`s across speaker
+modules. The crash was likely in audio/speaker code triggered downstream of error handling,
+not directly in the HTTP request path. P3's error-path change (thrown error → catch block
+instead of yielding into fullResponse) changes the control flow and may avoid the trigger.
+
+**Panic hook already present** in `lib.rs:68-79` — writes to `krishna-crash.txt` in temp dir.
+**P3's fix changes the error path** — the crash may no longer reproduce. Owner to re-test;
+if it recurs, share the `krishna-crash.txt` content for targeted fix. Full candidate list
+(42 unwrap/expect sites across 6 files) available in the P4 phase report.
+
+### T4-F3 · BUG · FIXED (fix/travel-t4-p3 commit 3132a3c) — raw network errors are spoken verbatim to the user
+fetchAIResponse now throws classified errors (__KRNET__/__KRAPI__/__KRPARSE__/__KRSTREAM__)
+instead of yielding raw strings into the response stream. The context maps each to a human
+sentence: network → "I'm having network trouble, {honorific} — give me a moment and try
+again."; API → "The AI service had a problem, {honorific}."; parse/stream → "I had trouble
+processing the response, {honorific}." Technical detail goes to logOutcome as ai_error.
+Raw errors NEVER enter fullResponse or parseActions.
 
 ### T4-F4 · BLOCKER · FIXED (commit 40c3a55) — travel answers are never spoken: the action-result speech filter drops them
 Owner report: "how much time to travel to work?" → Krishna spoke only the ack, then silently
@@ -322,6 +353,31 @@ for the not-found path.
 failure — it shouldn't count against the failure stats. Minor insight noise; a third
 `kind:"prompt"` (speak, log neither answered nor failed) would be cleaner if this pattern
 recurs.
+
+## T4-P3 — commit 3132a3c (reviewed 2026-07-03)
+
+Solid pattern: `fetchAIResponse` throws classified `__KRNET__`/`__KRAPI__`/`__KRPARSE__`/
+`__KRSTREAM__`-tagged errors instead of yielding raw strings; the context catch block maps
+each to an honorific-aware human sentence for TTS/history while `logDetail` (the technical
+half after the tag) still reaches `command_log` for diagnostics — exactly the split the plan
+asked for. 3 new tests cover HTTP/network/stream failures with tag assertions. No blockers.
+
+### T4-N1 · NIT · OPEN — untagged errors still reach TTS raw ("I had trouble: " + rawMsg)
+The `else` fallback in `krishna.context.tsx`'s new mapping speaks `"I had trouble: " + rawMsg`
+verbatim for any error that isn't one of the four tags — i.e. this fix narrows the raw-error
+surface rather than closing it. Acceptable as an interim safety net (better a labeled
+fallback than silently swallowing an unclassified error), but any future throw site that
+doesn't use the four tags reintroduces exactly what T4-F3 fixed. **Fix (low priority, fold
+into a later pass):** tag the fallback too, e.g. `"Something unexpected went wrong, {hon}."`
+with `rawMsg` still going to `logDetail` — never surface a raw exception message in speech.
+
+## T4-P4 — commit 5369faf (reviewed 2026-07-03)
+Doc-only status update, correctly follows the plan's repro-first protocol: audited 42
+Rust `unwrap`/`expect` sites, found 0 in network paths (ruling out the leading crash
+hypothesis), flagged 6 HIGH-risk sites in `speaker/*.rs` for awareness, and marked T4-F2
+`NEEDS-REPRO` rather than guessing at a fix — exactly right per the plan's "do not blind-fix"
+instruction. No action needed until the crash reproduces (post-P3-merge, since P3 changed the
+error path the crash occurred in).
 
 ---
 *Log format for the agent: change `OPEN` → `FIXED (p<N> commit <sha>)` with a one-line note.*

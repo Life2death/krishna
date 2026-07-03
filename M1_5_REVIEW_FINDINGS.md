@@ -719,6 +719,14 @@ tracked, deliberate owner decisions (dated, rationale given, Ola's spec still pi
 later) — consistent with how this file records decisions. Noted for the record, not a
 concern, provided Vikram confirms these were in fact made with him.
 
+## ⚠️ Correction: travel-tool findings belong in `TRAVEL_TIME_REVIEW_FINDINGS.md`, not here
+The section below was filed in the wrong file (written while catching up after a branch-model
+change moved this project to per-track findings files, with `main` as the consolidated hub —
+see `pendingitems03july.md`). It has been re-filed as **T1-F4** in
+`TRAVEL_TIME_REVIEW_FINDINGS.md` (still `OPEN` — verify before Vikram's T4 retest) with a
+proper review of T4-P3/P4 alongside it. Left here only for the paper trail; do not act on the
+copy below — act on the `TRAVEL_TIME_REVIEW_FINDINGS.md` copy.
+
 ## Travel tool T1–T3 review (commits d598051/50e3dce/80dbc7a/1922f38, reviewed 2026-07-03)
 
 Overall well-built: live Google Routes v2 fields pinned correctly (traffic-aware DRIVE/
