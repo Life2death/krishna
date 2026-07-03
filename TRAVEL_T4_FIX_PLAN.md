@@ -9,10 +9,10 @@
 1. **Branch setup — fresh branch off `main` (owner decision; branches were consolidated):**
    ```
    cd D:\Learning\krishna-m15
-   git fetch origin
-   git checkout main && git pull --ff-only 2>nul || git checkout main
    git checkout -b fix/travel-t4 main
    ```
+   (Do NOT `git checkout main` itself — main is checked out in the reviewer's worktree
+   `D:\Learning\krishna` and git will refuse; branching off it directly works fine.)
    `main` (tip ≥ `c236d7a`) already contains ALL prior work (M1.5, voice-id, travel T1–T3).
    Do NOT build on `feature/m1-5-voice` anymore — it's an archive now.
 2. Work ONLY in `D:\Learning\krishna-m15`. Verify before every commit:
