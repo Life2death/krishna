@@ -3,6 +3,8 @@ import type { Action, ParsedReply, StepAction } from "@/types/assistant";
 import { resolveAppAlias, isUrl, isFilePath } from "@/config/app-aliases";
 import { resolveTarget, saveAndConfirm, needsConfirmation } from "@/lib/resolver";
 import type { ResolveResult } from "@/lib/resolver";
+import { getTravelTimeTool } from "@krishna/core/tools/get-travel-time";
+import { getResponseSettings } from "@krishna/core/settings";
 
 const ACTION_REGEX = /```action\n([\s\S]*?)```/g;
 const JSON_BLOCK_REGEX = /```json\n([\s\S]*?)```/g;
@@ -50,6 +52,9 @@ export function parseActions(reply: string): ParsedReply {
         if (parsed && parsed.action === "remember" && parsed.value) {
           actions.push({ action: "remember", key: parsed.key ?? null, value: parsed.value });
         }
+        if (parsed && parsed.action === "travel_time") {
+          actions.push({ action: "travel_time", from: parsed.from, to: parsed.to, mode: parsed.mode });
+        }
       } catch {
         // Not valid JSON, ignore
       }
@@ -74,6 +79,30 @@ export async function executeAction(
   action: Action,
   llmFallback?: LlmFallbackFn
 ): Promise<ExecuteActionResult> {
+  if (action.action === "travel_time") {
+    const from = action.from || "home";
+    const to = action.to || "";
+    const mode = action.mode || "car";
+
+    if (!to) {
+      return { spokenResponse: "Where would you like to go?" };
+    }
+
+    const result = await getTravelTimeTool.run({ from, to, mode }, { vars: {} });
+
+    if (result.data?.url) {
+      try {
+        await invoke("open_target", { target: result.data.url });
+      } catch {
+        // URL open failure is non-critical
+      }
+    }
+
+    return {
+      spokenResponse: result.output || (result.success ? "Got it, " + (getResponseSettings().honorific || "sir") + "." : "I couldn't find a route, " + (getResponseSettings().honorific || "sir") + "."),
+    };
+  }
+
   if (action.action === "open") {
     const rawTarget = action.target.trim();
     const lowerTarget = rawTarget.toLowerCase();
@@ -137,6 +166,17 @@ export async function resolveActionForConfirm(
   action: Action,
   llmFallback?: LlmFallbackFn
 ): Promise<ExecuteActionResult> {
+  if (action.action === "travel_time") {
+    const from = action.from || "home";
+    const to = action.to || "";
+    const mode = action.mode || "car";
+    const placeStr = [from, to].filter(Boolean).join(" to ");
+    return {
+      spokenResponse: `Check travel time from ${placeStr} by ${mode}?`,
+      needsConfirmation: true,
+    };
+  }
+
   if (action.action === "open") {
     const rawTarget = action.target.trim();
     const lowerTarget = rawTarget.toLowerCase();

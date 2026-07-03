@@ -1,6 +1,7 @@
 import type { Tool } from "./index";
 import { getSecret } from "../secrets";
 import { getResponseSettings } from "../settings";
+import { resolvePlace } from "./place-resolver";
 
 // ── Types ────────────────────────────────────────────────────────────────
 
@@ -301,15 +302,18 @@ export const getTravelTimeTool: Tool = {
   description:
     "Get travel time and route info between two places by car, bike, transit, or walk. " +
     "Requires a Google Maps API key in Settings. Falls back to opening Maps URL if no key. " +
-    'Args: from (origin), to (destination), mode (car|two_wheeler|transit|bicycle|walk, default car).',
+    'Args: from (origin, default "home"), to (destination), mode (car|two_wheeler|transit|bicycle|walk, default car).',
   run: async (args, ctx) => {
-    const origin = args.from || args.origin;
-    const destination = args.to || args.destination;
+    const rawOrigin = args.from || args.origin || "home";
+    const rawDestination = args.to || args.destination;
     const mode: TravelMode = (args.mode as TravelMode) || "car";
 
-    if (!origin || !destination) {
+    if (!rawDestination) {
       return { success: false, error: "Missing required args: from and to" };
     }
+
+    const origin = await resolvePlace(rawOrigin);
+    const destination = await resolvePlace(rawDestination);
 
     if (!["car", "two_wheeler", "transit", "bicycle", "walk"].includes(mode)) {
       return { success: false, error: `Invalid mode: ${mode}. Use car, two_wheeler, transit, bicycle, or walk.` };

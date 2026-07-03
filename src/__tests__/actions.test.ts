@@ -59,4 +59,27 @@ describe("parseActions", () => {
     expect(result.spokenText).toBe("Remembering that.");
     expect(result.actions).toHaveLength(1);
   });
+
+  it("parses travel_time action from action block", () => {
+    const result = parseActions('Checking route.\n```action\n{"action":"travel_time","from":"home","to":"work","mode":"car"}\n```');
+    expect(result.spokenText).toBe("Checking route.");
+    expect(result.actions).toHaveLength(1);
+    expect(result.actions[0]).toEqual({ action: "travel_time", from: "home", to: "work", mode: "car" });
+  });
+
+  it("parses travel_time with defaults omitted", () => {
+    const result = parseActions('```action\n{"action":"travel_time","to":"airport"}\n```');
+    expect(result.actions[0]).toEqual({ action: "travel_time", to: "airport" });
+  });
+
+  it("parses travel_time with two_wheeler mode", () => {
+    const result = parseActions('```action\n{"action":"travel_time","from":"home","to":"airport","mode":"two_wheeler"}\n```');
+    expect(result.actions[0]).toEqual({ action: "travel_time", from: "home", to: "airport", mode: "two_wheeler" });
+  });
+
+  it("parses travel_time from json block", () => {
+    const result = parseActions('```json\n{"action":"travel_time","from":"home","to":"work"}\n```');
+    expect(result.actions).toHaveLength(1);
+    expect(result.actions[0]).toEqual({ action: "travel_time", from: "home", to: "work" });
+  });
 });

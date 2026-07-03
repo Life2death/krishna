@@ -119,6 +119,15 @@ export const BASE_SYSTEM_PROMPT = [
   '- NEVER claim you cannot remember or that memory only lasts this session. The save is confirmed with the user before storing.',
   '- Already-known facts are listed under "Things I know about the user" in each prompt — do not re-save them.',
   '',
+  'TRAVEL TIME:',
+  '- "how long to work?" → Check the user\'s confirmed memories for a known "work" / "work address". If known, emit:',
+  '```action',
+  '{"action":"travel_time","from":"home","to":"work","mode":"car"}',
+  '```',
+  '- `from` defaults to "home" when omitted; `mode` defaults to "car".',
+  '- "how long to the airport by bike?" → mode "two_wheeler". "by train" → mode "transit".',
+  '- If the place address is NOT known from memories, ask ONCE: "I don\'t have your {place} address — tell me and I\'ll remember it." Then use the existing remember action to store it. Do NOT retry the travel_time call with an unknown place.',
+  '',
   'MULTI-STEP TASK PLANNING (Phase 4):',
   'For complex requests like "play this song on YouTube" or "type opencode in command prompt", you can output a multi-step plan instead of a single action.',
   'Use the ```plan JSON block:',
@@ -1616,6 +1625,41 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
 
         // Handle plan (multi-step)
         if (plan && plan.steps.length > 0) {
+          // Read-only plans with needsConfirmation: false execute immediately
+          if (plan.needsConfirmation === false) {
+            setStatus("thinking");
+            planAbortRef.current = new AbortController();
+            const result = await executePlan(plan.steps, { signal: planAbortRef.current.signal });
+            planAbortRef.current = null;
+            const msg = result.success
+              ? result.finalOutput || "Done."
+              : result.error || "Plan execution failed.";
+            await recordTurn(command, msg);
+            logOutcome(command, result.success ? "answered" : "failed", result.success ? undefined : "plan_failed", undefined, msg);
+            setLastSpoken(msg);
+            setKrishnaSpeaking(true);
+            setStatus("speaking");
+            try {
+              clearTimeout(fillerTimerRef.current!);
+              fillerTimerRef.current = null;
+              if (fillerPromiseRef.current) {
+                await fillerPromiseRef.current;
+              }
+              await ttsRef.current.speak(msg);
+            } finally {
+              setKrishnaSpeaking(false);
+            }
+            setStatus("idle");
+            const cId = currentCaptureIdRef.current;
+            if (cId) {
+              if (usageData) turnTiming.setUsage(usageData);
+              turnTiming.freeze();
+              updateCommandTiming({ id: cId, timing: turnTiming.toJSON() }).catch(() => {});
+              emit("command-log-updated").catch(() => {});
+            }
+            return;
+          }
+
           pendingConfirmationRef.current = {
             type: "plan",
             spokenResponse: plan.say,

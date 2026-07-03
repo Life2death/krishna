@@ -8,7 +8,8 @@ export interface KrishnaSettings {
 
 export type Action =
   | { action: "open"; target: string }
-  | { action: "remember"; key: string | null; value: string };
+  | { action: "remember"; key: string | null; value: string }
+  | { action: "travel_time"; from?: string; to?: string; mode?: string };
 
 export interface StepAction {
   tool: string;

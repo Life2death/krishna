@@ -24,6 +24,11 @@ vi.mock("@krishna/core/settings", () => ({
   LANGUAGES: [],
 }));
 
+vi.mock("@krishna/core/database", () => ({
+  getAllMemories: vi.fn().mockResolvedValue([]),
+}));
+
+import { resolvePlace } from "@krishna/core/tools/place-resolver";
 import {
   getTravelTimeTool,
   formatTravelOutput,
@@ -32,6 +37,7 @@ import {
   type RouteInfo,
   type TravelMode,
 } from "@krishna/core/tools/get-travel-time";
+import { getAllMemories } from "@krishna/core/database";
 
 // ── Helpers ──────────────────────────────────────────────────────────────
 
@@ -493,5 +499,70 @@ describe("getTravelTimeTool", () => {
 
     expect(result.success).toBe(true);
     expect(result.output).toContain("10 minutes");
+  });
+});
+
+// ── resolvePlace ──────────────────────────────────────────────────────────
+
+describe("resolvePlace", () => {
+  const mockGetAllMemories = vi.mocked(getAllMemories);
+
+  beforeEach(() => {
+    mockGetAllMemories.mockReset();
+  });
+
+  it("returns address for exact memory key match", async () => {
+    mockGetAllMemories.mockResolvedValue([
+      { id: "1", key: "home address", value: "123 Main St", confirmed: 1, source: "user", createdAt: 0, lastUsedAt: null },
+    ]);
+    expect(await resolvePlace("home address")).toBe("123 Main St");
+  });
+
+  it("matches noise-stripped key (home → home address)", async () => {
+    mockGetAllMemories.mockResolvedValue([
+      { id: "1", key: "home address", value: "123 Main St", confirmed: 1, source: "user", createdAt: 0, lastUsedAt: null },
+    ]);
+    expect(await resolvePlace("home")).toBe("123 Main St");
+  });
+
+  it("passes through unknown place names", async () => {
+    mockGetAllMemories.mockResolvedValue([
+      { id: "1", key: "home address", value: "123 Main St", confirmed: 1, source: "user", createdAt: 0, lastUsedAt: null },
+    ]);
+    expect(await resolvePlace("Rahul's place")).toBe("Rahul's place");
+  });
+
+  it("passes through Devanagari place names", async () => {
+    mockGetAllMemories.mockResolvedValue([
+      { id: "1", key: "home address", value: "123 Main St", confirmed: 1, source: "user", createdAt: 0, lastUsedAt: null },
+    ]);
+    expect(await resolvePlace("मुंबई")).toBe("मुंबई");
+  });
+
+  it("returns empty string for empty input", async () => {
+    mockGetAllMemories.mockResolvedValue([]);
+    expect(await resolvePlace("")).toBe("");
+  });
+
+  it("is case-insensitive when matching", async () => {
+    mockGetAllMemories.mockResolvedValue([
+      { id: "1", key: "Home Address", value: "456 Oak Ave", confirmed: 1, source: "user", createdAt: 0, lastUsedAt: null },
+    ]);
+    expect(await resolvePlace("home address")).toBe("456 Oak Ave");
+  });
+
+  it("matches work address from memory", async () => {
+    mockGetAllMemories.mockResolvedValue([
+      { id: "1", key: "home address", value: "123 Main St", confirmed: 1, source: "user", createdAt: 0, lastUsedAt: null },
+      { id: "2", key: "work address", value: "456 Oak Ave", confirmed: 1, source: "user", createdAt: 0, lastUsedAt: null },
+    ]);
+    expect(await resolvePlace("work")).toBe("456 Oak Ave");
+  });
+
+  it("ignores unconfirmed memories", async () => {
+    mockGetAllMemories.mockResolvedValue([
+      { id: "1", key: "home address", value: "123 Main St", confirmed: 0, source: "user", createdAt: 0, lastUsedAt: null },
+    ]);
+    expect(await resolvePlace("home")).toBe("home");
   });
 });
