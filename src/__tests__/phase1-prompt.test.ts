@@ -14,7 +14,7 @@ describe("BASE_SYSTEM_PROMPT — spoken conversation etiquette", () => {
     expect(BASE_SYSTEM_PROMPT).toContain("SPOKEN CONVERSATION ETIQUETTE:");
     expect(BASE_SYSTEM_PROMPT).toContain("{honorific}");
     expect(BASE_SYSTEM_PROMPT).toContain("language the user used");
-    expect(BASE_SYSTEM_PROMPT).toContain("1-3 short sentences");
+    expect(BASE_SYSTEM_PROMPT).toContain("at most 2 sentences");
     expect(BASE_SYSTEM_PROMPT).toContain("ACKNOWLEDGE-THEN-ACT");
   });
 });

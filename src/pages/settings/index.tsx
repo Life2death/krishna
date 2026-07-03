@@ -16,6 +16,8 @@ import {
   LanguageSelector,
   AutoScrollToggle,
   HonorificInput,
+  VoiceMaxTokensInput,
+  VoiceModelInput,
 } from "@/pages/responses/components";
 import { CreateSkillDialog, PersonaSelector } from "./components";
 import { PageLayout } from "@/layouts";
@@ -133,6 +135,12 @@ const Settings = () => {
 
       {/* Honorific */}
       <HonorificInput />
+
+      {/* Voice Max Tokens */}
+      <VoiceMaxTokensInput />
+
+      {/* Voice Model */}
+      <VoiceModelInput />
 
     </PageLayout>
   );
