@@ -670,6 +670,18 @@ but the prompt nudge kept URLs out of replies entirely. **Fix (one line, fold in
 commit):** append "Never speak raw URLs — say the site's name instead." to the etiquette line.
 
 ## P6 brevity hardening — commit 348f2e0 (REVIEWER-authored, owner-authorized, 2026-07-03)
+
+> ⚠️ **REVERTED 2026-07-03 by owner request — commit `fca491a` (`revert(m1.5-p6)`).**
+> All of 348f2e0's changes were undone: rule 11, the few-shot etiquette example, the
+> restored no-raw-URLs clause, and the cap 160 (back to 100). Prompt + cap now match the
+> agent's `69dea23` state. Reverted (not reset) because 348f2e0 was already pushed and
+> shared on the agent's branch; `fca491a` is local-only, not pushed. Consequences reopened:
+> **P6-N4 is OPEN again** (no-raw-URLs clause dropped once more), **P6-F5 risk is back**
+> (cap 100 can truncate a multi-step plan's JSON — the reason 348f2e0 raised it to 160), and
+> broad-question brevity is unhardened again (27–30s TTS on broad questions). Context: the
+> "no reply" that prompted the revert was later traced to a **duplicate `krishna.exe`
+> instance**, not 348f2e0. Original 348f2e0 review notes retained below for history.
+
 Live retest showed the abstract rule holds on simple questions (7.6s TTS) but broad questions
 still ran 27–30s. Reviewer took over with owner's sign-off:
 - **P6-F3 → HARDENED (348f2e0):** few-shot example in the etiquette (the "what can you help
