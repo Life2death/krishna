@@ -1785,7 +1785,7 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
           humanMsg = `I had trouble processing the response, ${hon}.`;
           logDetail = rawMsg.slice(rawMsg.indexOf("__KRSTREAM__:") + 13);
         } else {
-          humanMsg = `I had trouble: ${rawMsg}`;
+          humanMsg = `Something unexpected went wrong, ${hon}.`;
           logDetail = rawMsg;
         }
         setLastError(logDetail);
