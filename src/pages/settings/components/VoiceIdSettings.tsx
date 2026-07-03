@@ -1,13 +1,11 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect } from "react";
 import { Switch, Label, Header, Button, Slider } from "@/components";
 import { readBrainConfig, saveBrainConfig } from "@/lib/brain-config";
 import {
-  getVoiceStatus,
-  enrollVoice,
   resetEnrollment,
   isVoiceIdEnabled,
 } from "@/lib/voice-client";
-import type { VoiceStatus } from "@/lib/voice-client";
+import { useVoiceStatus, useVoiceEnroll } from "@/hooks";
 import { subscribeToModelLoad, getModelLoadStatus } from "@/lib/voice-id/embedding";
 import type { ModelLoadStatus } from "@/lib/voice-id/embedding";
 import { Mic, Trash2, ShieldCheck, ShieldAlert, Loader2, Download } from "lucide-react";
@@ -15,33 +13,18 @@ import { Mic, Trash2, ShieldCheck, ShieldAlert, Loader2, Download } from "lucide
 export const VoiceIdSettings = () => {
   const [enabled, setEnabled] = useState(isVoiceIdEnabled());
   const [threshold, setThreshold] = useState(readBrainConfig().voiceThreshold ?? 0.85);
-  const [status, setStatus] = useState<VoiceStatus | null>(null);
-  const [statusLoading, setStatusLoading] = useState(true);
-  const [recording, setRecording] = useState(false);
-  const [enrolling, setEnrolling] = useState(false);
   const [resetting, setResetting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [enrollResult, setEnrollResult] = useState<string | null>(null);
   const [modelStatus, setModelStatus] = useState<ModelLoadStatus>(getModelLoadStatus());
 
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const audioChunksRef = useRef<Blob[]>([]);
-  const streamRef = useRef<MediaStream | null>(null);
-
-  const fetchStatus = useCallback(async () => {
-    try {
-      const s = await getVoiceStatus();
-      setStatus(s);
-    } catch {
-      setStatus(null);
-    } finally {
-      setStatusLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchStatus();
-  }, [fetchStatus]);
+  const { status, loading: statusLoading, refresh: fetchStatus } = useVoiceStatus();
+  const {
+    recording,
+    enrolling,
+    error: enrollError,
+    result: enrollResult,
+    start: startRecording,
+    stop: stopRecording,
+  } = useVoiceEnroll(fetchStatus);
 
   useEffect(() => {
     return subscribeToModelLoad((s) => setModelStatus(s));
@@ -62,99 +45,20 @@ export const VoiceIdSettings = () => {
     saveBrainConfig(cfg);
   };
 
-  const cleanup = useCallback(() => {
-    if (mediaRecorderRef.current?.state === "recording") {
-      try { mediaRecorderRef.current.stop(); } catch {}
-    }
-    mediaRecorderRef.current = null;
-    const stream = streamRef.current;
-    if (stream) {
-      stream.getTracks().forEach((t) => { t.stop(); t.enabled = false; });
-      streamRef.current = null;
-    }
-  }, []);
-
-  const startRecording = async () => {
-    setError(null);
-    setEnrollResult(null);
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      streamRef.current = stream;
-      const mimeType = MediaRecorder.isTypeSupported("audio/webm")
-        ? "audio/webm"
-        : "audio/ogg";
-      const recorder = new MediaRecorder(stream, { mimeType });
-      mediaRecorderRef.current = recorder;
-      audioChunksRef.current = [];
-      recorder.ondataavailable = (e) => {
-        if (e.data.size > 0) audioChunksRef.current.push(e.data);
-      };
-      recorder.onstop = () => handleEnroll();
-      recorder.start(100);
-      setRecording(true);
-    } catch (err) {
-      setError("Microphone access denied");
-    }
-  };
-
-  const stopRecording = () => {
-    if (mediaRecorderRef.current?.state === "recording") {
-      mediaRecorderRef.current.stop();
-    }
-    setRecording(false);
-  };
-
-  const handleEnroll = async () => {
-    const chunks = [...audioChunksRef.current];
-    cleanup();
-    if (chunks.length === 0) return;
-    setEnrolling(true);
-    try {
-      const recordedBlob = new Blob(chunks, { type: "audio/webm" });
-      // Decode the recording, then resample to 16 kHz mono via OfflineAudioContext
-      // so enrollment audio matches the VAD verify path EXACTLY. (Sending 48 kHz and
-      // letting the brain's crude linear resampler downsample it aliased the audio and
-      // produced mismatched embeddings — owner self-score was ~0.44.)
-      const arrayBuffer = await recordedBlob.arrayBuffer();
-      const audioCtx = new AudioContext();
-      const decoded = await audioCtx.decodeAudioData(arrayBuffer);
-      await audioCtx.close();
-      const offline = new OfflineAudioContext(
-        1,
-        Math.max(1, Math.ceil(decoded.duration * 16000)),
-        16000,
-      );
-      const srcNode = offline.createBufferSource();
-      srcNode.buffer = decoded;
-      srcNode.connect(offline.destination);
-      srcNode.start();
-      const rendered = await offline.startRendering();
-      const pcm16k = rendered.getChannelData(0); // 16 kHz mono
-      const result = await enrollVoice(pcm16k, 16000);
-      setEnrollResult(`Enrolled (${result.sampleCount} sample${result.sampleCount > 1 ? "s" : ""}, ${result.dims} dims)`);
-      await fetchStatus();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Enrollment failed");
-    } finally {
-      setEnrolling(false);
-    }
-  };
-
   const handleReset = async () => {
-    setError(null);
-    setEnrollResult(null);
     setResetting(true);
     try {
       await resetEnrollment();
       await fetchStatus();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Reset failed");
+    } catch {
+      /* ignore */
     } finally {
       setResetting(false);
     }
   };
 
   const isEnrolled = status?.enrolled ?? false;
+  const error = enrollError;
 
   return (
     <div id="voice-id" className="space-y-3">
