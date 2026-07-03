@@ -160,7 +160,6 @@ export async function executeAction(
   llmFallback?: LlmFallbackFn
 ): Promise<ExecuteActionResult> {
   if (action.action === "travel_time") {
-    const from = action.from || "home";
     const to = action.to || "";
     const mode = action.mode || "car";
 
@@ -168,7 +167,7 @@ export async function executeAction(
       return { kind: "answer", spokenResponse: "Where would you like to go?" };
     }
 
-    const result = await getTravelTimeTool.run({ from, to, mode }, { vars: {} });
+    const result = await getTravelTimeTool.run({ from: action.from, to, mode }, { vars: {} });
 
     if (result.data?.url) {
       try {

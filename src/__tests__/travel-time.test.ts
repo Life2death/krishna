@@ -28,6 +28,7 @@ vi.mock("@krishna/core/database", () => ({
   getAllMemories: vi.fn().mockResolvedValue([]),
 }));
 
+import { setHttpFetch } from "@krishna/core/http";
 import { resolvePlace } from "@krishna/core/tools/place-resolver";
 import {
   getTravelTimeTool,
@@ -175,6 +176,7 @@ describe("buildMapsUrl", () => {
 describe("callGoogleRoutes (pure function)", () => {
   beforeEach(() => {
     mockFetch.mockReset();
+    setHttpFetch(mockFetch);
     vi.stubGlobal("fetch", mockFetch);
   });
 
@@ -374,6 +376,7 @@ describe("callGoogleRoutes (pure function)", () => {
 describe("getTravelTimeTool", () => {
   beforeEach(() => {
     mockFetch.mockReset();
+    setHttpFetch(mockFetch);
     vi.stubGlobal("fetch", mockFetch);
     mockGetSecret.mockReset();
     mockGetSecret.mockResolvedValue("test-key");

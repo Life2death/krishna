@@ -143,11 +143,10 @@ and should re-validate every step is actually `KNOWN_SAFE` in code — not trust
 truthy in practice — the `||` fallback string is unreachable. Harmless, just dead code; fold
 into a cleanup pass.
 
-### T2-N2 · NIT · OPEN — "home" default duplicated in two places
-`actions.ts`'s `executeAction` does `const from = action.from || "home";`, and
-`get-travel-time.ts`'s `run()` independently does `args.from || args.origin || "home"`. Both
-correct individually, but the default now lives in two places that could drift. Not urgent —
-note for whenever this file is touched next.
+### T2-N2 · NIT · FIXED (fix/travel-t4-p5) — "home" default duplicated in two places
+`executeAction` in `actions.ts` no longer applies the "home" default — `action.from` is
+passed as-is to the tool, which already applies `args.from || args.origin || "home"` at
+`get-travel-time.ts:307`. Single source of truth in the tool.
 
 ## T3 — commit 1922f38 (reviewed 2026-07-03)
 
