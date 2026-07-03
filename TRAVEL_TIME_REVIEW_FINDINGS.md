@@ -83,7 +83,7 @@ ctx-plumbing question, it's a missing import. **Fix:** import `getResponseSettin
 source `ai-response.function.ts` uses) inside `get-travel-time.ts` and pass the real
 honorific through.
 
-### T1-F4 · BLOCKER · OPEN — `callGoogleRoutes` uses plain `fetch()`, not the app's CORS-bypass transport
+### T1-F4 · BLOCKER · FIXED (commit 4d2b08e) — `callGoogleRoutes` uses plain `fetch()`, not the app's CORS-bypass transport
 `packages/core/tools/get-travel-time.ts:119` calls `fetch(GOOGLE_ROUTES_BASE, ...)` directly.
 Confirmed still present on `main` and on `fix/travel-t4` tip (`5369faf`) as of 2026-07-03.
 Every other outbound API call in this codebase (`ai-response.function.ts:194`, both `src/lib`
@@ -161,7 +161,7 @@ and should re-validate every step is actually `KNOWN_SAFE` in code — not trust
 truthy in practice — the `||` fallback string is unreachable. Harmless, just dead code; fold
 into a cleanup pass.
 
-### T2-N2 · NIT · OPEN — "home" default duplicated in two places
+### T2-N2 · NIT · FIXED (commit 4d2b08e) — "home" default duplicated in two places
 `actions.ts`'s `executeAction` does `const from = action.from || "home";`, and
 `get-travel-time.ts`'s `run()` independently does `args.from || args.origin || "home"`. Both
 correct individually, but the default now lives in two places that could drift. Not urgent —
