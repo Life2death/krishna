@@ -181,7 +181,7 @@ export async function* fetchAIResponse(params: {
     // Override max_tokens when voice path provides a cap
     if (maxOutputTokens !== undefined) {
       const maxTokensKey = Object.keys(bodyObj).find(
-        (k) => k === "max_tokens" || k === "max_completion_tokens" || k === "maxOutputTokens"
+        (k) => ["max_tokens", "max_completion_tokens", "maxOutputTokens"].includes(k.toLowerCase())
       );
       if (maxTokensKey) {
         bodyObj[maxTokensKey] = maxOutputTokens;
