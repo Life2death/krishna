@@ -4,26 +4,65 @@
 > questions. Companion state also lives in Claude's memory (`m1-5-pipeline-status`,
 > `review-not-fix-workflow`, `local-first-architecture`).
 
+## Latest updates (2026-07-03 — after this file was written)
+
+Major work happened after this session log was drafted. **Read the latest findings files**
+for the full current state: `TRAVEL_TIME_REVIEW_FINDINGS.md` (travel tool T1–T4) +
+`M1_5_REVIEW_FINDINGS.md` (T4 cross-track context + remaining open items).
+
+**Travel tool T1–T3: COMPLETE & APPROVED.** Agent built: Google Routes adapter (`d598051`),
+place resolution + prompt wiring (`80dbc7a`), Settings UI Maps key field (`1922f38`).
+All findings fixed. Module feature-complete.
+
+**T4 live acceptance (2026-07-03): FIRST ATTEMPT FAILED** — 4 findings, 3 fixed:
+- T4-F1 (phantom "saved" memories — model spoke claims without emitting action blocks):
+  **FIXED** — `detectPhantomSave()` helper + prompt hardening (`299d0b7` on `fix/travel-t4`, merged to `main`).
+- T4-F3 (raw network errors spoken verbatim): **FIXED** — classified error tags
+  (`__KRNET__`/`__KRAPI__`/etc) catch + human mapping (`3132a3c` on `fix/travel-t4-p3`).
+- T4-F4 (travel answers never spoken — legacy prefix heuristic dropped them):
+  **FIXED** — `executeActionResult.kind: "answer" / "status"` routing (`40c3a55`,
+  merged to `main`).
+- T4-F2 (hard crash `exit 0xcfffffff` mid-turn): **NEEDS REPRO** — audit found 0 panics in
+  network paths; suspected in audio/speaker Rust code. Owner must re-test after P3 merge
+  and share `krishna-crash.txt` if it recurs.
+- **T1-F4 (`fetch()` → `getHttpFetch()`): OPEN BLOCKER** — must fix before T4 retest.
+
+**Key status changes since this file:**
+- Google Maps key regenerated and re-vaulted in **app's secure store** (`secure_set` — not
+  Windows PasswordVault). ✅
+- Ola Maps key obtained and probe-tested ✅ (unused by v1 — future optional comparison only).
+- Travel tool v1 = **Google-only, English-only** per owner decision (Ola demoted from plan).
+- `348f2e0` brevity hardening **REVERTED** by `fca491a` (owner request — later traced to a
+  duplicate app instance, not the commit). P6-N4 (no-raw-URL clause) re-regressed.
+- Branch model updated: **`main`** is now the single consolidated hub for review documents;
+  `feature/local-first-p1` is archived.
+- Findings file split: travel tool findings live in `TRAVEL_TIME_REVIEW_FINDINGS.md` (not
+  `M1_5_REVIEW_FINDINGS.md`).
+
 ## Working model (who does what)
 - **Vikram (owner):** decisions, live voice testing on his laptop, API keys.
 - **Coding agent** (separate tool, currently on a free flash-tier model): writes ALL app
   code, in worktree **`D:\Learning\krishna-m15`**, branch **`feature/m1-5-voice`**. Commits
-  `feat(m1.5-p<N>)`/`fix(m1.5-p<N>)`, reports, STOPS for confirmation each phase.
+  `feat(m1.5-p<N>)`/`fix(m1.5-p<N>)` / `feat(travel-p<N>t<N>)`, reports, STOPS for
+  confirmation each phase.
 - **Claude (reviewer/architect):** plans, reviews every commit via git-object reads
   (`git show <sha>` from the main checkout — NEVER run commands inside the agent's worktree
-  while it's active), writes findings to **`M1_5_REVIEW_FINDINGS.md`**, commits docs to
-  **`D:\Learning\krishna`** on **`feature/local-first-p1`**, pushes (safe — releases only
-  fire on `v*` tags). Claude edits app code ONLY when Vikram explicitly says so (happened
-  once: commit `348f2e0`).
+  while it's active), writes findings to **`M1_5_REVIEW_FINDINGS.md`** (M1.5 legacy findings)
+  or **`TRAVEL_TIME_REVIEW_FINDINGS.md`** (travel tool findings), commits docs to
+  **`D:\Learning\krishna`** on **`main`** (was `feature/local-first-p1`; that branch is
+  archived), pushes (safe — releases only fire on `v*` tags). Claude edits app code ONLY when
+  Vikram explicitly says so.
 - **Mobile review variant:** when Vikram is out, he runs a Claude Code mobile session with a
   prompt Claude drafts (sha + spec section + "output in chat only, do NOT push"); desktop
   Claude verifies mobile's findings against the diff before merging (worked: caught P6-F1).
 
-## Repo map
-- `D:\Learning\krishna` = main checkout, branch `feature/local-first-p1` (docs/findings).
-- `D:\Learning\krishna-m15` = agent worktree, branch `feature/m1-5-voice` (all M1.5 code).
+## Repo map (updated 2026-07-03 — main is now the hub)
+- `D:\Learning\krishna` = main checkout, branch **`main`** (docs/findings consolidated hub;
+  `feature/local-first-p1` archived).
+- `D:\Learning\krishna-m15` = agent worktree, branch **`feature/m1-5-voice`** (all agent code).
+  Also has `fix/travel-t4` branch with T4 fix commits.
 - Other worktrees exist (`krishna-agent`, `krishna-agent2`) — other tracks, untouched.
-- Remote: github.com/Life2death/krishna — both branches pushed and current.
+- Remote: github.com/Life2death/krishna — `main` and `feature/m1-5-voice` pushed and current.
 
 ## 1) Architecture v2 (owner-confirmed via Q&A)
 `ARCHITECTURE_V2_PLAN.md`: desktop stays local-first (unchanged); cloud = Turso sync hub +
@@ -59,8 +98,13 @@ all in repo root, all pushed:
 - **Brevity hardening `348f2e0` (Claude-authored, owner-authorized):** few-shot example in
   etiquette, final rule 11 (spoken brevity absolute), cap 100→160 (a 100 cap could truncate
   plan JSON — P6-F5), no-raw-URLs clause restored.
+  ⚠️ **REVERTED by `fca491a`** (owner request; later traced to duplicate `krishna.exe`
+  instance, not the commit). Brief hardening undone, cap back to 100, P6-N4 re-regressed.
 - Findings ledger: `M1_5_REVIEW_FINDINGS.md` (P0-F1…P6-N4; every BLOCKER fixed & verified).
   Pattern: nearly every agent phase shipped one blocker; review caught all of them.
+  **Branch model updated:** findings now split — `M1_5_REVIEW_FINDINGS.md` for M1.5 legacy,
+  `TRAVEL_TIME_REVIEW_FINDINGS.md` for travel tool track. Both committed to `main` (was
+  `feature/local-first-p1`).
 
 ## 3) Live-test results (owner's laptop, Haiku as provider model)
 - Baseline (Sonnet): time-to-first-word ~2.1–2.5s (TTFT-dominated), TTS 15–45s monologues.
@@ -69,20 +113,35 @@ all in repo root, all pushed:
 - Canned path: bare greetings answer <500ms offline. Persona/"sir"/ack-then-act confirmed.
 - Cache column works (shows 0/0 = correctly dormant).
 - After 69dea23: simple questions brief (7.6s TTS) but broad ones still 27–30s → hence
-  `348f2e0` (not yet retested — see PENDING #1).
+  `348f2e0` (since **REVERTED** — P6-F5 cap risk is back; see `P6-F5` in findings).
 
-## 4) Maps / travel tool
-- `TRAVEL_TIME_TOOL_PLAN.md`: **v1 = Ola Maps** (India-first, ~500K–5M free calls/mo, no
-  card) — traffic-aware directions incl. two-wheeler, geocoding; T1 starts by pinning exact
-  endpoints from live Ola docs. TomTom rejected (India coverage), Mappls rejected for now
-  (opaque free tier, ~$300/mo entry), Google = future transit adapter.
-- **Google Routes key: WORKS** (live-tested: Gateway→CST 850s vs 795s static) and is stored
-  in **Windows PasswordVault**, resource `"Krishna"`, name `"GOOGLE_MAPS_API_KEY"`.
-  ⚠️ The key was exposed in chat — **Vikram must regenerate it** in Google Cloud console and
-  re-vault (retrieve/save PowerShell snippets are in the chat history; pattern: PasswordVault
-  via WinRT, never print the key).
-- **Ola Maps key: NOT yet obtained.** When Vikram vaults it as `"OLA_MAPS_API_KEY"` and says
-  "saved", Claude live-tests it from the vault (in-memory, never printed).
+## 4) Maps / travel tool — v1 COMPLETE (pending T1-F4 fix + T4 retest)
+
+**Plan doc:** `TRAVEL_TIME_TOOL_PLAN.md`. **Findings:** `TRAVEL_TIME_REVIEW_FINDINGS.md`.
+**Branch:** `feature/m1-5-voice` (agent code), `fix/travel-t4` (T4 fixes).
+
+**v1 = Google Routes ONLY, English only** (owner decision 2026-07-03). Ola is DOCUMENTED and
+key-obtained but is a **future user-invoked "second opinion" check only** — never a fallback.
+
+**T1–T3: BUILT & REVIEWED (commits `d598051` / `50e3dce` / `80dbc7a` / `1922f38`).**
+- Google Routes v2 adapter (`computeRoutes`, traffic-aware, DRIVE/TWO_WHEELER/TRANSIT).
+- Place resolution (memories → exact match → noise-stripped → raw text pass-through).
+- Prompt wiring + action vocabulary + ask-once-then-remember for unknown places.
+- Settings UI Maps API key field (`secure_set`/`secure_get` — app's real secure store).
+- Read-only tool (no confirmation gate, `KNOWN_SAFE`). All review findings fixed.
+
+**T4 (live acceptance): FIRST ATTEMPT FAILED.** 3 fixes applied, 2 open items.
+- **T1-F4 · OPEN BLOCKER:** `callGoogleRoutes` uses plain `fetch()` — must be `getHttpFetch()`
+  (CORS bypass). Fix before any live retest.
+- **T4-F2 · NEEDS-REPRO:** Hard crash `exit 0xcfffffff`. Audit found 0 panics in network
+  paths; suspect audio/speaker Rust code. Owner re-test + share `krishna-crash.txt` if recur.
+
+**Key changes from earlier assumptions in this file:**
+- Google key: **regenerated** (was exposed in chat), **re-vaulted** in app's `secure_set`
+  (not Windows PasswordVault). The `secure_set`/`secure_get` Tauri commands use an
+  **AES-256-GCM-encrypted blob** (`secure_storage.enc`) in app-data — not Credential Manager.
+- Ola key: **obtained and probe-tested** (2026-07-03). Unused by v1.
+- `TRAVEL_TIME_TOOL_PLAN.md` updated to reflect the Google-only scope.
 
 ## 5) Parked / other
 - `ORNITH_INTEGRATION_PLAN.md`: PARKED — laptop (Ryzen 3 3200U, Vega 3, 18GB, no dGPU)
@@ -92,29 +151,30 @@ all in repo root, all pushed:
 - Agent quality note: free flash-tier model → expect a blocker per phase; review pipeline
   absorbs it; suggest stronger model if a phase loops.
 
-## PENDING (ordered)
-1. **Owner retest of 348f2e0** (M1.5 finish line). Steps: `cd D:\Learning\krishna-m15` →
-   `npm run tauri dev` → **Settings → Voice Max Tokens → set 160** (old 100 persists in
-   localStorage; new default can't override) → speak: "what can you help me with?" (acid
-   test: 2 sentences + offer, ~5–8s), "tell me something interesting about space.",
-   "open Chrome and search for lofi music" (**command turn — verifies plans survive the
-   cap**, P6-F5 watch item). Pass ⇒ M1.5 DONE → write the closing before/after report card.
-2. **P6-F4 (needs repro):** TTS occasionally too fast to understand — capture turn,
+## PENDING (ordered, as of 2026-07-03 travel T4 findings)
+1. **Fix T1-F4 before T4 retest** — replace plain `fetch()` with `getHttpFetch()` in
+   `packages/core/tools/get-travel-time.ts`. Also verify Tauri CSP/capabilities allow
+   `routes.googleapis.com` in `src-tauri/capabilities/*.json`.
+2. **Owner T4 retest** — after T1-F4 fix, re-run live acceptance (`npm run tauri dev`):
+   remember home/work addresses → "how long to work?" → verify spoken travel time with
+   traffic + alternative + transit. Watch for T4-F2 crash (`exit 0xcfffffff`) — if it recurs,
+   share `krishna-crash.txt`. Pass ⇒ travel v1 DONE.
+3. **P6-F4 (needs repro):** TTS occasionally too fast to understand — capture turn,
    transcript, and whether a filler played just before.
-3. Open NITs (fold into future commits): P6-N4 *(done in 348f2e0)*, P0-F3 (STT stage
-   unmeasured), P1-F5 (seed edits inert on existing installs), P6-F2 note (brain's
-   pre-existing tsc error, non-blocking).
-4. **Travel tool build** (`TRAVEL_TIME_TOOL_PLAN.md`) — needs Ola key from Vikram; agent
-   does T1–T4 with the usual phase protocol; also fold the P6-F4/N items above.
-5. **Google key regeneration** (security hygiene, Vikram).
-6. Then the bigger roadmap: M1 mobile (conversation-only Android) → M2 → M3 → M4;
-   Phase 5 (language matching) of M1.5 still unbuilt — schedule with M1 mobile since it
-   touches the same TTS voice selection.
+4. **Open NITs (fold into future commits):** P6-N4 (no-raw-URL clause — regressed by
+   `fca491a` revert of `348f2e0`), P0-F3 (STT stage unmeasured), P1-F5 (seed edits inert on
+   existing installs), T3-N1 (no real validation ping), T3-N2 (no MapsSettings tests),
+   T4-N1 (untagged errors still reach TTS).
+5. **Bigger roadmap:** M1 mobile (conversation-only Android) → M2 (reminders/tasks) →
+   M3 (cloud worker/push) → M4 (command relay). Phase 5 (language matching) of M1.5 still
+   unbuilt — schedule with M1 mobile since it touches the same TTS voice selection. Travel
+   tool already built; add read-only `travel_time` to M1 mobile safe-list when M1 lands.
 
 ## How to resume (for a fresh Claude session)
-Read this file + `M1_5_REVIEW_FINDINGS.md`. Check `git log --oneline feature/m1-5-voice -5`
-for anything new since `348f2e0`; review new commits via `git show` (never run inside the
-agent worktree while it's active); update the findings file; commit+push docs on
-`feature/local-first-p1`. If Vikram pastes a test table: newest rows are at the top;
-E→Send/Send→1st/1st→Audio/Tokens/Cache/TTS/Total columns; TTS ≤10s and Send→1st ~1s are the
-current pass bars.
+Read this file + `M1_5_REVIEW_FINDINGS.md` + `TRAVEL_TIME_REVIEW_FINDINGS.md`.
+Check `git log --oneline feature/m1-5-voice -5` for anything new since `1922f38` (the latest
+agent commit); review new commits via `git show` (never run inside the agent worktree while
+it's active); update findings files as needed; commit+push docs on **`main`** (the single
+consolidated hub — `feature/local-first-p1` is archived). If Vikram pastes a test table:
+newest rows at the top; the travel T4 table has its own column format (see
+`TRAVEL_TIME_REVIEW_FINDINGS.md` for the latest).
