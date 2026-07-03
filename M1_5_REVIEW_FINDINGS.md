@@ -597,7 +597,7 @@ brain workspace's own typecheck to confirm (report both tsc results).
 Original issue (case-sensitive exact-match) addressed by switching to
 `[...].includes(k.toLowerCase())` in both twins. But the fix is itself case-broken — see P6-N2.
 
-### P6-N2 · NIT · OPEN — the case-insensitivity fix keeps a mixed-case needle in the list
+### P6-N2 · NIT · FIXED (p6 commit 69dea23) — the case-insensitivity fix keeps a mixed-case needle in the list
 bbd1bf0 uses `["max_tokens", "max_completion_tokens", "maxOutputTokens"].includes(k.toLowerCase())`
 in both twins (`ai-response.function.ts:184`). The haystack is lowercased but the list still
 contains **`"maxOutputTokens"`** (mixed case) — so a body key that lowercases to
@@ -615,7 +615,7 @@ target — the `setSettingsGetter` literal — now typechecks). `apps/brain` is 
 runtime path, so this is not a milestone blocker. Confirm it predates 9b5cf12 only if the
 brain workspace ever needs to build again.
 
-### P6-N3 · NIT · OPEN — `voiceModel` has storage + updater but NO Settings UI control
+### P6-N3 · NIT · FIXED (p6 commit 69dea23) — `voiceModel` has storage + updater but NO Settings UI control
 `updateVoiceModel`/`voiceModel` exist in response-settings storage and the voice path reads
 them, but there is no UI input to set `voiceModel` (only `HonorificInput` was added). So the
 Phase-6 scope item "chat model as a setting + Haiku-tier option for owner A/B" is only
@@ -639,7 +639,7 @@ Rows 1–4 of the run were on **Haiku** (owner realized the provider MODEL was a
 - **1st→Audio rose to ~2.8–3.1s on the Haiku rows** (was ~1.3–2.0s) — likely the P4-F7-class
   post-stream gap under different timing; watch it, may be variance.
 
-### P6-F3 · BUG · OPEN — voice replies ignore the brevity/no-markdown etiquette → 14–43s monologues
+### P6-F3 · BUG · FIXED (p6 commit 69dea23) — voice replies ignore the brevity/no-markdown etiquette → 14–43s monologues
 Haiku TTS: 42.9s / 17.9s / 32.3s / 13.9s. The "what can you help me with?" reply was a
 **multi-section markdown list** (headers + bullets: "Open & Launch:", "Control Your
 Computer:", …) that also **truncated mid-sentence** ("…type out") — i.e. it hit the 200-token
