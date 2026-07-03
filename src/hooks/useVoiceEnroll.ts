@@ -17,7 +17,6 @@ export function useVoiceEnroll(onEnrolled?: () => Promise<void>): VoiceEnrollSta
   const [result, setResult] = useState<string | null>(null);
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const audioChunksRef = useRef<Blob[]>([]);
   const streamRef = useRef<MediaStream | null>(null);
   const chunksRef = useRef<Blob[]>([]);
 

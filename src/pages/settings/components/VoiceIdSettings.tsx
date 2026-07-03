@@ -14,6 +14,7 @@ export const VoiceIdSettings = () => {
   const [enabled, setEnabled] = useState(isVoiceIdEnabled());
   const [threshold, setThreshold] = useState(readBrainConfig().voiceThreshold ?? 0.85);
   const [resetting, setResetting] = useState(false);
+  const [resetError, setResetError] = useState<string | null>(null);
   const [modelStatus, setModelStatus] = useState<ModelLoadStatus>(getModelLoadStatus());
 
   const { status, loading: statusLoading, refresh: fetchStatus } = useVoiceStatus();
@@ -47,18 +48,19 @@ export const VoiceIdSettings = () => {
 
   const handleReset = async () => {
     setResetting(true);
+    setResetError(null);
     try {
       await resetEnrollment();
       await fetchStatus();
-    } catch {
-      /* ignore */
+    } catch (err) {
+      setResetError(err instanceof Error ? err.message : "Reset failed");
     } finally {
       setResetting(false);
     }
   };
 
   const isEnrolled = status?.enrolled ?? false;
-  const error = enrollError;
+  const error = enrollError || resetError;
 
   return (
     <div id="voice-id" className="space-y-3">
