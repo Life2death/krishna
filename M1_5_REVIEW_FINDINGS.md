@@ -572,5 +572,42 @@ conversational replies; keep etiquette line; verify TTS times drop from 15–45s
    override, groq (`max_completion_tokens`) override, no-key template skips, chat path
    (param omitted) untouched.
 
+## Phase 6 — commit 9b5cf12 (reviewed 2026-07-02/03, mobile Claude review + desktop verification)
+
+Substantively a clean phase — all six spec checks passed: override-not-inject verified against
+all 10 real templates (claude `max_tokens` + groq `max_completion_tokens` override; the other
+8 correctly skip+warn), twin-file parity byte-identical, voice-only scoping correct
+(`voiceModel: ""` falls back to provider MODEL; text chat passes neither param), all 4 tests
+assert the right things, HonorificInput genuinely persists AND is read at runtime (voice +
+chat), and the canned/filler/plan-confirmation paths are untouched. Two findings:
+
+### P6-F1 · BLOCKER · OPEN — `apps/brain/src/core-init.ts` misses the two new required ResponseSettings fields
+`packages/core/settings.ts` now requires `voiceMaxTokens: number` and `voiceModel: string`
+(non-optional). `src/lib/startup.ts` + `src/__tests__/setup.ts` were updated, but the brain's
+`setSettingsGetter(() => ({responseLength, language, autoScroll, honorific}))`
+(`core-init.ts:56-61`) was not → the object literal no longer satisfies `SettingsGetter` →
+**apps/brain workspace typecheck breaks** (not covered by the root `tsc --noEmit` the commit
+message cites — brain has its own tsconfig). Precedent: honorific was added to this exact
+call site in 236d1fb; this commit broke that pattern. **Fix:** add `voiceMaxTokens: 200,
+voiceModel: ""` to the literal. Impact note: brain is retired from the runtime path, so this
+is a build-hygiene break, not a user-facing one — but it's a one-liner; fix it and run the
+brain workspace's own typecheck to confirm (report both tsc results).
+
+### P6-N1 · NIT · OPEN — max-tokens key detection is case-sensitive, spec said match the stream-key pattern
+`ai-response.function.ts:183-184` (both twins): `k === "max_tokens" || …` — the stream-key
+search this was modeled on uses `k.toLowerCase() === "stream"`. Harmless for the 10 built-in
+templates (all lowercase); a custom template with different casing would silently skip.
+**Fix (fold into the P6-F1 commit):** compare `k.toLowerCase()` against the three names.
+
+*(Credit: both findings from the mobile Claude review session; desktop-verified against the
+commit before filing.)*
+
 ---
 *Log format for the agent: change `OPEN` → `FIXED (p<N> commit <sha>)` with a one-line note.*
+
+## Phase 6 — commit 9b5cf12 (complete)
+- P4-F9: FIXED (commit 5b9f47d)
+- Phase 6: feat(m1.5-p6) — commit 9b5cf12: max_tokens cap (200), voiceModel override,
+  honorific Settings UI (P1-F8). Full suite: 23 files, 339/339 tests, tsc clean.
+- **Next:** owner runs `npm run tauri dev` in the worktree, turns 3-4 voice rounds,
+  observes LatencyPanel (expect TTS column to drop from 15-45s to <10s). Report table.
