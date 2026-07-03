@@ -94,7 +94,7 @@ noise-stripped match → pass-through), `travel_time` correctly added to `KNOWN_
 tests are well-targeted. One significant finding that goes beyond T2's stated scope and needs
 attention before T3/T4; two minor NITs.
 
-### T2-F1 · BLOCKER · OPEN — new plan-level confirmation bypass isn't scoped to travel_time and can skip the Voice-ID unverified-speaker gate
+### T2-F1 · BLOCKER · FIXED (commit 1922f38) — new plan-level confirmation bypass isn't scoped to travel_time and can skip the Voice-ID unverified-speaker gate
 `krishna.context.tsx`, inside the plan-handling branch: a new `if (plan.needsConfirmation ===
 false) { ... executePlan(...); return; }` fast path was added, inserted **before** the
 pre-existing `isUnverified`/`hasSensitiveStep` check that normally forces confirmation. This
@@ -134,7 +134,7 @@ fast path is genuinely wanted for a future case, it must AND together with the e
 and should re-validate every step is actually `KNOWN_SAFE` in code — not trust the model's
 `needsConfirmation` claim alone.
 
-### T2-N1 · NIT · OPEN — dead fallback branch in `actions.ts`'s travel_time executeAction
+### T2-N1 · NIT · FIXED (commit 1922f38) — dead fallback branch in `actions.ts`'s travel_time executeAction
 `spokenResponse: result.output || ("Got it, " + honorific + "." / "I couldn't find a route...")`
 — `getTravelTimeTool.run()`'s every return path already sets a non-empty `output` (the
 `formatTravelOutput([], ...) === ""` case only happens when `routes.length === 0`, which
@@ -148,6 +148,51 @@ into a cleanup pass.
 `get-travel-time.ts`'s `run()` independently does `args.from || args.origin || "home"`. Both
 correct individually, but the default now lives in two places that could drift. Not urgent —
 note for whenever this file is touched next.
+
+## T3 — commit 1922f38 (reviewed 2026-07-03)
+
+Overall: T2-F1/N1 fixes verified genuine (checked the real diff, not just the claim — see
+below). New `MapsSettings.tsx` correctly wired and, importantly, **T1-F1 is now genuinely
+resolved**: traced `secureStorage.set/get` → `invoke("secure_set"/"secure_get")` → the same
+Tauri commands `getSecret` reads from (`src-tauri/src/secure.rs`) — once a key is pasted into
+Settings → Maps, `getTravelTimeTool` will actually find it. One SHA correction, one
+downgraded/reframed finding, no new blockers.
+
+**T2-F1 verified fixed:** the entire `if (plan.needsConfirmation === false) { ... }` block is
+cleanly removed from `krishna.context.tsx` — all plans now unconditionally go through the
+original `pendingConfirmationRef` flow again, so the Voice-ID `isUnverified` check applies to
+every plan as before. Full revert-style fix, exactly option (a) from the T2 review. *(Ledger
+correction: this file briefly cited commit `80dbc7a` — that's the commit that introduced the
+bug, not the fix. Corrected above to `1922f38`, the actual fix commit.)*
+
+**T2-N1 verified fixed:** simplified to a flat `"I couldn't find a route."` string, dropping
+the never-reached honorific-interpolating ternary. Reasonable simplification of confirmed
+dead code.
+
+### T3-N1 · NIT (downgraded from a suspected gap) · OPEN — no live "validation ping" against the plan's literal wording, but this matches the codebase's actual existing pattern
+`TRAVEL_TIME_TOOL_PLAN.md`'s T3 line asks for "validation ping (1 cheap request)." What
+`MapsSettings.tsx` does instead is a **storage round-trip check** — write via `secureStorage.
+set`, then immediately `secureStorage.get` to confirm the write persisted — not a real call to
+Google's Routes API to confirm the key itself is valid. Checked whether this is a shortcut
+against house style: it is not — `Integrations.tsx` (GitHub PAT), the exact component this
+was explicitly modeled on, does **the identical thing** (save → read-back → persistence
+check, no live GitHub API call either). So this isn't a corner cut by the agent; it's that no
+provider-key field in this codebase does real validation yet, and the plan's wording (mine)
+assumed a stricter existing pattern than actually exists. **Consequence if left as-is:** a
+typo'd or expired key gets a green "✓ API key configured" checkmark and silently degrades to
+the URL fallback on first real use, with no signal pointing at the key being the problem.
+**Suggested fix (not urgent, batch with Integrations.tsx if ever done):** add a real one-call
+validation ping to both `MapsSettings` and `Integrations` together, for consistency — doing
+it for Maps alone would create a fresh inconsistency between two visually-identical
+components.
+
+### T3-N2 · NIT · OPEN — no test file for `MapsSettings.tsx`
+Zero new tests in this commit (flat at 390, same as after T2). Matches existing precedent —
+`Integrations.tsx` also has no test file — so not a new gap, just noting it stays uncovered.
+
+**Status: T1, T2, T3 all reviewed and approved.** Module is feature-complete per the plan
+(minus the intentionally-out-of-scope Ola comparison check). Only T4 (owner's live
+acceptance test) remains, and it's unblocked now that the key-store path works end-to-end.
 
 ---
 *Log format for the agent: change `OPEN` → `FIXED (p<N> commit <sha>)` with a one-line note.*
