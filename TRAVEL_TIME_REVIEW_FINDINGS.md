@@ -86,5 +86,68 @@ honorific through.
 The diff's second `+` line (`"@krishna/core/tools": path.resolve(...)`) lost its leading
 6-space indent — cosmetic only, `tsc`/bundler don't care, but run the formatter next commit.
 
+## T2 — commit 80dbc7a (reviewed 2026-07-03)
+
+Overall: place resolution, action-vocabulary/prompt wiring, and action parsing are all clean
+and correctly scoped to the plan — `resolvePlace()` matches spec exactly (exact key match →
+noise-stripped match → pass-through), `travel_time` correctly added to `KNOWN_SAFE`, new
+tests are well-targeted. One significant finding that goes beyond T2's stated scope and needs
+attention before T3/T4; two minor NITs.
+
+### T2-F1 · BLOCKER · OPEN — new plan-level confirmation bypass isn't scoped to travel_time and can skip the Voice-ID unverified-speaker gate
+`krishna.context.tsx`, inside the plan-handling branch: a new `if (plan.needsConfirmation ===
+false) { ... executePlan(...); return; }` fast path was added, inserted **before** the
+pre-existing `isUnverified`/`hasSensitiveStep` check that normally forces confirmation. This
+is a general plan-execution change, not something scoped to `get_travel_time` — it applies to
+*any* multi-step plan the model emits.
+**Why this matters:**
+1. `SYSTEM_PROMPT_RULES` rule 3 (unchanged by this commit) still says **"Always set
+   `needsConfirmation`: true for multi-step plans."** The new travel-time prompt section also
+   tells the model to emit travel_time as a single `action` block, not a `plan` — so today,
+   under normal model behavior, this path shouldn't trigger at all. It was added without any
+   prompt instruction that would ever produce `needsConfirmation: false`, and isn't requested
+   anywhere in `TRAVEL_TIME_TOOL_PLAN.md`'s T2 scope (place resolution + prompt wiring +
+   ask-once-remember only).
+2. The flag is **fully model-self-attested with zero code-side enforcement** —
+   `src/lib/actions.ts:23`: `needsConfirmation: parsed.needsConfirmation !== false` takes the
+   raw parsed JSON at face value. Nothing cross-checks the plan's actual step composition
+   against this claim.
+3. `executePlan()` (`packages/core/executor.ts:53-63`) does still reject any step whose tool
+   `classifyAction()`s as `"sensitive"` — so this isn't a full bypass of all safety. But
+   `KNOWN_SAFE` already includes `open_target` and `memory_write` (pre-existing, not added by
+   this commit) alongside the new `get_travel_time`. If the model ever emits
+   `needsConfirmation: false` on a plan built entirely from `KNOWN_SAFE` tools — whether by
+   hallucination, an edge-case phrasing, or simply not perfectly following rule 3 (this
+   project's own notes flag the driving model as a "free flash-tier model" prone to one
+   blocker per phase) — that plan runs **immediately, with no spoken confirmation, and
+   without ever checking whether the current speaker is Voice-ID-verified.** That directly
+   defeats the Voice ID feature's stated purpose ("unverified speakers are asked to confirm
+   before executing any action," per `VoiceIdSettings.tsx`'s own description text) for
+   exactly the tool combination (`open_target`, `memory_write`) where an unverified/impostor
+   speaker skipping confirmation is most worth preventing.
+**Fix, in order of preference:** (a) simplest — remove the fast path entirely; T2's actual
+requirement (no confirmation for read-only travel_time) is already satisfied correctly via
+the single-`action` path (`KNOWN_SAFE` + `resolveActionForConfirm` gated on `isUnverified`),
+so this fast path isn't needed to hit the plan's acceptance criteria. (b) if a plan-level
+fast path is genuinely wanted for a future case, it must AND together with the existing
+`isUnverified` check (never skip on an unverified speaker, no matter what the model claims),
+and should re-validate every step is actually `KNOWN_SAFE` in code — not trust the model's
+`needsConfirmation` claim alone.
+
+### T2-N1 · NIT · OPEN — dead fallback branch in `actions.ts`'s travel_time executeAction
+`spokenResponse: result.output || ("Got it, " + honorific + "." / "I couldn't find a route...")`
+— `getTravelTimeTool.run()`'s every return path already sets a non-empty `output` (the
+`formatTravelOutput([], ...) === ""` case only happens when `routes.length === 0`, which
+`callGoogleRoutes` already turns into a thrown error caught by the URL-fallback branch before
+`formatTravelOutput` is ever called with an empty array). So `result.output` is always
+truthy in practice — the `||` fallback string is unreachable. Harmless, just dead code; fold
+into a cleanup pass.
+
+### T2-N2 · NIT · OPEN — "home" default duplicated in two places
+`actions.ts`'s `executeAction` does `const from = action.from || "home";`, and
+`get-travel-time.ts`'s `run()` independently does `args.from || args.origin || "home"`. Both
+correct individually, but the default now lives in two places that could drift. Not urgent —
+note for whenever this file is touched next.
+
 ---
 *Log format for the agent: change `OPEN` → `FIXED (p<N> commit <sha>)` with a one-line note.*
