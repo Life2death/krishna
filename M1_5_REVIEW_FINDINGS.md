@@ -629,6 +629,42 @@ storage). Fold into the travel-tool commit or a quick `feat(m1.5-p6)` follow-up.
 *(Credit: P6-F1/P6-N1 from the mobile Claude review session; P6-N2/P6-F2/P6-N3 from desktop
 verification of the fix commit.)*
 
+## Phase 6 LIVE TEST (owner, 2026-07-03) — Haiku TTFT win confirmed; brevity is broken
+
+Rows 1–4 of the run were on **Haiku** (owner realized the provider MODEL was already
+`claude-haiku-4-5`), rows 6–9 the earlier **Sonnet** run — so this is a real A/B:
+- **Send→1st (TTFT): Haiku ~1.0–1.3s vs Sonnet ~2.0–5.7s.** Haiku ~halves TTFT and removes
+  the 5.7s cold spikes. **Haiku is a legit fast-conversation option — recommend it as the
+  voice-model default** once P6-N3 gives it a UI (or set provider MODEL to Haiku now).
+- **1st→Audio rose to ~2.8–3.1s on the Haiku rows** (was ~1.3–2.0s) — likely the P4-F7-class
+  post-stream gap under different timing; watch it, may be variance.
+
+### P6-F3 · BUG · OPEN — voice replies ignore the brevity/no-markdown etiquette → 14–43s monologues
+Haiku TTS: 42.9s / 17.9s / 32.3s / 13.9s. The "what can you help me with?" reply was a
+**multi-section markdown list** (headers + bullets: "Open & Launch:", "Control Your
+Computer:", …) that also **truncated mid-sentence** ("…type out") — i.e. it hit the 200-token
+cap. So the Phase-6 cap IS applied, but two things are wrong:
+1. **200 tokens is still ~40s of speech** — far past the "1–3 short sentences" goal.
+2. **The spoken-etiquette rule is not being followed** — the model produces lists/headings for
+   spoken output (BASE_SYSTEM_PROMPT forbids markdown + caps at 1–3 sentences). Sonnet rows
+   (6–9) were also 15–45s, so this is model-agnostic and worse on Haiku (weaker instruction
+   following). Truncating a long reply mid-sentence is itself bad UX.
+**Fix (prompt-first, cap as backstop):** (a) verify `voiceMaxTokens` actually reaches the
+request — surface the request's `max_tokens` in the LatencyPanel or log it once; (b) lower the
+voice cap to ~100 tokens; (c) STRENGTHEN the spoken etiquette for weak models — explicit:
+"Spoken reply: at most 2 sentences. NEVER use markdown, headings, bullet lists, or numbered
+lists — this is read aloud. If the question is broad, give a one-sentence answer and offer to
+elaborate." Consider wiring the existing response-length setting to the cap. (d) Re-verify the
+owner's selected persona/response-length settings aren't set to a long mode.
+
+### P6-F4 · BUG · NEEDS-REPRO — TTS occasionally speaks too fast to understand
+Owner: one reply "spoke so fast no one would understand," hypothesized to correlate with a URL
+in the sentence. Not reproducible from the table alone. **To diagnose, capture:** the exact
+turn, the on-screen transcript text of that reply, and whether a filler ("One moment…") played
+just before it. Suspects: browser `speechSynthesis` rate glitch after a filler/cancel
+transition (P4-F9 area), or a `sanitizeSpeech` output that concatenates words. Hold until
+repro data.
+
 ---
 *Log format for the agent: change `OPEN` → `FIXED (p<N> commit <sha>)` with a one-line note.*
 
