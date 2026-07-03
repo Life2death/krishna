@@ -362,7 +362,7 @@ each to an honorific-aware human sentence for TTS/history while `logDetail` (the
 half after the tag) still reaches `command_log` for diagnostics — exactly the split the plan
 asked for. 3 new tests cover HTTP/network/stream failures with tag assertions. No blockers.
 
-### T4-N1 · NIT · OPEN — untagged errors still reach TTS raw ("I had trouble: " + rawMsg)
+### T4-N1 · NIT · FIXED (commit bd644cf) — untagged errors still reach TTS raw ("I had trouble: " + rawMsg)
 The `else` fallback in `krishna.context.tsx`'s new mapping speaks `"I had trouble: " + rawMsg`
 verbatim for any error that isn't one of the four tags — i.e. this fix narrows the raw-error
 surface rather than closing it. Acceptable as an interim safety net (better a labeled
