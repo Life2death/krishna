@@ -657,6 +657,18 @@ lists — this is read aloud. If the question is broad, give a one-sentence answ
 elaborate." Consider wiring the existing response-length setting to the cap. (d) Re-verify the
 owner's selected persona/response-length settings aren't set to a long mode.
 
+## P6 fix commit — 69dea23 (desktop-verified 2026-07-03)
+FIXED marks for P6-F3/P6-N2/P6-N3 accepted after diff verification: etiquette line matches
+the prescription verbatim; cap 200→100 across the constant + all fallback literals; override
+log added (key+value only); needle list fully lowercased in both twins; VoiceMaxTokensInput +
+VoiceModelInput are rendered in settings/index.tsx AND wired to storage (not dead fields).
+
+### P6-N4 · NIT · OPEN — etiquette rewrite dropped the "no raw URLs" clause
+The old spoken-etiquette line also banned raw URLs in spoken text; the strengthened rewrite
+lost that clause. The sanitizer converts domains at speak-time (P2-F8), so impact is low —
+but the prompt nudge kept URLs out of replies entirely. **Fix (one line, fold into any next
+commit):** append "Never speak raw URLs — say the site's name instead." to the etiquette line.
+
 ### P6-F4 · BUG · NEEDS-REPRO — TTS occasionally speaks too fast to understand
 Owner: one reply "spoke so fast no one would understand," hypothesized to correlate with a URL
 in the sentence. Not reproducible from the table alone. **To diagnose, capture:** the exact
