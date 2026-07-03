@@ -1,10 +1,38 @@
 # Claude session log — 2026-07-02 → 03 (architecture v2 + M1.5 voice/latency)
 
 > **Purpose: cold-start file.** A fresh Claude session reads this and resumes with zero
-> questions. Companion state also lives in Claude's memory (`m1-5-pipeline-status`,
-> `review-not-fix-workflow`, `local-first-architecture`).
+> questions. Companion state also lives in Claude's memory (`session-status-2026-07-03`,
+> `m1-5-pipeline-status`, `review-not-fix-workflow`, `local-first-architecture`).
 
-## Latest updates (2026-07-03 — after this file was written)
+## Latest updates (night of 2026-07-03 — travel-t4 findings all closed)
+
+**T1-F4, T2-N2, T4-N1 all FIXED tonight** (commits `4d2b08e` and `bd644cf` on `fix/travel-t4`,
+both verified by the reviewer, findings file updated in commits `e1079cb`/`f426e1b` on `main`
+— none of this is pushed yet, per policy, see "Push policy" below):
+- **T1-F4** — `callGoogleRoutes` now uses `getHttpFetch()` instead of plain `fetch()`;
+  `routes.googleapis.com` added to CSP `connect-src` (`tauri.conf.json`) and both
+  `src-tauri/capabilities/default.json` + `cross-platform.json`; test file wires
+  `setHttpFetch(mockFetch)`. This was the blocker keeping the tool from working live at all.
+- **T2-N2** rode along in the same commit — deduped the `"home"` default (the tool itself
+  still defaults internally at `get-travel-time.ts:309`, so behavior is unchanged).
+- **T4-N1** — untagged errors now speak "Something unexpected went wrong, {hon}." instead of
+  the raw exception text; raw text still flows to `logDetail` for diagnostics.
+- **Only remaining open items in `TRAVEL_TIME_REVIEW_FINDINGS.md`:** `T3-N1` (downgraded, no
+  action needed), `T3-N2` (no test file for `MapsSettings.tsx`, low priority), and `T4-F2`
+  (the crash — still `NEEDS-REPRO`, needs Vikram live with terminal capture).
+- **No code work is queued for the agent right now** — next step is Vikram's live T4 retest
+  (see PENDING #1 below, rewritten). Everything below "Latest updates" in this file predates
+  tonight and is kept for history/context only — trust this section over the body for status.
+
+### Push policy (read this before pushing anything)
+`main` is the working branch now (see branch-model note below), and pushing to it fires
+`.github/workflows/release.yml` on every push — it fails fast (~0s) and doesn't actually
+publish (verified via `gh release list` — latest is still June's `v2.1.0` draft), but it's
+still unwanted noise per [[no-push-release-pipeline]]. **Commit locally, do not push, unless
+Vikram explicitly says to push.** This bit the reviewer once already tonight (2 accidental
+pushes, no real harm, see `session-status-2026-07-03` memory for the full account).
+
+## Earlier updates (2026-07-03 daytime — after this file was originally written)
 
 Major work happened after this session log was drafted. **Read the latest findings files**
 for the full current state: `TRAVEL_TIME_REVIEW_FINDINGS.md` (travel tool T1–T4) +
@@ -25,7 +53,8 @@ All findings fixed. Module feature-complete.
 - T4-F2 (hard crash `exit 0xcfffffff` mid-turn): **NEEDS REPRO** — audit found 0 panics in
   network paths; suspected in audio/speaker Rust code. Owner must re-test after P3 merge
   and share `krishna-crash.txt` if it recurs.
-- **T1-F4 (`fetch()` → `getHttpFetch()`): OPEN BLOCKER** — must fix before T4 retest.
+- ~~T1-F4 (`fetch()` → `getHttpFetch()`): OPEN BLOCKER~~ — **FIXED same night**, see "Latest
+  updates" at the top of this file.
 
 **Key status changes since this file:**
 - Google Maps key regenerated and re-vaulted in **app's secure store** (`secure_set` — not
@@ -130,9 +159,8 @@ key-obtained but is a **future user-invoked "second opinion" check only** — ne
 - Settings UI Maps API key field (`secure_set`/`secure_get` — app's real secure store).
 - Read-only tool (no confirmation gate, `KNOWN_SAFE`). All review findings fixed.
 
-**T4 (live acceptance): FIRST ATTEMPT FAILED.** 3 fixes applied, 2 open items.
-- **T1-F4 · OPEN BLOCKER:** `callGoogleRoutes` uses plain `fetch()` — must be `getHttpFetch()`
-  (CORS bypass). Fix before any live retest.
+**T4 (live acceptance): FIRST ATTEMPT FAILED.** 3 fixes applied, then T1-F4/T2-N2/T4-N1 all
+fixed same night (see "Latest updates" at top). **Only remaining open item:**
 - **T4-F2 · NEEDS-REPRO:** Hard crash `exit 0xcfffffff`. Audit found 0 panics in network
   paths; suspect audio/speaker Rust code. Owner re-test + share `krishna-crash.txt` if recur.
 
@@ -151,30 +179,40 @@ key-obtained but is a **future user-invoked "second opinion" check only** — ne
 - Agent quality note: free flash-tier model → expect a blocker per phase; review pipeline
   absorbs it; suggest stronger model if a phase loops.
 
-## PENDING (ordered, as of 2026-07-03 travel T4 findings)
-1. **Fix T1-F4 before T4 retest** — replace plain `fetch()` with `getHttpFetch()` in
-   `packages/core/tools/get-travel-time.ts`. Also verify Tauri CSP/capabilities allow
-   `routes.googleapis.com` in `src-tauri/capabilities/*.json`.
-2. **Owner T4 retest** — after T1-F4 fix, re-run live acceptance (`npm run tauri dev`):
-   remember home/work addresses → "how long to work?" → verify spoken travel time with
-   traffic + alternative + transit. Watch for T4-F2 crash (`exit 0xcfffffff`) — if it recurs,
-   share `krishna-crash.txt`. Pass ⇒ travel v1 DONE.
-3. **P6-F4 (needs repro):** TTS occasionally too fast to understand — capture turn,
-   transcript, and whether a filler played just before.
-4. **Open NITs (fold into future commits):** P6-N4 (no-raw-URL clause — regressed by
+## PENDING (rewritten night of 2026-07-03 — T1-F4/T2-N2/T4-N1 are done, see top of file)
+1. **Owner T4 live retest — NEXT ACTION, no code work queued until this happens.** Rebuild
+   needed (Rust capabilities changed): `npm run tauri dev` in `krishna-m15` → "remember my
+   home address is X" / "remember my work address is Y" → "how long to work?" (expect spoken
+   time + traffic + one alternative) → try "by bike" / "by train" → watch for the `exit
+   0xcfffffff` crash (T4-F2) — if it recurs, grab `krishna-crash.txt` immediately, that's the
+   repro that's been missing. Pass ⇒ travel tool v1 is DONE.
+2. **T4-F2 crash fix** — blocked on the repro from #1. Nothing to build yet.
+3. **T3-N2 / T3-N1** — low-priority NITs (missing test file; a downgraded non-issue). Fold in
+   whenever convenient, not urgent.
+4. **P6-F4 (needs repro):** TTS occasionally too fast to understand — capture turn,
+   transcript, and whether a filler played just before. Also parked.
+5. **Other open NITs (fold into future commits):** P6-N4 (no-raw-URL clause — regressed by
    `fca491a` revert of `348f2e0`), P0-F3 (STT stage unmeasured), P1-F5 (seed edits inert on
-   existing installs), T3-N1 (no real validation ping), T3-N2 (no MapsSettings tests),
-   T4-N1 (untagged errors still reach TTS).
-5. **Bigger roadmap:** M1 mobile (conversation-only Android) → M2 (reminders/tasks) →
-   M3 (cloud worker/push) → M4 (command relay). Phase 5 (language matching) of M1.5 still
-   unbuilt — schedule with M1 mobile since it touches the same TTS voice selection. Travel
-   tool already built; add read-only `travel_time` to M1 mobile safe-list when M1 lands.
+   existing installs).
+6. **After travel v1 closes, next item off the queue** (owner's pick from
+   `pendingitems03july.md` / `session-status-2026-07-03` memory): Phase 4a Gmail-local
+   (`GMAIL_MCP_LOCAL_PHASE4_PLAN.md`), network resilience (`NETWORK_RESILIENCE_PLAN.md`), or
+   voice-ID P3/P4 (`VOICE_ID_STATUS_METER_PLAN.md`) — all three plans are written and ready.
+7. **Bigger roadmap (further out):** M1 mobile (conversation-only Android) → M2
+   (reminders/tasks) → M3 (cloud worker/push) → M4 (command relay). Phase 5 (language
+   matching) of M1.5 still unbuilt — schedule with M1 mobile since it touches the same TTS
+   voice selection. Travel tool already built; add read-only `travel_time` to M1 mobile
+   safe-list when M1 lands.
 
 ## How to resume (for a fresh Claude session)
-Read this file + `M1_5_REVIEW_FINDINGS.md` + `TRAVEL_TIME_REVIEW_FINDINGS.md`.
-Check `git log --oneline feature/m1-5-voice -5` for anything new since `1922f38` (the latest
-agent commit); review new commits via `git show` (never run inside the agent worktree while
-it's active); update findings files as needed; commit+push docs on **`main`** (the single
-consolidated hub — `feature/local-first-p1` is archived). If Vikram pastes a test table:
-newest rows at the top; the travel T4 table has its own column format (see
-`TRAVEL_TIME_REVIEW_FINDINGS.md` for the latest).
+Read this file (the "Latest updates" section at the top is authoritative for status) +
+`TRAVEL_TIME_REVIEW_FINDINGS.md` + `M1_5_REVIEW_FINDINGS.md`. Branch model: **`main`** is the
+single consolidated hub (`feature/local-first-p1` and `feature/m1-5-voice` are archived —
+don't build on them). Agent work happens in `D:\Learning\krishna-m15`, currently on branch
+`fix/travel-t4` (tip should be `bd644cf` unless the agent has moved further). Check
+`git log --oneline fix/travel-t4 -5` for anything new; review via `git show` (never run
+commands inside the agent worktree while it's active — `git status`/`git log` are the safe
+read-only exceptions used throughout this session); update findings files; **commit locally
+to `main` from `D:\Learning\krishna` — do NOT push** unless Vikram explicitly says to (see
+"Push policy" above). If Vikram pastes a test table: newest rows at the top; the travel T4
+table has its own column format (see `TRAVEL_TIME_REVIEW_FINDINGS.md` for the latest).
