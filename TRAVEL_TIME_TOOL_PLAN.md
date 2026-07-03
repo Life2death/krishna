@@ -22,7 +22,7 @@ The Eastern Expressway route is faster today at 35. The train takes around 55."
   confirmation-gated (`classifyAction` stays untouched).
 - **Routing provider abstraction** — an ordered **failover chain** (mirror the AI-provider
   philosophy): `RoutingProvider` interface with `getRoutes({origin, destination, mode,
-  alternatives}) → Route[]`. The tool tries providers in priority order and falls through
+  alternatives, languageCode}) → Route[]`. The tool tries providers in priority order and falls through
   on quota / error / missing-key; if every provider fails it degrades to the URL-open
   fallback (below). Feature degrades, never errors (Principle 4).
   **v1 order: (1) Google Routes = primary, (2) Ola Maps (Krutrim) = secondary.** Owner
@@ -35,8 +35,21 @@ The Eastern Expressway route is faster today at 35. The train takes around 55."
     live Routes v2 docs and pin the exact request body + the required `X-Goog-FieldMask`
     header, `routingPreference: TRAFFIC_AWARE`, the `travelMode` enum used for each mode
     (`DRIVE` / `TWO_WHEELER` / `TRANSIT`), `duration` vs `staticDuration` (traffic delta),
-    and how alternative routes + route labels/`description` come back. Do NOT guess these
-    from this plan; record them in code comments + tests. Key: `GOOGLE_MAPS_API_KEY`.
+    how alternative routes + route labels/`description` come back, **and the request's
+    `languageCode` field** (BCP-47, e.g. `en-IN`/`hi-IN`) — pin its exact name/behavior too,
+    don't assume. Do NOT guess these from this plan; record them in code comments + tests.
+    Key: `GOOGLE_MAPS_API_KEY`.
+  - **Language passthrough (owner decision 2026-07-03):** the tool must speak Indian
+    languages when the user is conversing in one, matching Krishna's existing "reply in the
+    same language the user used" behavior (`BASE_SYSTEM_PROMPT`,
+    `src/contexts/krishna.context.tsx`). Map the app's current language context to a BCP-47
+    code and pass it as `languageCode` on the Google request so any Google-sourced strings
+    (road/place names, transit line names) come back localized; default `en-IN` if
+    undetermined. **Note (separate, do not fix here):** the app's `LANGUAGES` settings list
+    (`packages/core/response-settings.constants.ts`) currently has zero Indian-language
+    entries (English through Filipino) — Hindi replies already work today only via the LLM's
+    general instruction-following, not via that explicit list. Out of scope for this tool;
+    flagging for a future pass.
   - **Ola Maps (SECONDARY, added later):** Directions API at maps.olakrutrim.com
     (+ Geocoding API for address strings). Adds India-first two-wheeler routing and a
     ~500K–5M/mo free tier for cost. Key: `OLA_MAPS_API_KEY`. Wire the adapter now (behind
@@ -104,10 +117,11 @@ parse; executor arg mapping) with `travel_time` examples:
 ## Tasks (each a commit checkpoint)
 - [ ] **T1 — Tool + provider chain + Google adapter + tests.** `get_travel_time` tool,
   `RoutingProvider` interface, the ordered failover chain, the **Google Routes adapter**
-  (primary) with request/response mapping, spoken-formatting helper. Stub/register the Ola
-  adapter slot behind the interface (dormant without key). Unit tests with mocked fetch:
-  happy path, traffic delta, alternatives, transit, API error → chain fallthrough, all-fail
-  → no-provider URL fallback. No UI yet.
+  (primary) with request/response mapping incl. `languageCode` passthrough, spoken-formatting
+  helper. Stub/register the Ola adapter slot behind the interface (dormant without key). Unit
+  tests with mocked fetch: happy path, traffic delta, alternatives, transit, non-English
+  `languageCode` request, API error → chain fallthrough, all-fail → no-provider URL fallback.
+  No UI yet.
 - [ ] **T1b — Ola adapter (secondary), later.** Implement the Ola Maps adapter behind the
   same interface once the owner vaults `OLA_MAPS_API_KEY`. Pin exact Ola endpoint/fields
   from live docs; tests: Ola used when Google key absent/failing, two-wheeler mapping.
@@ -129,7 +143,10 @@ parse; executor arg mapping) with `travel_time` examples:
 5. (When Ola key is vaulted) invalid/absent Google key but valid Ola key → answer still
    comes back via the Ola secondary — silent failover, no error spoken.
 6. Unknown place ("how long to Rahul's place?") → Krishna asks once, remembers, answers.
-7. All suites green; no confirmation prompt for travel queries (read-only).
+7. Ask "how long to work?" in Hindi → spoken reply comes back in Hindi (existing LLM
+   language-following) and the Google request's `languageCode` reflects it, not hardcoded
+   `en`.
+8. All suites green; no confirmation prompt for travel queries (read-only).
 
 ## Cost / key setup (owner)
 **Google Routes (v1 primary):** billed Google Cloud project with the Routes API enabled →
