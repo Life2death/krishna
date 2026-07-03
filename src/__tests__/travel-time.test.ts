@@ -1,10 +1,27 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 const mockGetSecret = vi.hoisted(() => vi.fn().mockResolvedValue("test-key"));
+const mockGetResponseSettings = vi.hoisted(() =>
+  vi.fn().mockReturnValue({
+    responseLength: "auto",
+    language: "english",
+    autoScroll: true,
+    honorific: "sir",
+    voiceMaxTokens: 100,
+    voiceModel: "",
+  }),
+);
 
 vi.mock("@krishna/core/secrets", () => ({
   getSecret: mockGetSecret,
   setSecretGetter: vi.fn(),
+}));
+
+vi.mock("@krishna/core/settings", () => ({
+  getResponseSettings: mockGetResponseSettings,
+  setSettingsGetter: vi.fn(),
+  RESPONSE_LENGTHS: {},
+  LANGUAGES: [],
 }));
 
 import {
@@ -15,7 +32,6 @@ import {
   type RouteInfo,
   type TravelMode,
 } from "@krishna/core/tools/get-travel-time";
-import type { Tool } from "@krishna/core/tools";
 
 // ── Helpers ──────────────────────────────────────────────────────────────
 
@@ -85,13 +101,32 @@ describe("formatTravelOutput", () => {
     );
   });
 
-  it("formats transit output", () => {
+  it("formats transit output with transitSummary", () => {
     const routes: RouteInfo[] = [
-      { duration: 3300, staticDuration: 3300, distanceMeters: 60000, description: "mostly by train — Harbour line" },
+      { duration: 3300, staticDuration: 3300, distanceMeters: 60000, transitSummary: "mostly by train — Harbour line" },
     ];
     const result = formatTravelOutput(routes, "transit");
     expect(result).toContain("55 minutes");
     expect(result).toContain("mostly by train");
+    expect(result).toContain("Harbour line");
+  });
+
+  it("formats transit output without transitSummary", () => {
+    const routes: RouteInfo[] = [
+      { duration: 1800, staticDuration: 1800, distanceMeters: 30000 },
+    ];
+    const result = formatTravelOutput(routes, "transit");
+    expect(result).toContain("30 minutes");
+    expect(result).not.toContain("mostly");
+  });
+
+  it("includes alternative for transit with transitSummary", () => {
+    const routes: RouteInfo[] = [
+      { duration: 3300, staticDuration: 3300, distanceMeters: 60000, transitSummary: "mostly by train — Harbour line" },
+      { duration: 3000, staticDuration: 3000, distanceMeters: 50000, transitSummary: "mostly by bus" },
+    ];
+    const result = formatTravelOutput(routes, "transit");
+    expect(result).toContain("mostly by bus — that one takes about 50");
   });
 
   it("returns empty string for empty routes", () => {
@@ -163,6 +198,88 @@ describe("callGoogleRoutes (pure function)", () => {
     expect(routes[0].description).toBe("via Western Express Highway");
   });
 
+  it("derives transitSummary from vehicle types", async () => {
+    mockRoutesResponse([
+      {
+        duration: "3300s",
+        staticDuration: "3300s",
+        distanceMeters: 60000,
+        legs: [
+          {
+            steps: [
+              { travelMode: "WALK" },
+              {
+                travelMode: "TRANSIT",
+                transitDetails: {
+                  transitLine: {
+                    name: "Harbour line",
+                    vehicle: { type: "TRAIN" },
+                  },
+                },
+              },
+              { travelMode: "WALK" },
+            ],
+          },
+        ],
+      },
+    ]);
+
+    const routes = await callGoogleRoutes({
+      origin: "A", destination: "B", mode: "transit", alternatives: false, apiKey: "k",
+    });
+
+    expect(routes[0].transitSummary).toContain("mostly by train");
+    expect(routes[0].transitSummary).toContain("Harbour line");
+  });
+
+  it("uses 'transit' label for unknown vehicle types", async () => {
+    mockRoutesResponse([
+      {
+        duration: "600s",
+        staticDuration: "600s",
+        distanceMeters: 10000,
+        legs: [
+          {
+            steps: [
+              {
+                travelMode: "TRANSIT",
+                transitDetails: {
+                  transitLine: {
+                    name: "Unknown Line",
+                    vehicle: { type: "SPACESHIP" },
+                  },
+                },
+              },
+            ],
+          },
+        ],
+      },
+    ]);
+
+    const routes = await callGoogleRoutes({
+      origin: "A", destination: "B", mode: "transit", alternatives: false, apiKey: "k",
+    });
+
+    expect(routes[0].transitSummary).toContain("mostly by transit");
+  });
+
+  it("sets transitSummary to undefined when no transit steps", async () => {
+    mockRoutesResponse([
+      {
+        duration: "600s",
+        staticDuration: "600s",
+        distanceMeters: 10000,
+        legs: [{ steps: [{ travelMode: "WALK" }, { travelMode: "WALK" }] }],
+      },
+    ]);
+
+    const routes = await callGoogleRoutes({
+      origin: "A", destination: "B", mode: "transit", alternatives: false, apiKey: "k",
+    });
+
+    expect(routes[0].transitSummary).toBeUndefined();
+  });
+
   it("sends TRAFFIC_AWARE for car", async () => {
     mockRoutesResponse([]);
 
@@ -226,7 +343,7 @@ describe("callGoogleRoutes (pure function)", () => {
     ).rejects.toThrow("Google Routes API error (403)");
   });
 
-  it("sends the required X-Goog-FieldMask header", async () => {
+  it("sends the required X-Goog-FieldMask header with transit fields", async () => {
     mockRoutesResponse([]);
     await expect(
       callGoogleRoutes({
@@ -240,6 +357,9 @@ describe("callGoogleRoutes (pure function)", () => {
     expect(headers["X-Goog-FieldMask"]).toContain("routes.distanceMeters");
     expect(headers["X-Goog-FieldMask"]).toContain("routes.routeLabels");
     expect(headers["X-Goog-FieldMask"]).toContain("routes.description");
+    expect(headers["X-Goog-FieldMask"]).toContain("routes.legs.steps.travelMode");
+    expect(headers["X-Goog-FieldMask"]).toContain("routes.legs.steps.transitDetails.transitLine.vehicle.type");
+    expect(headers["X-Goog-FieldMask"]).toContain("routes.legs.steps.transitDetails.transitLine.name");
   });
 });
 
@@ -251,6 +371,14 @@ describe("getTravelTimeTool", () => {
     vi.stubGlobal("fetch", mockFetch);
     mockGetSecret.mockReset();
     mockGetSecret.mockResolvedValue("test-key");
+    mockGetResponseSettings.mockReturnValue({
+      responseLength: "auto",
+      language: "english",
+      autoScroll: true,
+      honorific: "sir",
+      voiceMaxTokens: 100,
+      voiceModel: "",
+    });
   });
 
   it("returns error on missing args", async () => {
@@ -268,7 +396,7 @@ describe("getTravelTimeTool", () => {
     expect(result.error).toContain("Invalid mode");
   });
 
-  it("falls back to URL when no API key (getSecret returns null)", async () => {
+  it("falls back to URL when no API key — uses 'add key' message", async () => {
     mockGetSecret.mockResolvedValue(null);
 
     const result = await getTravelTimeTool.run(
@@ -277,7 +405,7 @@ describe("getTravelTimeTool", () => {
     );
 
     expect(result.success).toBe(true);
-    expect(result.output).toContain("I've opened the route on Maps");
+    expect(result.output).toContain("Add a Maps API key in Settings");
     expect(result.data?.fallback).toBe("true");
     expect(result.data?.url).toContain("google.com/maps/dir/");
     expect(result.data?.url).toContain("origin=Home");
@@ -285,7 +413,7 @@ describe("getTravelTimeTool", () => {
     expect(result.data?.url).toContain("travelmode=driving");
   });
 
-  it("falls back to URL on Google API error", async () => {
+  it("falls back to URL on Google API error — uses 'did not go through' message, not 'add key'", async () => {
     mockFetchError(403, "quota exceeded");
 
     const result = await getTravelTimeTool.run(
@@ -294,8 +422,37 @@ describe("getTravelTimeTool", () => {
     );
 
     expect(result.success).toBe(true);
-    expect(result.output).toContain("I've opened the route on Maps");
+    expect(result.output).toContain("didn't go through this time");
+    expect(result.output).not.toContain("Add a Maps API key");
     expect(result.data?.fallback).toBe("true");
+  });
+
+  it("uses configured honorific from settings", async () => {
+    mockGetResponseSettings.mockReturnValue({
+      responseLength: "auto",
+      language: "english",
+      autoScroll: true,
+      honorific: "madam",
+      voiceMaxTokens: 100,
+      voiceModel: "",
+    });
+
+    mockRoutesResponse([
+      {
+        duration: "1200s",
+        staticDuration: "1200s",
+        distanceMeters: 20000,
+        routeLabels: ["DEFAULT_ROUTE"],
+      },
+    ]);
+
+    const result = await getTravelTimeTool.run(
+      { from: "Home", to: "Work", mode: "car" },
+      { vars: {} },
+    );
+
+    expect(result.output).toContain("madam");
+    expect(result.output).not.toContain("sir");
   });
 
   it("returns formatted output on success", async () => {

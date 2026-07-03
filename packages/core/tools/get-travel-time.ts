@@ -1,5 +1,6 @@
 import type { Tool } from "./index";
 import { getSecret } from "../secrets";
+import { getResponseSettings } from "../settings";
 
 // ── Types ────────────────────────────────────────────────────────────────
 
@@ -10,6 +11,7 @@ export interface RouteInfo {
   staticDuration: number;
   distanceMeters: number;
   description?: string;
+  transitSummary?: string;
 }
 
 // ── Google Routes v2: computeRoutes ──────────────────────────────────────
@@ -22,18 +24,25 @@ export interface RouteInfo {
 //   X-Goog-FieldMask   (required — masks what fields to return)
 //   Content-Type: application/json
 //
-// Request body fields used:
-//   origin.address / destination.address — text strings accepted (no separate geocoding)
+// Request body:
+//   origin.address / destination.address — text strings (no separate geocoding)
 //   travelMode — "DRIVE" | "TWO_WHEELER" | "TRANSIT" | "BICYCLE" | "WALK"
 //   routingPreference — "TRAFFIC_AWARE" for DRIVE/TWO_WHEELER; omitted for TRANSIT
 //   computeAlternativeRoutes — boolean
 //
 // Response fields (via field mask):
-//   routes.duration        — traffic-aware time (string like "165s")
-//   routes.staticDuration  — time without traffic (string like "150s")
+//   routes.duration        — traffic-aware time ("165s")
+//   routes.staticDuration  — time without traffic ("150s")
 //   routes.distanceMeters  — integer
 //   routes.routeLabels     — ["DEFAULT_ROUTE"] or ["DEFAULT_ROUTE_ALTERNATE"]
-//   routes.description     — human-readable label, e.g. "via Eastern Expressway"
+//   routes.description     — human-readable label ("via Eastern Expressway")
+//   routes.legs.steps.travelMode — per-step travel mode (for transit detection)
+//   routes.legs.steps.transitDetails.transitLine.vehicle.type — Google's enum:
+//     BUS | INTERCITY_BUS | TROLLEYBUS | SUBWAY | METRO_RAIL | TRAIN | RAIL |
+//     HEAVY_RAIL | HIGH_SPEED_RAIL | LIGHT_RAIL | MONORAIL | TRAM | STREETCAR |
+//     FERRY | CABLE_CAR | GONDOLA_LIFT | FUNICULAR | OTHER
+//     (https://developers.google.com/maps/documentation/routes/reference/rest/v2/RouteTravelMode)
+//   routes.legs.steps.transitDetails.transitLine.name — e.g. "Harbour Line"
 
 const GOOGLE_ROUTES_BASE = "https://routes.googleapis.com/directions/v2:computeRoutes";
 
@@ -45,13 +54,32 @@ const MODE_TO_GOOGLE: Record<TravelMode, string> = {
   walk: "WALK",
 };
 
-// Maps URL fallback travelmode values (Google Maps URLs API)
 const MODE_TO_MAPS_URL: Record<TravelMode, string> = {
   car: "driving",
   two_wheeler: "driving",
   transit: "transit",
   bicycle: "bicycling",
   walk: "walking",
+};
+
+const VEHICLE_TYPE_LABEL: Record<string, string> = {
+  BUS: "bus",
+  INTERCITY_BUS: "bus",
+  TROLLEYBUS: "bus",
+  SUBWAY: "subway",
+  METRO_RAIL: "subway",
+  TRAIN: "train",
+  RAIL: "train",
+  HEAVY_RAIL: "train",
+  HIGH_SPEED_RAIL: "train",
+  LIGHT_RAIL: "light rail",
+  MONORAIL: "monorail",
+  TRAM: "tram",
+  STREETCAR: "tram",
+  FERRY: "ferry",
+  CABLE_CAR: "cable car",
+  GONDOLA_LIFT: "cable car",
+  FUNICULAR: "cable car",
 };
 
 export async function callGoogleRoutes(params: {
@@ -72,7 +100,6 @@ export async function callGoogleRoutes(params: {
     computeAlternativeRoutes: alternatives,
   };
 
-  // routingPreference is only valid for DRIVE and TWO_WHEELER
   if (mode === "car" || mode === "two_wheeler") {
     body.routingPreference = "TRAFFIC_AWARE";
   }
@@ -83,6 +110,9 @@ export async function callGoogleRoutes(params: {
     "routes.distanceMeters",
     "routes.routeLabels",
     "routes.description",
+    "routes.legs.steps.travelMode",
+    "routes.legs.steps.transitDetails.transitLine.vehicle.type",
+    "routes.legs.steps.transitDetails.transitLine.name",
   ].join(",");
 
   const response = await fetch(GOOGLE_ROUTES_BASE, {
@@ -108,15 +138,23 @@ export async function callGoogleRoutes(params: {
     throw new Error("No routes found");
   }
 
-  return rawRoutes.map((r: any) => ({
-    duration: parseDuration((r as any).duration),
-    staticDuration: parseDuration((r as any).staticDuration),
-    distanceMeters: (r as any).distanceMeters ?? 0,
-    description: (r as any).description ?? undefined,
-  }));
+  return rawRoutes.map((r: any) => {
+    const route = r as any;
+    const info: RouteInfo = {
+      duration: parseDuration(route.duration),
+      staticDuration: parseDuration(route.staticDuration),
+      distanceMeters: route.distanceMeters ?? 0,
+      description: route.description ?? undefined,
+    };
+
+    if (mode === "transit") {
+      info.transitSummary = deriveTransitSummary(route);
+    }
+
+    return info;
+  });
 }
 
-// Parse a proto-Duration string like "165s" or "3.5s" to integer seconds
 function parseDuration(s: string | undefined): number {
   if (!s) return 0;
   const match = s.match(/^([\d.]+)s$/);
@@ -124,11 +162,59 @@ function parseDuration(s: string | undefined): number {
   return Math.round(parseFloat(match[1]));
 }
 
+// Count transit-vehicle types across all legs/steps; return "mostly by {vehicle}" string.
+// Google's RouteTravelMode docs: https://developers.google.com/maps/documentation/routes/reference/rest/v2/RouteTravelMode
+function deriveTransitSummary(route: any): string | undefined {
+  const vehicleCounts: Record<string, number> = {};
+  const lineNames: Set<string> = new Set();
+  let totalTransitSteps = 0;
+
+  const legs = route.legs;
+  if (!legs || !Array.isArray(legs)) return undefined;
+
+  for (const leg of legs) {
+    const steps = leg.steps;
+    if (!steps || !Array.isArray(steps)) continue;
+    for (const step of steps) {
+      if ((step.travelMode as string) !== "TRANSIT") continue;
+      totalTransitSteps++;
+      const td = step.transitDetails;
+      if (!td) continue;
+      const line = td.transitLine;
+      if (!line) continue;
+      if (line.name) lineNames.add(line.name);
+      const vt = line.vehicle?.type as string | undefined;
+      if (vt) {
+        const label = VEHICLE_TYPE_LABEL[vt] || "transit";
+        vehicleCounts[label] = (vehicleCounts[label] || 0) + 1;
+      }
+    }
+  }
+
+  if (totalTransitSteps === 0) return undefined;
+
+  // Find the most common vehicle label
+  let topLabel = "transit";
+  let topCount = 0;
+  for (const [label, count] of Object.entries(vehicleCounts)) {
+    if (count > topCount) {
+      topCount = count;
+      topLabel = label;
+    }
+  }
+
+  let summary = `mostly by ${topLabel}`;
+  if (lineNames.size > 0) {
+    summary += ` — ${[...lineNames][0]}`;
+  }
+
+  return summary;
+}
+
 // ── Spoken formatting ────────────────────────────────────────────────────
 // Rules (from plan):
 // - Round to minutes ("about 40 minutes")
-// - Traffic delta when duration - staticDuration >= 5 min
-//   ("about 10 slower than usual")
+// - Traffic delta when duration - staticDuration >= 5 min ("about 10 slower than usual")
 // - At most ONE alternative (the fastest non-default), by road name
 // - Transit: total time + primary leg ("mostly by train")
 
@@ -136,14 +222,6 @@ const MODE_LABEL: Record<TravelMode, string> = {
   car: "car",
   two_wheeler: "bike",
   transit: "transit",
-  bicycle: "bicycle",
-  walk: "walk",
-};
-
-const MODE_TRANSIT_LABEL: Record<TravelMode, string> = {
-  car: "car",
-  two_wheeler: "bike",
-  transit: "train",
   bicycle: "bicycle",
   walk: "walk",
 };
@@ -162,9 +240,18 @@ export function formatTravelOutput(
   let text: string;
 
   if (mode === "transit") {
-    text = `By ${MODE_LABEL[mode]} it's about ${primaryMin} minutes`;
-    if (primary.description) {
-      text += `, ${primary.description}`;
+    text = `By transit it's about ${primaryMin} minutes`;
+    if (primary.transitSummary) {
+      text += `, ${primary.transitSummary}`;
+    }
+    const alternatives = routes
+      .slice(1)
+      .filter((r) => r.transitSummary)
+      .sort((a, b) => a.duration - b.duration);
+    if (alternatives.length > 0) {
+      const best = alternatives[0];
+      const altMin = Math.round(best.duration / 60);
+      text += `. ${best.transitSummary} — that one takes about ${altMin}`;
     }
   } else {
     const label = MODE_LABEL[mode];
@@ -192,8 +279,6 @@ export function formatTravelOutput(
 }
 
 // ── Fallback URL ─────────────────────────────────────────────────────────
-// Build a google.com/maps/dir URL for the no-key / error fallback.
-// https://www.google.com/maps/dir/?api=1&origin=...&destination=...&travelmode=...
 
 export function buildMapsUrl(
   origin: string,
@@ -230,6 +315,8 @@ export const getTravelTimeTool: Tool = {
       return { success: false, error: `Invalid mode: ${mode}. Use car, two_wheeler, transit, bicycle, or walk.` };
     }
 
+    const settings = getResponseSettings();
+    const honorific = settings.honorific || "sir";
     const apiKey = await getGoogleMapsKey();
 
     if (apiKey) {
@@ -243,7 +330,7 @@ export const getTravelTimeTool: Tool = {
           signal: ctx.signal,
         });
 
-        const output = formatTravelOutput(routes, mode);
+        const output = formatTravelOutput(routes, mode, honorific);
 
         return {
           success: true,
@@ -253,12 +340,21 @@ export const getTravelTimeTool: Tool = {
             staticDuration: String(routes[0].staticDuration),
             distanceMeters: String(routes[0].distanceMeters),
             description: routes[0].description ?? "",
+            transitSummary: routes[0].transitSummary ?? "",
             routeCount: String(routes.length),
             fallback: "false",
           } as Record<string, string>,
         };
       } catch {
-        // Google error → fall through to URL fallback
+        const mapsUrl = buildMapsUrl(origin, destination, mode);
+        return {
+          success: true,
+          output: `I've opened the route on Maps — the live traffic lookup didn't go through this time, ${honorific}.`,
+          data: {
+            url: mapsUrl,
+            fallback: "true",
+          } as Record<string, string>,
+        };
       }
     }
 
@@ -266,7 +362,7 @@ export const getTravelTimeTool: Tool = {
     return {
       success: true,
       output:
-        "I've opened the route on Maps. Add a Maps API key in Settings and I can read out times with live traffic.",
+        `I've opened the route on Maps. Add a Maps API key in Settings and I can read out times with live traffic, ${honorific}.`,
       data: {
         url: mapsUrl,
         fallback: "true",
