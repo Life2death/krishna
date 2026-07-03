@@ -1,6 +1,7 @@
 import { openTargetTool } from "./open-target";
 import { youtubeSearchTool } from "./youtube-search";
 import { webSearchTool } from "./web-search";
+import { getTravelTimeTool } from "./get-travel-time";
 import {
   computerTypeTool,
   computerKeyTool,
@@ -48,6 +49,7 @@ export function registerTools(newTools: Tool[]): void {
 register(openTargetTool);
 register(youtubeSearchTool);
 register(webSearchTool);
+register(getTravelTimeTool);
 
 export function getTool(name: string): Tool | undefined {
   return tools.get(name);
