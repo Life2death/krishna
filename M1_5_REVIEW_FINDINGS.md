@@ -593,14 +593,30 @@ voiceModel: ""` to the literal. Impact note: brain is retired from the runtime p
 is a build-hygiene break, not a user-facing one — but it's a one-liner; fix it and run the
 brain workspace's own typecheck to confirm (report both tsc results).
 
-### P6-N1 · NIT · FIXED (p6 commit bbd1bf0) — max-tokens key detection is case-sensitive, spec said match the stream-key pattern
-`ai-response.function.ts:183-184` (both twins): `k === "max_tokens" || …` — the stream-key
-search this was modeled on uses `k.toLowerCase() === "stream"`. Harmless for the 10 built-in
-templates (all lowercase); a custom template with different casing would silently skip.
-**Fix (fold into the P6-F1 commit):** compare `k.toLowerCase()` against the three names.
+### P6-N1 · NIT · PARTIALLY FIXED, reopened as P6-N2 (p6 commit bbd1bf0)
+Original issue (case-sensitive exact-match) addressed by switching to
+`[...].includes(k.toLowerCase())` in both twins. But the fix is itself case-broken — see P6-N2.
 
-*(Credit: both findings from the mobile Claude review session; desktop-verified against the
-commit before filing.)*
+### P6-N2 · NIT · OPEN — the case-insensitivity fix keeps a mixed-case needle in the list
+bbd1bf0 uses `["max_tokens", "max_completion_tokens", "maxOutputTokens"].includes(k.toLowerCase())`
+in both twins (`ai-response.function.ts:184`). The haystack is lowercased but the list still
+contains **`"maxOutputTokens"`** (mixed case) — so a body key that lowercases to
+`maxoutputtokens` can never match, defeating the very case-insensitivity this was meant to add.
+**Not active today** (verified: no built-in template uses a `maxOutputTokens`-style key — only
+claude `max_tokens` + groq `max_completion_tokens`, both lowercase, both work), so the voice
+cap functions correctly for real providers. Latent only. **Fix:** lowercase the list entry →
+`["max_tokens", "max_completion_tokens", "maxoutputtokens"]`. Fine to fold into the next
+commit (e.g. travel-tool work) — not worth its own round-trip.
+
+### P6-F2 · NOTE (not blocking) — apps/brain still has ONE pre-existing typecheck error
+Agent reports brain `tsc --noEmit` = 1 error at `status.ts:126` (missing `voice-id/store.ts`),
+unrelated to the settings literal. Plausible and clearly independent of this change (P6-F1's
+target — the `setSettingsGetter` literal — now typechecks). `apps/brain` is retired from the
+runtime path, so this is not a milestone blocker. Confirm it predates 9b5cf12 only if the
+brain workspace ever needs to build again.
+
+*(Credit: P6-F1/P6-N1 from the mobile Claude review session; P6-N2/P6-F2 from desktop
+verification of the fix commit.)*
 
 ---
 *Log format for the agent: change `OPEN` → `FIXED (p<N> commit <sha>)` with a one-line note.*
