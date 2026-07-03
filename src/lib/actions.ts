@@ -66,11 +66,91 @@ export function parseActions(reply: string): ParsedReply {
 }
 
 export interface ExecuteActionResult {
+  kind?: "answer" | "status";
   spokenResponse: string;
   needsConfirmation?: boolean;
   pendingResult?: ResolveResult;
   learnedActionId?: string;
   input?: string;
+  ok?: boolean;
+}
+
+export interface ActionResponsePlan {
+  shouldSpeak: boolean;
+  recordTurn: boolean;
+  outcome: "answered" | "failed";
+  failureReason?: "tool_failed";
+  detail?: string;
+}
+
+export function decideActionResponse(
+  result: ExecuteActionResult,
+  spokenTextRecorded: boolean,
+): ActionResponsePlan | null {
+  if (!result.spokenResponse) return null;
+
+  if (result.kind === "answer") {
+    return {
+      shouldSpeak: true,
+      recordTurn: true,
+      outcome: result.ok !== false ? "answered" : "failed",
+      failureReason: result.ok !== false ? undefined : "tool_failed",
+      detail: result.ok !== false ? undefined : result.spokenResponse,
+    };
+  }
+
+  if (result.kind === "status") {
+    if (spokenTextRecorded) {
+      return { shouldSpeak: false, recordTurn: false, outcome: "answered" };
+    }
+    const toolFailed = result.ok === false || result.spokenResponse.startsWith("Failed");
+    return {
+      shouldSpeak: true,
+      recordTurn: true,
+      outcome: toolFailed ? "failed" : "answered",
+      failureReason: toolFailed ? "tool_failed" : undefined,
+      detail: toolFailed ? result.spokenResponse : undefined,
+    };
+  }
+
+  // Legacy: no kind — fall back to prefix heuristic unchanged
+  if (spokenTextRecorded) {
+    return { shouldSpeak: false, recordTurn: false, outcome: "answered" };
+  }
+  const isStatusLegacy = result.spokenResponse.startsWith("Opening") || result.spokenResponse.startsWith("Failed");
+  if (!isStatusLegacy) return null;
+  const toolFailed = result.spokenResponse.startsWith("Failed");
+  return {
+    shouldSpeak: true,
+    recordTurn: true,
+    outcome: toolFailed ? "failed" : "answered",
+    failureReason: toolFailed ? "tool_failed" : undefined,
+    detail: toolFailed ? result.spokenResponse : undefined,
+  };
+}
+
+// A "save claim" in the spoken reply (e.g. "saved", "I'll save that", "noted").
+const CLAIMED_SAVE_RE = /\b(saved|save (that|this|it)|I('|')ll (remember|save)|remembered|noted)\b/i;
+// Remember-intent in the USER's turn — deliberately typo-tolerant ("rember", "remmber").
+const USER_REMEMBER_INTENT_RE = /\b(rem+e?m?ber|save|note|keep in mind|address is)\b/i;
+
+/**
+ * T4-F1 grounding: detect a "phantom save" — the model spoke a save claim
+ * ("your address is now saved") WITHOUT emitting a remember action, so nothing
+ * was actually persisted. The user-intent guard prevents false positives on
+ * incidental uses of "saved"/"save" (e.g. "Ronaldo saved the match").
+ */
+export function detectPhantomSave(
+  userCommand: string,
+  spokenText: string,
+  actions: Action[],
+): boolean {
+  if (!spokenText) return false;
+  return (
+    USER_REMEMBER_INTENT_RE.test(userCommand) &&
+    CLAIMED_SAVE_RE.test(spokenText) &&
+    !actions.some((a) => a.action === "remember")
+  );
 }
 
 type LlmFallbackFn = (input: string) => Promise<string | null>;
@@ -85,7 +165,7 @@ export async function executeAction(
     const mode = action.mode || "car";
 
     if (!to) {
-      return { spokenResponse: "Where would you like to go?" };
+      return { kind: "answer", spokenResponse: "Where would you like to go?" };
     }
 
     const result = await getTravelTimeTool.run({ from, to, mode }, { vars: {} });
@@ -99,7 +179,9 @@ export async function executeAction(
     }
 
     return {
+      kind: "answer",
       spokenResponse: result.output || "I couldn't find a route.",
+      ok: result.success,
     };
   }
 
@@ -111,18 +193,18 @@ export async function executeAction(
       const url = rawTarget.startsWith("http") ? rawTarget : "https://" + rawTarget;
       try {
         await invoke("open_target", { target: url });
-        return { spokenResponse: "Opening " + rawTarget };
+        return { kind: "status", spokenResponse: "Opening " + rawTarget };
       } catch {
-        return { spokenResponse: "Failed to open " + rawTarget };
+        return { kind: "status", spokenResponse: "Failed to open " + rawTarget };
       }
     }
 
     if (isFilePath(rawTarget)) {
       try {
         await invoke("open_target", { target: rawTarget });
-        return { spokenResponse: "Opening file path" };
+        return { kind: "status", spokenResponse: "Opening file path" };
       } catch {
-        return { spokenResponse: "Failed to open path" };
+        return { kind: "status", spokenResponse: "Failed to open path" };
       }
     }
 
@@ -130,9 +212,9 @@ export async function executeAction(
     if (alias) {
       try {
         await invoke("open_target", { target: alias.launchCommand });
-        return { spokenResponse: "Opening " + alias.name };
+        return { kind: "status", spokenResponse: "Opening " + alias.name };
       } catch {
-        return { spokenResponse: "Failed to open " + alias.name };
+        return { kind: "status", spokenResponse: "Failed to open " + alias.name };
       }
     }
 
@@ -148,10 +230,10 @@ export async function executeAction(
       }
       await saveAndConfirm(result, rawTarget);
       await invoke("open_target", { target: result.target });
-      return { spokenResponse: "Opening " + result.displayName };
+      return { kind: "status", spokenResponse: "Opening " + result.displayName };
     }
 
-    return { spokenResponse: "I couldn't find an app named \"" + rawTarget + "\"" };
+    return { kind: "status", ok: false, spokenResponse: "I couldn't find an app named \"" + rawTarget + "\"" };
   }
 
   return { spokenResponse: "Unknown action" };

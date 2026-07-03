@@ -3,7 +3,7 @@ import { useApp } from "@/contexts";
 import { useMcpTools, useDevicePresence } from "@/hooks";
 import { fetchAIResponse } from "@/lib/repo-bound";
 import { getRepo } from "@/lib/repo-selector";
-import { parseActions, executeAction, resolveActionForConfirm } from "@/lib/actions";
+import { parseActions, executeAction, resolveActionForConfirm, decideActionResponse, detectPhantomSave } from "@/lib/actions";
 import { executePlan, resolvePlaceholders } from "@/lib/executor";
 import { getAllTools } from "@/lib/tools";
 import { selectTools } from "@krishna/core/tool-selector";
@@ -118,6 +118,12 @@ export const BASE_SYSTEM_PROMPT = [
   '- The block will NOT be read aloud -- it is only used to trigger the save.',
   '- NEVER claim you cannot remember or that memory only lasts this session. The save is confirmed with the user before storing.',
   '- Already-known facts are listed under "Things I know about the user" in each prompt — do not re-save them.',
+  '- Example — user says "remember my home address is 123 Main St" → reply with the action block and then "Saving that now, {honorific}." in the spoken part:',
+  '```action',
+  '{"action":"remember","key":"home address","value":"123 Main St"}',
+  '```',
+  'Saving that now, {honorific}.',
+  '- CRITICAL: NEVER say "saved", "remembered", "save", "I\'ll remember", "I\'ll save", or "noted" in your spoken reply UNLESS the same reply also contains the ````action...```` remember block above. If you say the word "saved" without the action block, the system cannot store anything and the user will see a lie.',
   '',
   'TRAVEL TIME:',
   '- "how long to work?" → Check the user\'s confirmed memories for a known "work" / "work address". If known, emit:',
@@ -1593,6 +1599,45 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
         historyRef.current = [...historyRef.current, { role: "assistant" as const, content: fullResponse }].slice(-8);
         let spokenTextRecorded = false;
 
+        // T4-F1 claimed-save grounding: the model spoke a save claim but emitted no remember
+        // action, so nothing was persisted. Speak an honest correction, AND scrub the false
+        // claim from history (line above just pushed `fullResponse`) — otherwise the model
+        // sees its own lie next turn and keeps believing the address was saved.
+        if (detectPhantomSave(command, spokenText, actions)) {
+          const hon = getResponseSettings().honorific || "sir";
+          const overrideText = `I couldn't save that properly, ${hon} — please tell me once more.`;
+          historyRef.current = [
+            ...historyRef.current.slice(0, -1),
+            { role: "assistant" as const, content: overrideText },
+          ].slice(-8);
+          await recordTurn(pendingUserTextRef.current, overrideText);
+          logOutcome(command, "failed", "tool_failed", "save claimed without remember action", overrideText);
+          setStatus("speaking");
+          setLastSpoken(overrideText);
+          setKrishnaSpeaking(true);
+          try {
+            clearTimeout(fillerTimerRef.current!);
+            fillerTimerRef.current = null;
+            if (fillerPromiseRef.current) {
+              await fillerPromiseRef.current;
+            }
+            await ttsRef.current.speak(overrideText);
+          } finally {
+            setKrishnaSpeaking(false);
+          }
+          const cId = currentCaptureIdRef.current;
+          if (cId) {
+            if (usageData) turnTiming.setUsage(usageData);
+            turnTiming.freeze();
+            updateCommandTiming({ id: cId, timing: turnTiming.toJSON() }).catch((err) =>
+              console.error("Failed to persist turn timing:", err)
+            );
+            emit("command-log-updated").catch(() => {});
+          }
+          setStatus("idle");
+          return;
+        }
+
         if (spokenText) {
           await recordTurn(pendingUserTextRef.current, spokenText);
           logOutcome(command, "answered", undefined, undefined, spokenText);
@@ -1689,17 +1734,16 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
             return;
           }
             if (result.spokenResponse) {
-              const isStatus = result.spokenResponse.startsWith("Opening") || result.spokenResponse.startsWith("Failed");
-              if (isStatus && !spokenTextRecorded) {
-                await recordTurn(pendingUserTextRef.current, result.spokenResponse);
-                // A "Failed…" status is a tool failure, not an answer — capture it as such
-                // so it shows up in command insights instead of inflating the success count.
-                const toolFailed = result.spokenResponse.startsWith("Failed");
+              const plan = decideActionResponse(result, spokenTextRecorded);
+              if (plan?.shouldSpeak) {
+                if (plan.recordTurn) {
+                  await recordTurn(pendingUserTextRef.current, result.spokenResponse);
+                }
                 logOutcome(
                   command,
-                  toolFailed ? "failed" : "answered",
-                  toolFailed ? "tool_failed" : undefined,
-                  toolFailed ? result.spokenResponse : undefined,
+                  plan.outcome,
+                  plan.failureReason,
+                  plan.detail,
                   result.spokenResponse,
                 );
                 setStatus("speaking");
