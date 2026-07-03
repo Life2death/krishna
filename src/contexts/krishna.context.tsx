@@ -3,7 +3,7 @@ import { useApp } from "@/contexts";
 import { useMcpTools, useDevicePresence } from "@/hooks";
 import { fetchAIResponse } from "@/lib/repo-bound";
 import { getRepo } from "@/lib/repo-selector";
-import { parseActions, executeAction, resolveActionForConfirm } from "@/lib/actions";
+import { parseActions, executeAction, resolveActionForConfirm, decideActionResponse } from "@/lib/actions";
 import { executePlan, resolvePlaceholders } from "@/lib/executor";
 import { getAllTools } from "@/lib/tools";
 import { selectTools } from "@krishna/core/tool-selector";
@@ -1689,61 +1689,25 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
             return;
           }
             if (result.spokenResponse) {
-              if (result.kind === "answer") {
-                await recordTurn(pendingUserTextRef.current, result.spokenResponse);
-                logOutcome(
-                  command,
-                  result.ok !== false ? "answered" : "failed",
-                  result.ok !== false ? undefined : "tool_failed",
-                  result.ok !== false ? undefined : result.spokenResponse,
-                  result.spokenResponse,
-                );
-                setStatus("speaking");
-                setLastSpoken(result.spokenResponse);
-                setKrishnaSpeaking(true);
-                try {
-                  await ttsRef.current.speak(result.spokenResponse);
-                } finally {
-                  setKrishnaSpeaking(false);
-                }
-              } else if (result.kind === "status" && !spokenTextRecorded) {
-                await recordTurn(pendingUserTextRef.current, result.spokenResponse);
-                const toolFailed = result.spokenResponse.startsWith("Failed");
-                logOutcome(
-                  command,
-                  toolFailed ? "failed" : "answered",
-                  toolFailed ? "tool_failed" : undefined,
-                  toolFailed ? result.spokenResponse : undefined,
-                  result.spokenResponse,
-                );
-                setStatus("speaking");
-                setLastSpoken(result.spokenResponse);
-                setKrishnaSpeaking(true);
-                try {
-                  await ttsRef.current.speak(result.spokenResponse);
-                } finally {
-                  setKrishnaSpeaking(false);
-                }
-              } else if (!result.kind && !spokenTextRecorded) {
-                const isStatus = result.spokenResponse.startsWith("Opening") || result.spokenResponse.startsWith("Failed");
-                if (isStatus) {
+              const plan = decideActionResponse(result, spokenTextRecorded);
+              if (plan?.shouldSpeak) {
+                if (plan.recordTurn) {
                   await recordTurn(pendingUserTextRef.current, result.spokenResponse);
-                  const toolFailed = result.spokenResponse.startsWith("Failed");
-                  logOutcome(
-                    command,
-                    toolFailed ? "failed" : "answered",
-                    toolFailed ? "tool_failed" : undefined,
-                    toolFailed ? result.spokenResponse : undefined,
-                    result.spokenResponse,
-                  );
-                  setStatus("speaking");
-                  setLastSpoken(result.spokenResponse);
-                  setKrishnaSpeaking(true);
-                  try {
-                    await ttsRef.current.speak(result.spokenResponse);
-                  } finally {
-                    setKrishnaSpeaking(false);
-                  }
+                }
+                logOutcome(
+                  command,
+                  plan.outcome,
+                  plan.failureReason,
+                  plan.detail,
+                  result.spokenResponse,
+                );
+                setStatus("speaking");
+                setLastSpoken(result.spokenResponse);
+                setKrishnaSpeaking(true);
+                try {
+                  await ttsRef.current.speak(result.spokenResponse);
+                } finally {
+                  setKrishnaSpeaking(false);
                 }
               }
             } else {

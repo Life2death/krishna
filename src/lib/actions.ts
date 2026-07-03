@@ -75,6 +75,60 @@ export interface ExecuteActionResult {
   ok?: boolean;
 }
 
+export interface ActionResponsePlan {
+  shouldSpeak: boolean;
+  recordTurn: boolean;
+  outcome: "answered" | "failed";
+  failureReason?: "tool_failed";
+  detail?: string;
+}
+
+export function decideActionResponse(
+  result: ExecuteActionResult,
+  spokenTextRecorded: boolean,
+): ActionResponsePlan | null {
+  if (!result.spokenResponse) return null;
+
+  if (result.kind === "answer") {
+    return {
+      shouldSpeak: true,
+      recordTurn: true,
+      outcome: result.ok !== false ? "answered" : "failed",
+      failureReason: result.ok !== false ? undefined : "tool_failed",
+      detail: result.ok !== false ? undefined : result.spokenResponse,
+    };
+  }
+
+  if (result.kind === "status") {
+    if (spokenTextRecorded) {
+      return { shouldSpeak: false, recordTurn: false, outcome: "answered" };
+    }
+    const toolFailed = result.ok === false || result.spokenResponse.startsWith("Failed");
+    return {
+      shouldSpeak: true,
+      recordTurn: true,
+      outcome: toolFailed ? "failed" : "answered",
+      failureReason: toolFailed ? "tool_failed" : undefined,
+      detail: toolFailed ? result.spokenResponse : undefined,
+    };
+  }
+
+  // Legacy: no kind — fall back to prefix heuristic unchanged
+  if (spokenTextRecorded) {
+    return { shouldSpeak: false, recordTurn: false, outcome: "answered" };
+  }
+  const isStatusLegacy = result.spokenResponse.startsWith("Opening") || result.spokenResponse.startsWith("Failed");
+  if (!isStatusLegacy) return null;
+  const toolFailed = result.spokenResponse.startsWith("Failed");
+  return {
+    shouldSpeak: true,
+    recordTurn: true,
+    outcome: toolFailed ? "failed" : "answered",
+    failureReason: toolFailed ? "tool_failed" : undefined,
+    detail: toolFailed ? result.spokenResponse : undefined,
+  };
+}
+
 type LlmFallbackFn = (input: string) => Promise<string | null>;
 
 export async function executeAction(
@@ -87,7 +141,7 @@ export async function executeAction(
     const mode = action.mode || "car";
 
     if (!to) {
-      return { kind: "answer", ok: false, spokenResponse: "Where would you like to go?" };
+      return { kind: "answer", spokenResponse: "Where would you like to go?" };
     }
 
     const result = await getTravelTimeTool.run({ from, to, mode }, { vars: {} });
@@ -155,7 +209,7 @@ export async function executeAction(
       return { kind: "status", spokenResponse: "Opening " + result.displayName };
     }
 
-    return { kind: "status", spokenResponse: "I couldn't find an app named \"" + rawTarget + "\"" };
+    return { kind: "status", ok: false, spokenResponse: "I couldn't find an app named \"" + rawTarget + "\"" };
   }
 
   return { spokenResponse: "Unknown action" };

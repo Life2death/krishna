@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { parseActions, executeAction } from "@/lib/actions";
+import { parseActions, executeAction, decideActionResponse } from "@/lib/actions";
 import { invoke } from "@tauri-apps/api/core";
+import type { ExecuteActionResult } from "@/lib/actions";
 
 const mockTravelToolRun = vi.hoisted(() => vi.fn());
 const mockResolveTarget = vi.hoisted(() => vi.fn());
@@ -100,6 +101,78 @@ describe("parseActions", () => {
   });
 });
 
+// ── decideActionResponse (pure decision helper) ──────────────────────────
+
+describe("decideActionResponse", () => {
+  it("answer kind always speaks and records", () => {
+    const r: ExecuteActionResult = { kind: "answer", spokenResponse: "By car, 40 min, sir.", ok: true };
+    const plan = decideActionResponse(r, false);
+    expect(plan?.shouldSpeak).toBe(true);
+    expect(plan?.recordTurn).toBe(true);
+    expect(plan?.outcome).toBe("answered");
+    expect(plan?.failureReason).toBeUndefined();
+  });
+
+  it("answer kind with ok=false logs failed", () => {
+    const r: ExecuteActionResult = { kind: "answer", spokenResponse: "No route.", ok: false };
+    const plan = decideActionResponse(r, false);
+    expect(plan?.shouldSpeak).toBe(true);
+    expect(plan?.outcome).toBe("failed");
+    expect(plan?.failureReason).toBe("tool_failed");
+  });
+
+  it("answer kind speaks even when ack was already spoken", () => {
+    const r: ExecuteActionResult = { kind: "answer", spokenResponse: "By car, 40 min.", ok: true };
+    const plan = decideActionResponse(r, true);
+    expect(plan?.shouldSpeak).toBe(true);
+  });
+
+  it("status kind speaks only when no prior ack", () => {
+    const r: ExecuteActionResult = { kind: "status", spokenResponse: "Opening chrome." };
+    expect(decideActionResponse(r, false)?.shouldSpeak).toBe(true);
+    expect(decideActionResponse(r, true)?.shouldSpeak).toBe(false);
+  });
+
+  it("status kind with Failed prefix logs tool_failed", () => {
+    const r: ExecuteActionResult = { kind: "status", spokenResponse: "Failed to open x." };
+    const plan = decideActionResponse(r, false);
+    expect(plan?.outcome).toBe("failed");
+    expect(plan?.failureReason).toBe("tool_failed");
+  });
+
+  it("status kind with ok=false logs tool_failed (even without Failed prefix)", () => {
+    const r: ExecuteActionResult = { kind: "status", ok: false, spokenResponse: "I couldn't find an app." };
+    const plan = decideActionResponse(r, false);
+    expect(plan?.outcome).toBe("failed");
+    expect(plan?.failureReason).toBe("tool_failed");
+  });
+
+  it("legacy (no kind) with Opening prefix speaks and logs answered", () => {
+    const r: ExecuteActionResult = { spokenResponse: "Opening youtube." };
+    const plan = decideActionResponse(r, false);
+    expect(plan?.shouldSpeak).toBe(true);
+    expect(plan?.outcome).toBe("answered");
+  });
+
+  it("legacy (no kind) with Failed prefix speaks and logs tool_failed", () => {
+    const r: ExecuteActionResult = { spokenResponse: "Failed to open x." };
+    const plan = decideActionResponse(r, false);
+    expect(plan?.shouldSpeak).toBe(true);
+    expect(plan?.outcome).toBe("failed");
+    expect(plan?.failureReason).toBe("tool_failed");
+  });
+
+  it("legacy (no kind) without prefix is silent (no speak)", () => {
+    const r: ExecuteActionResult = { spokenResponse: "By car it's 40 min." };
+    expect(decideActionResponse(r, false)).toBeNull();
+  });
+
+  it("returns null for empty spokenResponse", () => {
+    const r: ExecuteActionResult = { spokenResponse: "" };
+    expect(decideActionResponse(r, false)).toBeNull();
+  });
+});
+
 // ── executeAction ─────────────────────────────────────────────────────────
 
 describe("executeAction — travel_time", () => {
@@ -146,7 +219,7 @@ describe("executeAction — travel_time", () => {
     expect(result.spokenResponse).toContain("Add a Maps API key");
   });
 
-  it("returns kind:answer with ok:false on missing destination", async () => {
+  it("returns kind:answer with ok:undefined on missing destination (clarification, not failure)", async () => {
     const result = await executeAction({
       action: "travel_time",
       from: "home",
@@ -155,7 +228,7 @@ describe("executeAction — travel_time", () => {
     });
 
     expect(result.kind).toBe("answer");
-    expect(result.ok).toBe(false);
+    expect(result.ok).toBeUndefined();
     expect(result.spokenResponse).toBe("Where would you like to go?");
   });
 
@@ -242,7 +315,7 @@ describe("executeAction — open", () => {
     expect(result.spokenResponse).toBe("Failed to open https://example.com");
   });
 
-  it("returns kind:status for unknown app", async () => {
+  it("returns kind:status for unknown app with ok:false", async () => {
     mockResolveTarget.mockResolvedValue({
       found: false,
       target: null,
@@ -256,6 +329,7 @@ describe("executeAction — open", () => {
     });
 
     expect(result.kind).toBe("status");
+    expect(result.ok).toBe(false);
     expect(result.spokenResponse).toContain("couldn't find an app");
   });
 });
