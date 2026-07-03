@@ -7,7 +7,8 @@ import { setSecretGetter, getSecret } from "@krishna/core/secrets";
 import { safeLocalStorage } from "@krishna/core/safe-local-storage";
 import { registerTools } from "@krishna/core/tools";
 import { COMPUTER_TOOLS } from "@krishna/core/tools/computer";
-import { SyncEngine, createTransport } from "@krishna/core/sync";
+import { SyncEngine } from "@krishna/core/sync";
+import { createTransport } from "@krishna/core/sync/create-transport";
 
 let _syncEngine: SyncEngine | null = null;
 
@@ -25,7 +26,7 @@ async function startSync(): Promise<void> {
       return;
     }
 
-    const transport = createTransport({ url: syncUrl, token: syncToken });
+    const transport = await createTransport({ url: syncUrl, token: syncToken });
     const engine = new SyncEngine(transport);
     _syncEngine = engine;
 

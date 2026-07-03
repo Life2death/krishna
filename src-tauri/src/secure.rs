@@ -94,14 +94,35 @@ fn get_key(app: &AppHandle) -> Result<[u8; 32], String> {
     Ok(derive_encryption_key(&machine_id, APP_SEED))
 }
 
+fn decrypt_storage(app: &AppHandle, data: &[u8]) -> Result<Vec<u8>, String> {
+    #[cfg(target_os = "android")]
+    {
+        if crate::keystore::has_keystore_key() {
+            return crate::keystore::decrypt_with_keystore(data);
+        }
+    }
+    let key = get_key(app)?;
+    decrypt_data(data, &key)
+}
+
+fn encrypt_storage(app: &AppHandle, plaintext: &[u8]) -> Result<Vec<u8>, String> {
+    #[cfg(target_os = "android")]
+    {
+        if crate::keystore::has_keystore_key() {
+            return crate::keystore::encrypt_with_keystore(plaintext);
+        }
+    }
+    let key = get_key(app)?;
+    encrypt_data(plaintext, &key)
+}
+
 pub fn read_encrypted_json(app: &AppHandle) -> Result<serde_json::Value, String> {
     let path = get_storage_path(app)?;
     if !path.exists() {
         return Ok(serde_json::json!({}));
     }
     let data = fs::read(&path).map_err(|e| format!("Failed to read storage: {}", e))?;
-    let key = get_key(app)?;
-    let decrypted = decrypt_data(&data, &key)?;
+    let decrypted = decrypt_storage(app, &data)?;
     serde_json::from_slice(&decrypted)
         .map_err(|e| format!("Failed to parse storage JSON: {}", e))
 }
@@ -130,9 +151,6 @@ pub fn encrypt_data(plaintext: &[u8], key: &[u8; 32]) -> Result<Vec<u8>, String>
 
 pub fn set_stored_value(app: &AppHandle, key: &str, value: &str) -> Result<(), String> {
     let path = get_storage_path(app)?;
-    // Self-healing: if the existing blob is missing, corrupt, or was written with
-    // an old (version-derived) key, start from an empty object instead of aborting
-    // the write. Otherwise one undecryptable file would permanently block all saves.
     let mut data = read_encrypted_json(app).unwrap_or_else(|_| serde_json::json!({}));
     if !data.is_object() {
         data = serde_json::json!({});
@@ -140,8 +158,7 @@ pub fn set_stored_value(app: &AppHandle, key: &str, value: &str) -> Result<(), S
     data[key] = serde_json::json!(value);
     let plaintext = serde_json::to_vec(&data)
         .map_err(|e| format!("Failed to serialize storage: {}", e))?;
-    let encryption_key = get_key(app)?;
-    let encrypted = encrypt_data(&plaintext, &encryption_key)?;
+    let encrypted = encrypt_storage(app, &plaintext)?;
     fs::write(&path, encrypted)
         .map_err(|e| format!("Failed to write storage: {}", e))?;
     Ok(())

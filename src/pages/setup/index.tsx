@@ -1,9 +1,9 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button, Label } from "@/components";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { secureStorage } from "@/lib/secure-storage";
+import { secureStorage, hasSealedKey } from "@/lib/secure-storage";
 import { CheckIcon, ChevronRightIcon, ChevronLeftIcon, KeyIcon, SparklesIcon } from "lucide-react";
 
 type SetupStep = "welcome" | "api-key" | "master-key" | "sync" | "done";
@@ -44,6 +44,8 @@ export default function Setup() {
   const navigate = useNavigate();
   const [currentStep, setCurrentStep] = useState<SetupStep>("welcome");
   const stepIndex = stepIds.indexOf(currentStep);
+  const [keyAlreadySealed, setKeyAlreadySealed] = useState(false);
+  const [bakedKey, setBakedKey] = useState<string | null>(null);
 
   const [anthropicKey, setAnthropicKey] = useState("");
   const [masterKey, setMasterKey] = useState("");
@@ -56,12 +58,36 @@ export default function Setup() {
   const brainToken = useMemo(generateToken, []);
   const autoMasterKey = useMemo(generateMasterKey, []);
 
+  useEffect(() => {
+    hasSealedKey().then(setKeyAlreadySealed);
+    import("@tauri-apps/api/core")
+      .then(({ invoke }) => invoke<string | null>("get_baked_anthropic_key"))
+      .then((k) => setBakedKey(k ?? null))
+      .catch(() => setBakedKey(null));
+  }, []);
+
+  // Mobile (baked build): the Anthropic key is baked into the app, so setup only
+  // asks for ONE strong password (the encryption key). Nothing else.
+  const isBakedMobile = !!bakedKey && bakedKey.length > 0;
+
+  useEffect(() => {
+    if (isBakedMobile) setUseAutoMasterKey(false);
+  }, [isBakedMobile]);
+
+  const activeSteps = isBakedMobile
+    ? (["welcome", "master-key", "done"] as SetupStep[])
+    : keyAlreadySealed
+    ? stepIds.filter((s) => s !== "master-key")
+    : stepIds;
+
   const canProceed = (): boolean => {
     switch (currentStep) {
       case "api-key":
         return anthropicKey.trim().length > 0;
       case "master-key":
-        return useAutoMasterKey || masterKey.trim().length >= 16;
+        return isBakedMobile
+          ? masterKey.trim().length >= 8
+          : useAutoMasterKey || masterKey.trim().length >= 16;
       default:
         return true;
     }
@@ -69,17 +95,17 @@ export default function Setup() {
 
   const nextStep = () => {
     setError(null);
-    const nextIdx = stepIndex + 1;
-    if (nextIdx < stepIds.length) {
-      setCurrentStep(stepIds[nextIdx] as SetupStep);
+    const nextIdx = activeSteps.indexOf(currentStep) + 1;
+    if (nextIdx < activeSteps.length) {
+      setCurrentStep(activeSteps[nextIdx] as SetupStep);
     }
   };
 
   const prevStep = () => {
     setError(null);
-    const prevIdx = stepIndex - 1;
+    const prevIdx = activeSteps.indexOf(currentStep) - 1;
     if (prevIdx >= 0) {
-      setCurrentStep(stepIds[prevIdx] as SetupStep);
+      setCurrentStep(activeSteps[prevIdx] as SetupStep);
     }
   };
 
@@ -87,11 +113,18 @@ export default function Setup() {
     setSaving(true);
     setError(null);
     try {
-      const finalMasterKey = useAutoMasterKey ? autoMasterKey : masterKey;
+      const finalMasterKey = isBakedMobile
+        ? masterKey.trim()
+        : keyAlreadySealed
+        ? undefined
+        : (useAutoMasterKey ? autoMasterKey : masterKey);
+      const finalAnthropicKey = isBakedMobile ? (bakedKey ?? "") : anthropicKey.trim();
 
       await secureStorage.set("KRISHNA_BRAIN_TOKEN", brainToken);
-      await secureStorage.set("ANTHROPIC_API_KEY", anthropicKey.trim());
-      await secureStorage.set("KRISHNA_MASTER_KEY", finalMasterKey);
+      await secureStorage.set("ANTHROPIC_API_KEY", finalAnthropicKey);
+      if (finalMasterKey) {
+        await secureStorage.set("KRISHNA_MASTER_KEY", finalMasterKey);
+      }
       await secureStorage.set("KRISHNA_CLAUDE_MODEL", "claude-sonnet-4-6");
       await secureStorage.set("KRISHNA_RAG_DISABLED", "true");
 
@@ -122,18 +155,18 @@ export default function Setup() {
             <CardTitle>Krishna</CardTitle>
           </div>
           <CardDescription>
-            {steps[stepIndex].description}
+            {steps.find((s) => s.id === currentStep)?.description ?? ""}
           </CardDescription>
         </CardHeader>
 
         <CardContent className="space-y-6">
           {/* Steps indicator */}
           <div className="flex gap-2">
-            {steps.map((s, i) => (
+            {activeSteps.map((id, i) => (
               <div
-                key={s.id}
+                key={id}
                 className={`h-1 flex-1 rounded-full transition-colors ${
-                  i <= stepIndex ? "bg-primary" : "bg-secondary"
+                  i <= activeSteps.indexOf(currentStep) ? "bg-primary" : "bg-secondary"
                 }`}
               />
             ))}
@@ -156,18 +189,27 @@ export default function Setup() {
                 This takes just a minute.
               </p>
               <ul className="space-y-2 text-left text-sm text-muted-foreground">
-                <li className="flex items-start gap-2">
-                  <KeyIcon className="mt-0.5 size-4 shrink-0 text-primary" />
-                  <span>Connect your Anthropic API key for AI responses</span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <KeyIcon className="mt-0.5 size-4 shrink-0 text-primary" />
-                  <span>Set up encryption to protect your data</span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <KeyIcon className="mt-0.5 size-4 shrink-0 text-primary" />
-                  <span>Optionally configure cloud sync with Turso</span>
-                </li>
+                {isBakedMobile ? (
+                  <li className="flex items-start gap-2">
+                    <KeyIcon className="mt-0.5 size-4 shrink-0 text-primary" />
+                    <span>Just set one strong password to protect your data — that's it.</span>
+                  </li>
+                ) : (
+                  <>
+                    <li className="flex items-start gap-2">
+                      <KeyIcon className="mt-0.5 size-4 shrink-0 text-primary" />
+                      <span>Connect your Anthropic API key for AI responses</span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <KeyIcon className="mt-0.5 size-4 shrink-0 text-primary" />
+                      <span>Set up encryption to protect your data</span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <KeyIcon className="mt-0.5 size-4 shrink-0 text-primary" />
+                      <span>Optionally configure cloud sync with Turso</span>
+                    </li>
+                  </>
+                )}
               </ul>
             </div>
           )}
@@ -199,8 +241,27 @@ export default function Setup() {
             </div>
           )}
 
-          {/* Step: Master Key */}
-          {currentStep === "master-key" && (
+          {/* Step: Master Key / Password */}
+          {currentStep === "master-key" && isBakedMobile && (
+            <div className="space-y-4 py-2">
+              <div className="space-y-1.5">
+                <Label htmlFor="mobile-password">Set a strong password</Label>
+                <p className="text-xs text-muted-foreground">
+                  This password protects all your data on this device. Choose something strong you
+                  can remember — it cannot be recovered if you forget it.
+                </p>
+              </div>
+              <Input
+                id="mobile-password"
+                type="password"
+                placeholder="At least 8 characters"
+                value={masterKey}
+                onChange={(e) => setMasterKey(e.target.value)}
+                autoFocus
+              />
+            </div>
+          )}
+          {currentStep === "master-key" && !isBakedMobile && (
             <div className="space-y-4 py-2">
               <div className="space-y-1.5">
                 <Label>Encryption Key</Label>
@@ -329,8 +390,11 @@ export default function Setup() {
                   Go to Dashboard
                   <ChevronRightIcon className="size-4" />
                 </Button>
-              ) : currentStep === "sync" ? (
-                <Button size="sm" onClick={handleSave} disabled={saving}>
+              ) : activeSteps.indexOf(currentStep) === activeSteps.length - 2 ? (
+                // Last input step (sync on desktop, password on mobile) → SAVE.
+                // Previously hardcoded to "sync", so the mobile flow (which has no
+                // sync step) never called handleSave and looped back to setup.
+                <Button size="sm" onClick={handleSave} disabled={saving || !canProceed()}>
                   {saving ? "Saving..." : "Save & Finish"}
                 </Button>
               ) : (

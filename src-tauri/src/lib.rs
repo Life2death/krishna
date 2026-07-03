@@ -5,6 +5,9 @@ mod assistant;
 mod automation;
 mod capture;
 mod db;
+#[cfg(target_os = "android")]
+mod keystore;
+mod mobile_bridge;
 mod resolver;
 mod secure;
 mod shortcuts;
@@ -167,6 +170,11 @@ pub fn run() {
             assistant::open_target,
             secure::secure_get,
             secure::secure_set,
+            mobile_bridge::has_sealed_key,
+            mobile_bridge::seal_master_key,
+            mobile_bridge::sync_exec,
+            mobile_bridge::sync_exec_multiple,
+            mobile_bridge::get_baked_anthropic_key,
             resolver::resolve_app,
             resolver::verify_target,
             tts::synthesize_speech_piper,
@@ -191,6 +199,9 @@ pub fn run() {
             if let Err(e) = window::setup_main_window(app) {
                 eprintln!("Warning: Failed to position main window: {}", e);
             }
+
+            #[cfg(target_os = "android")]
+            keystore::init();
 
             #[cfg(target_os = "macos")]
             init(app.app_handle());

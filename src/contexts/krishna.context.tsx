@@ -509,7 +509,8 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (voiceInitRef.current) return;
     const loadVoices = () => {
-      const allVoices = window.speechSynthesis.getVoices();
+      // Android WebView has no Web Speech API — guard so this can't blank the app.
+      const allVoices = window.speechSynthesis?.getVoices() ?? [];
       if (voice) {
         const saved = allVoices.find((v) => v.name === voice);
         if (saved) {
@@ -531,7 +532,7 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
       }
     };
     loadVoices();
-    window.speechSynthesis.onvoiceschanged = loadVoices;
+    if (window.speechSynthesis) window.speechSynthesis.onvoiceschanged = loadVoices;
   }, [voice]);
 
   // Sync TTS rate when it changes
@@ -747,7 +748,7 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
   const setVoice = useCallback((name: string) => {
     setVoiceState(name);
     safeLocalStorage.setItem(STORAGE_KEYS.KRISHNA_VOICE, name);
-    const allVoices = window.speechSynthesis.getVoices();
+    const allVoices = window.speechSynthesis?.getVoices() ?? [];
     const found = allVoices.find((v) => v.name === name);
     if (found) ttsRef.current.setVoice(found);
   }, []);

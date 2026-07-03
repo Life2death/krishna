@@ -17,5 +17,19 @@ fn main() {
         println!("cargo:rustc-env=POSTHOG_API_KEY={}", posthog_api_key);
     }
 
+    if let Ok(master_key) = std::env::var("KRISHNA_MASTER_KEY") {
+        println!("cargo:rustc-env=KRISHNA_MASTER_KEY={}", master_key);
+    }
+
+    // Bake the Anthropic API key into MOBILE builds only, so the phone needs no
+    // key entry (self-installed personal device). Desktop keeps user-entered keys.
+    let target_os = std::env::var("CARGO_CFG_TARGET_OS").unwrap_or_default();
+    if target_os == "android" || target_os == "ios" {
+        if let Ok(anthropic_key) = std::env::var("ANTHROPIC_API_KEY") {
+            println!("cargo:rustc-env=ANTHROPIC_API_KEY={}", anthropic_key);
+        }
+    }
+    println!("cargo:rerun-if-env-changed=ANTHROPIC_API_KEY");
+
     tauri_build::build()
 }

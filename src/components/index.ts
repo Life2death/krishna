@@ -15,3 +15,4 @@ export * from "./KrishnaChakraOrb";
 export * from "./KrishnaVAD";
 export * from "./KrishnaChat";
 export * from "./MobileVoiceButton";
+export * from "./MobileNav";

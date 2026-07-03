@@ -13,9 +13,11 @@ import {
   Screenshot,
   Presence,
   Setup,
+  MobileMemories,
 } from "@/pages";
 import { DashboardLayout } from "@/layouts";
 import { invoke } from "@tauri-apps/api/core";
+import { hasSealedKey, sealMasterKey } from "@/lib/secure-storage";
 
 function FirstRunGuard() {
   const [checking, setChecking] = useState(true);
@@ -24,6 +26,19 @@ function FirstRunGuard() {
   useEffect(() => {
     (async () => {
       try {
+        // Mobile: best-effort KeyStore seal. Must NEVER throw into the first-run
+        // check — if the KeyStore JNI is unavailable, secure storage falls back to
+        // a device-bound key, and we must still read the saved token below (else
+        // the app loops back to setup forever).
+        const sealed = await hasSealedKey();
+        if (!sealed) {
+          try {
+            await sealMasterKey();
+          } catch {
+            /* seal unavailable — secure storage falls back to a device key */
+          }
+        }
+
         const token = await invoke<string | null>("secure_get", { key: "KRISHNA_BRAIN_TOKEN" });
         setIsFirstRun(!token);
       } catch {
@@ -56,6 +71,7 @@ export default function AppRoutes() {
             <Route path="/settings" element={<Settings />} />
             <Route path="/audio" element={<Audio />} />
             <Route path="/dev-space" element={<DevSpace />} />
+            <Route path="/mobile/memories" element={<MobileMemories />} />
             <Route path="/chats" element={<Navigate to="/dashboard" replace />} />
             <Route path="/responses" element={<Navigate to="/settings" replace />} />
             <Route path="*" element={<Navigate to="/dashboard" replace />} />

@@ -581,7 +581,7 @@ all 10 real templates (claude `max_tokens` + groq `max_completion_tokens` overri
 assert the right things, HonorificInput genuinely persists AND is read at runtime (voice +
 chat), and the canned/filler/plan-confirmation paths are untouched. Two findings:
 
-### P6-F1 · BLOCKER · OPEN — `apps/brain/src/core-init.ts` misses the two new required ResponseSettings fields
+### P6-F1 · BLOCKER · FIXED (p6 commit bbd1bf0) — `apps/brain/src/core-init.ts` misses the two new required ResponseSettings fields
 `packages/core/settings.ts` now requires `voiceMaxTokens: number` and `voiceModel: string`
 (non-optional). `src/lib/startup.ts` + `src/__tests__/setup.ts` were updated, but the brain's
 `setSettingsGetter(() => ({responseLength, language, autoScroll, honorific}))`
@@ -593,7 +593,7 @@ voiceModel: ""` to the literal. Impact note: brain is retired from the runtime p
 is a build-hygiene break, not a user-facing one — but it's a one-liner; fix it and run the
 brain workspace's own typecheck to confirm (report both tsc results).
 
-### P6-N1 · NIT · OPEN — max-tokens key detection is case-sensitive, spec said match the stream-key pattern
+### P6-N1 · NIT · FIXED (p6 commit bbd1bf0) — max-tokens key detection is case-sensitive, spec said match the stream-key pattern
 `ai-response.function.ts:183-184` (both twins): `k === "max_tokens" || …` — the stream-key
 search this was modeled on uses `k.toLowerCase() === "stream"`. Harmless for the 10 built-in
 templates (all lowercase); a custom template with different casing would silently skip.

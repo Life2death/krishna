@@ -284,3 +284,8 @@ body {
   .krishna-chakra__aura { animation: none !important; }
 }
 
+/* Mobile safe-area inset for notch/home indicator */
+.safe-area-bottom {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+

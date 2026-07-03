@@ -1,0 +1,41 @@
+{
+  "$schema": "../gen/schemas/mobile-schema.json",
+  "identifier": "mobile",
+  "description": "Capability for the main window on Android/iOS. Only includes permissions for plugins actually registered on mobile (sql, http, keychain, opener, log, core) — desktop-only plugins (global-shortcut, posthog, autostart, machine-uid, nspanel) are NOT registered on mobile and must not be listed here or ACL validation fails.",
+  "windows": ["main", "dashboard"],
+  "platforms": ["android", "iOS"],
+  "permissions": [
+    "core:default",
+    "core:event:default",
+    "opener:default",
+    "log:default",
+    "keychain:default",
+    "keychain:allow-get-item",
+    "keychain:allow-save-item",
+    "keychain:allow-remove-item",
+    "sql:default",
+    "sql:allow-load",
+    "sql:allow-select",
+    "sql:allow-execute",
+    {
+      "identifier": "http:default",
+      "allow": [
+        { "url": "https://api.anthropic.com/**" },
+        { "url": "https://api.groq.com/**" },
+        { "url": "https://api.elevenlabs.io/**" },
+        { "url": "https://www.googleapis.com/**" },
+        { "url": "https://api.github.com/**" },
+        { "url": "https://openrouter.ai/**" },
+        { "url": "https://api.openai.com/**" },
+        { "url": "https://generativelanguage.googleapis.com/**" },
+        { "url": "https://api.mistral.ai/**" },
+        { "url": "https://api.cohere.ai/**" },
+        { "url": "https://api.perplexity.ai/**" },
+        { "url": "https://speech.googleapis.com/**" },
+        { "url": "https://api.deepgram.com/**" },
+        { "url": "https://*.turso.io/**" },
+        { "url": "https://*.aws.turso.io/**" }
+      ]
+    }
+  ]
+}

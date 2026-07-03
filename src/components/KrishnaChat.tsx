@@ -33,15 +33,15 @@ export const KrishnaChat = () => {
   useEffect(() => {
     if (isElevenLabs) return; // browser voices not needed when using EL
     const load = () => {
-      const all = window.speechSynthesis.getVoices();
+      const all = window.speechSynthesis?.getVoices() ?? [];
       const en = all
         .filter((v) => v.lang.startsWith("en"))
         .map((v) => ({ name: v.name, lang: v.lang, localService: v.localService }));
       if (en.length > 0) setVoices(en);
     };
     load();
-    window.speechSynthesis.onvoiceschanged = load;
-    return () => { window.speechSynthesis.onvoiceschanged = null; };
+    if (window.speechSynthesis) window.speechSynthesis.onvoiceschanged = load;
+    return () => { if (window.speechSynthesis) window.speechSynthesis.onvoiceschanged = null; };
   }, [isElevenLabs]);
 
   const preview = (name: string) => {

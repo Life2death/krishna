@@ -47,6 +47,10 @@ aes-gcm = "0.10"
 sha2 = "0.10"
 rand = "0.8"
 
+[target.'cfg(target_os = "android")'.dependencies]
+jni = "0.21"
+ndk-context = "0.1"
+
 [target.'cfg(target_os = "macos")'.dependencies]
 tauri-plugin-macos-permissions = "2"
 cidre = "0.11.3"
