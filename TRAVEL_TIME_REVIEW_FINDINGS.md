@@ -194,5 +194,38 @@ Zero new tests in this commit (flat at 390, same as after T2). Matches existing 
 (minus the intentionally-out-of-scope Ola comparison check). Only T4 (owner's live
 acceptance test) remains, and it's unblocked now that the key-store path works end-to-end.
 
+## T4 — owner live test, first attempt (2026-07-03, FAILED at acceptance item 1)
+
+Environment note: owner's network was flaky during the whole run — that interacts with
+several findings below.
+
+### T4-F1 · BLOCKER · OPEN — model claims "saved" without emitting the remember action; nothing verifies persistence
+Reviewer queried the live DB read-only (`%APPDATA%/com.krishna.assistant/krishna.db`):
+`memories` table has **0 rows** — yet the message log shows the assistant answering "Your
+home address is now saved" and "Your office address is now saved" to the owner's two
+remember requests. The model spoke success prose WITHOUT emitting the ```action
+{"action":"remember",...}``` block, so `promptMemoryConfirmation` never ran and nothing hit
+the DB. The subsequent "how much time to travel to work?" then had no memory to resolve —
+`resolvePlace` passed raw "home"/"work" strings to Google. Two layered fixes needed:
+1. **Prompt:** strengthen the REMEMBER section — the model must NEVER say "saved" unless it
+   emitted the action block in the same reply (few-shot example; weak models follow examples,
+   not rules — proven by the P6 brevity saga).
+2. **Code-side verification (the real fix):** after a turn whose user text matches remember
+   intent (or whose reply claims saving), if `parseActions` produced NO remember action,
+   either re-ask or at minimum never speak the model's "saved" claim. Persistence claims must
+   be grounded in an actual `addMemory` result, not model prose.
+
+### T4-F2 · BUG · OPEN — hard process crash (exit 0xcfffffff) during the address-save turn
+`target\debug\krishna.exe` exited with 0xcfffffff mid-conversation (owner report; terminal
+scrollback lost after auto-restart). Rust-side crash, plausibly in a network-failure path
+(the same turn produced "Network error during API request: Unknown error"). Needs repro with
+terminal capture; treat any panic reachable from a failed HTTP request as the prime suspect.
+
+### T4-F3 · BUG · OPEN — raw network errors are spoken verbatim to the user
+"Network error during API request: Unknown error" was stored (and likely spoken) as the
+assistant's reply. Ties into `NETWORK_RESILIENCE_PLAN.md` (new doc, same date): errors must
+map to a human sentence ("I'm having network trouble, {honorific} — check the connection")
+and offline state should be announced once, not per-turn.
+
 ---
 *Log format for the agent: change `OPEN` → `FIXED (p<N> commit <sha>)` with a one-line note.*
