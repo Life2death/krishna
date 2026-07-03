@@ -199,7 +199,19 @@ acceptance test) remains, and it's unblocked now that the key-store path works e
 Environment note: owner's network was flaky during the whole run — that interacts with
 several findings below.
 
-### T4-F1 · BLOCKER · OPEN — model claims "saved" without emitting the remember action; nothing verifies persistence
+### T4-F1 · BLOCKER · FIXED (commit 299d0b7, P2) — model claims "saved" without emitting the remember action; nothing verifies persistence
+> Fix (reviewer completed P2 after the agent stopped mid-phase): new pure helper
+> `detectPhantomSave(userCommand, spokenText, actions)` in `actions.ts` fires when the user
+> asked to remember (typo-tolerant) + the reply claims a save + no remember action was
+> emitted; the context then speaks an honest correction, records it, AND replaces the false
+> claim in `historyRef` so the model doesn't see its own lie next turn. Prompt few-shot +
+> CRITICAL "never say saved without the action block" rule added. Two bugs in the agent's
+> partial were fixed (history pollution, missing recordTurn). Tests exercise the real helper
+> end-to-end (not a re-declared regex — also closes P1-R1's class of gap). 419/419 green.
+> **Owner still to re-verify live** (T4 re-run): "remember my home address is X" → confirm
+> prompt → yes → row appears in the DB; a phantom save now says "I couldn't save that
+> properly."
+
 Reviewer queried the live DB read-only (`%APPDATA%/com.krishna.assistant/krishna.db`):
 `memories` table has **0 rows** — yet the message log shows the assistant answering "Your
 home address is now saved" and "Your office address is now saved" to the owner's two
@@ -275,7 +287,14 @@ and T4-F3 (network errors) remain OPEN for their respective phases.
 preserves the `!spokenTextRecorded` gate; the no-`kind` legacy branch is byte-preserving. But
 three items, one of which the agent's own summary got backwards:
 
-#### P1-R1 · BUG (test coverage) · OPEN — the new tests are at the SAME shallow layer that let T4-F4 through
+#### P1-R1 · BUG (test coverage) · FIXED (commits f9bc489 + 299d0b7) — the new tests are at the SAME shallow layer that let T4-F4 through
+> `decideActionResponse()` was extracted (f9bc489) as a pure, unit-tested helper for the
+> speak/log decision, and `detectPhantomSave()` (299d0b7) is likewise pure and tested
+> end-to-end — the P2 test rewrite dropped the re-declared-regex tests for real-helper calls.
+> The speak-decision layer that missed T4-F4 is now guarded. (A full context-render test is
+> still not present — the pure-helper extraction is the pragmatic substitute given the size
+> of `KrishnaProvider`.)
+
 The commit note claims the 9 tests cover "the layer T2/T3 tests missed." That's inverted:
 all 9 assert on `executeAction`'s **return value** (`result.kind`/`result.ok`) — which is
 *exactly* the layer T2/T3 already tested. The layer that actually missed T4-F4 is the
@@ -288,7 +307,7 @@ into a pure, unit-testable helper and test that a `kind:"answer"` result → spe
 P1; it isn't met yet. Not a merge-blocker for proceeding to P2, but MUST close before
 `fix/travel-t4` merges.
 
-#### P1-R2 · NIT · OPEN — "couldn't find app" behavior changed (agent claimed "byte-for-byte")
+#### P1-R2 · NIT · FIXED (commit f9bc489) — "couldn't find app" behavior changed (agent claimed "byte-for-byte")
 `{ kind: "status", spokenResponse: "I couldn't find an app named X" }`: under the OLD filter
 this string started with neither "Opening" nor "Failed", so it was **silently dropped and not
 logged**. Now, as `status`, it gets **spoken and logged as `answered`**. The speaking part is
@@ -297,7 +316,7 @@ not-found as `answered` mis-inflates the insights success count (the very thing 
 inline comment guarded against). Consider a `kind:"status"` + `ok:false` → log `tool_failed`
 for the not-found path.
 
-#### P1-R3 · NIT · OPEN — travel clarification logged as a failure
+#### P1-R3 · NIT · FIXED (commit f9bc489) — travel clarification logged as a failure
 `travel_time` with no destination returns `kind:"answer", ok:false` → logged
 `failed`/`tool_failed`. But "Where would you like to go?" is a clarifying question, not a tool
 failure — it shouldn't count against the failure stats. Minor insight noise; a third
