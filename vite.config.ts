@@ -25,6 +25,7 @@ export default defineConfig(async () => ({
       "@krishna/core/tools/mcp-bridge": path.resolve(__dirname, "packages/core/tools/mcp-bridge.ts"),
       "@krishna/core/tools/computer": path.resolve(__dirname, "packages/core/tools/computer.ts"),
       "@krishna/core/tools/get-travel-time": path.resolve(__dirname, "packages/core/tools/get-travel-time.ts"),
+      "@krishna/core/tools/gmail": path.resolve(__dirname, "packages/core/tools/gmail.ts"),
       "@krishna/core/tools/place-resolver": path.resolve(__dirname, "packages/core/tools/place-resolver.ts"),
       "@krishna/core/tools": path.resolve(__dirname, "packages/core/tools/index.ts"),
       "@krishna/core/functions": path.resolve(__dirname, "packages/core/functions/index.ts"),

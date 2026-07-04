@@ -103,24 +103,28 @@ not yours — just don't be surprised if he reports something new mid-way throug
 
 ---
 
-### 3. Phase 4a — Gmail client-side (queued after travel-t4 is fully closed)
+### 3. Phase 4a — Gmail client-side — **DONE**, built + verified
 
-**Plan:** `GMAIL_MCP_LOCAL_PHASE4_PLAN.md` (also read the "§Gmail & MCP" section of
-`LOCAL_FIRST_ARCHITECTURE_PLAN.md` it references, and `apps/brain/src/gmail/tools.ts` — you're
-porting its arg/return shapes, not redesigning them). **Branch:** `feat/local-p4-gmail` off
-`main`.
+**Built 2026-07-04** by the coding agent. Implementation spans 10 files across 3 layers:
 
-Goal: move Gmail's 4 tools (search/read/list-labels/send) from the Node "brain" to fully
-client-side (Tauri OAuth loopback + direct Gmail REST calls, no `googleapis` dependency in the
-app). Read tools → `KNOWN_SAFE`; `gmail_send_email` stays sensitive with a real spoken
-confirmation (recipient + subject). **Depends on item 1's P1 fix already being in `main`**
-(Gmail results are `kind:"answer"` speech — without that fix they'd be silently dropped, same
-bug class as T4-F4).
+**New files:**
+- `packages/core/tools/gmail.ts` — 4 tool impls (search/read/list-labels/send), direct Gmail REST API, token refresh on 401, `confirmOrAbort` for send, in-code spoken formatting
+- `src/lib/gmail-oauth.ts` — frontend OAuth helpers wrapping Tauri commands
+- `src-tauri/src/gmail_oauth.rs` — Rust TCP listener for PKCE loopback, token exchange & refresh
+- `src/pages/settings/components/GmailSettings.tsx` — Settings UI (client_id/secret inputs, Connect/Disconnect, status)
 
-**Owner prerequisite (not yours):** Vikram needs to paste a Google OAuth client_id/secret
-(from the brain's existing keys) into a new Gmail Settings section once you build it.
+**Modified files:**
+- `src-tauri/src/lib.rs` — registered module + 4 Tauri commands
+- `packages/core/tools/index.ts` — registered all tools
+- `packages/core/action-policy.ts` — read tools in `KNOWN_SAFE`
+- `src/lib/actions.ts` — parse, execute, confirm (gmail_send)
+- `src/contexts/krishna.context.tsx` — GMAIL section in `BASE_SYSTEM_PROMPT`
+- `src/pages/settings/components/index.ts` + `settings/index.tsx` — component wiring
+- `vite.config.ts` — path alias
 
-Commit prefix: `feat(local-p4a-N)`.
+**Verification:** `tsc --noEmit` clean, `vitest run` — 25 files, 421 tests all passing.
+
+**Owner prerequisite:** Vikram still needs to paste the brain's Google OAuth client_id/secret into Settings → Gmail, then click "Connect Gmail" for one-time authorization.
 
 ---
 
