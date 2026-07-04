@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, beforeAll, afterAll } from "vitest";
 import {
   checkRecruiters,
   formatRecruiterOutput,
@@ -217,6 +217,17 @@ describe("formatRecruiterOutput — with outreach", () => {
 });
 
 describe("formatSince", () => {
+  const FIXED_NOW = new Date("2026-07-05T15:00:00");
+
+  beforeAll(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(FIXED_NOW);
+  });
+
+  afterAll(() => {
+    vi.useRealTimers();
+  });
+
   it('returns "just now" for recent timestamps', () => {
     expect(formatSince(Date.now() - 1000)).toBe("just now");
   });
@@ -234,13 +245,13 @@ describe("formatSince", () => {
   });
 
   it('returns "this morning" when timestamp falls in morning hours', () => {
-    const d = new Date();
+    const d = new Date(FIXED_NOW);
     d.setHours(8, 0, 0, 0);
     expect(formatSince(d.getTime())).toBe("this morning");
   });
 
   it('returns "earlier today" for pre-dawn timestamp', () => {
-    const d = new Date();
+    const d = new Date(FIXED_NOW);
     d.setHours(2, 0, 0, 0);
     expect(formatSince(d.getTime())).toBe("earlier today");
   });
