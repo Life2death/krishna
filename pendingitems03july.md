@@ -264,6 +264,23 @@ answers → then item 6 (network resilience) unless re-prioritized.
 
 ---
 
+### 11. Natural speech — variety engine + owner-learned voice lines (NEW — owner request 2026-07-04)
+
+**Plan:** `NATURAL_SPEECH_PLAN.md` (read in full — root causes are verified with file:line).
+Krishna repeats "One moment, sir" (hardcoded at `krishna.context.tsx:1720`) and other fixed
+lines verbatim; the prompt's single example ack gets parroted; canned pools are tiny and
+repeat-blind. Fix: a `voice_lines` Style Bank (seeded → owner-taught → LLM-refreshed from the
+owner's own conversation style) with an anti-repeat picker, prompt-side variety rules with
+last-acks injection, voice-command teach/ban, and an approve-gated "refresh your vocabulary"
+flow. No realtime per-ack LLM calls, no external phrase APIs. V1 alone kills the monotony.
+
+**Branch:** `feat/natural-speech` off `main`. **Commit prefix:** `feat(speech-vN)` (V1–V4).
+Findings file: `NATURAL_SPEECH_REVIEW_FINDINGS.md` (reviewer creates at first review).
+Unblocked — no owner decisions needed; V2 pairs naturally with item 2 (both edit the same
+ACKNOWLEDGE-THEN-ACT prompt region — coordinate so they don't collide).
+
+---
+
 ## Parked (do not start without being asked)
 - M1.5 broad-question spoken brevity — was hardened, then reverted at owner's request
   (`fca491a`); currently unhardened again (broad questions can run 27–30s TTS). Not scheduled.
