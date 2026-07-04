@@ -78,6 +78,21 @@ the main checkout. You never merge or push.
 
 ---
 
+## CURRENT WORKING ORDER (updated 2026-07-04 — agent: work top to bottom, one phase at a time)
+
+1. **Item 1** — travel error visibility (small, gates item 9)
+2. **Item 2** — no narrated-but-unexecuted actions (small prompt fix)
+3. **Item 10-H1** — job-hunter bearer token (`JOB_HUNTER_API_PLAN.md`, in the
+   `D:\Learning\job-hunter` repo — then STOP: owner sets Render env vars + deploys)
+4. **Item 10-J1 + J3** — pipeline URL alias; application profile store (Krishna repo)
+5. **Item 9 P1–P4** — travel insights (best departure time + route watch)
+6. **Item 10-J2** — queue read tool (needs H1 deployed)
+7. **Item 10-J4** — assisted apply, LinkedIn Easy Apply first; then J4b Naukri
+8. **Item 11 V1–V4** — natural speech (V2 must come after item 2 — same prompt region)
+9. **Item 6** — network resilience; then item 7 (fix Gmail G-11 first), then item 8.
+
+Owner can reshuffle at any time; if he does, the reviewer updates this block.
+
 ## Pending items, in priority order
 
 ### 1. Travel tool swallows the real Google API error (NEW — top priority)
@@ -241,19 +256,19 @@ Findings file: `TRAVEL_INSIGHTS_REVIEW_FINDINGS.md` (reviewer creates at first r
 
 ### 10. Job autopilot — voice job pipeline + assisted apply (NEW — owner request 2026-07-04)
 
-**Plan:** `JOB_AUTOPILOT_PLAN.md` (read it in full — especially the "Reality check" and the
-three OWNER DECISIONS that gate J2/J4). Phased: J1 voice-open the pipeline URL (trivial,
-unblocked, can ship immediately), J2 queue read tool (blocked on job-hunter API decision),
-J3 application profile store (unblocked), J4 assisted apply via CDP-attached Chrome with a
-non-negotiable confirm-gated Submit (blocked on decisions #2/#3 + J2 + J3). Full unattended
+**Plans:** `JOB_AUTOPILOT_PLAN.md` (Krishna side) + `JOB_HUNTER_API_PLAN.md` (job-hunter
+side — read both in full). Phased: **H1** bearer-token auth in the `D:\Learning\job-hunter`
+repo (the JSON API already exists — `/api/jobs?status=not_applied` is the queue; only machine
+auth is missing), J1 voice-open the pipeline URL, J2 queue read tool (needs H1 deployed),
+J3 application profile store, J4 assisted apply via CDP-attached Chrome with a non-negotiable
+confirm-gated Submit — LinkedIn Easy Apply first, then Naukri (J4b). Full unattended
 auto-apply is rejected permanently.
 
-**Owner (Vikram) — three answers needed before J2/J4 can start:**
-1. Does job-hunter (`https://job-hunter-x5l1.onrender.com`) expose a JSON queue API + auth, or
-   will you add one?
-2. Browser tech: OK with CDP into your real Chrome (recommended), or prefer the existing
-   computer-control/vision route?
-3. Which portals dominate the current queue (LinkedIn Easy Apply vs Naukri vs external ATS)?
+**All three owner decisions ANSWERED 2026-07-04:** (1) agent adds the token path per
+`JOB_HUNTER_API_PLAN.md` (API itself already existed); (2) CDP into the owner's real Chrome —
+approved; (3) LinkedIn + Naukri first, scale later. Nothing here is blocked on the owner
+until H1 lands (then he sets `KRISHNA_API_TOKEN` + `KRISHNA_API_USER_EMAIL` in Render and
+deploys).
 
 **Branch:** `feat/job-autopilot` off `main`. **Commit prefix:** `feat(jobap-jN)` (J1–J4).
 Findings file: `JOB_AUTOPILOT_REVIEW_FINDINGS.md` (reviewer creates at first review).

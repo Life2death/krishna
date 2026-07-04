@@ -19,21 +19,18 @@ navigation and form-filling labor, the owner gives one spoken confirmation befor
 is clicked. **Full unattended mass-apply is explicitly out of scope** — consistent with the
 owner's own job-search skill convention ("never auto-submits an application").
 
-## Owner decisions needed BEFORE J2/J4 (agent: do not guess past these — J1 has no blockers)
+## Owner decisions — ALL ANSWERED 2026-07-04 (nothing blocked on the owner anymore)
 
-1. **Does job-hunter expose a JSON API?** (e.g. `GET /api/queue`, `POST /api/jobs/:id/applied`)
-   and what auth does it use? If none exists, the owner adds one to the job-hunter repo (he
-   owns it) — scraping our own app's HTML is rejected as the fragile option.
-2. **Browser automation tech for J4** — recommendation: **CDP (Chrome DevTools Protocol) into
-   the owner's real Chrome** launched with `--remote-debugging-port`, driven from Rust
-   (`chromiumoxide` or raw WebSocket). Rationale: DOM-level `querySelector`/fill/click is
-   robust; the real browser carries the owner's logged-in LinkedIn/Naukri sessions, which
-   sidesteps most login walls legitimately. Fallback/alternative: the existing `computer_*`
-   tools + screen-capture vision (zero new deps, but coordinate-guessing on forms is fragile —
-   fine for "click the Apply button", poor for 12-field forms). Owner picks; plan assumes CDP.
-3. **Which portals dominate the current queue?** Determines which form shapes J4's filler
-   handles first (LinkedIn Easy Apply is the highest-value single target; external ATS forms
-   are the long tail).
+1. **Job-hunter API:** ~~does one exist?~~ **It already does** — reviewer inspected
+   `D:\Learning\job-hunter\web_app.py` (Flask + Supabase): `GET /api/jobs` with
+   `status/portal/track/min_fit/limit/offset` filters (`?status=not_applied` IS the queue),
+   `/api/jobs/count|stats|breakdown`, `POST /api/jobs/<id>/status`. The only gap is machine
+   auth (session-cookie only today). The agent adds a bearer-token path — full spec in
+   **`JOB_HUNTER_API_PLAN.md`** (phase H1, done in the `D:\Learning\job-hunter` repo).
+2. **Browser tech:** owner approved **CDP into his real Chrome**. J4 proceeds on CDP as
+   specced; `computer_*`/vision remains the documented fallback only.
+3. **Portals:** owner: **"start with LinkedIn and Naukri, then scale."** J4 MVP targets
+   LinkedIn Easy Apply first (most structured), Naukri second; external ATS is out of MVP.
 
 ## Phases
 
@@ -108,10 +105,13 @@ proven itself live for a while. Full no-confirm auto-apply is rejected permanent
 
 | Phase | Commit prefix | Content | Blocked on |
 |---|---|---|---|
+| H1 | `feat(kapi-h1)` | bearer-token auth in job-hunter repo (`JOB_HUNTER_API_PLAN.md`) | nothing |
 | J1 | `feat(jobap-j1)` | pipeline URL alias + prompt + tests | nothing |
-| J2 | `feat(jobap-j2)` | queue read tool + settings + tests | decision #1 |
+| J2 | `feat(jobap-j2)` | queue read tool + settings + tests | H1 reviewed + owner sets Render env + deploys |
 | J3 | `feat(jobap-j3)` | application profile store + settings UI + tests | nothing |
-| J4 | `feat(jobap-j4)` | CDP attach, apply flow, submit gate, truth check, tests | #2, #3, J2, J3 |
+| J4 | `feat(jobap-j4)` | CDP attach, LinkedIn Easy Apply flow, submit gate, truth check, tests | J2, J3 |
+| J4b | `feat(jobap-j4b)` | Naukri apply flow on the same pipeline | J4 |
 
-`npx tsc --noEmit` clean + full `npx vitest run` green after every phase, then STOP and report.
-J1 and J3 are unblocked today; J2/J4 wait on the owner's three answers above.
+`npx tsc --noEmit` clean + full `npx vitest run` green after every phase (pytest green for
+H1 in the job-hunter repo), then STOP and report. All owner decisions are in — H1, J1, J3
+are startable today; J2 needs H1 deployed; J4 targets LinkedIn first, then Naukri (J4b).
