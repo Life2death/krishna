@@ -22,6 +22,7 @@ export { generateConversationTitle } from "@/lib/database";
 
 // --- memories ---
 export const getAllMemories = (): Promise<Memory[]> => getRepo().memories.getAllMemories();
+export const getMemoryByKey = (key: string): Promise<Memory | null> => getRepo().memories.getMemoryByKey(key);
 export const createMemory = (memory: Memory): Promise<Memory> => getRepo().memories.createMemory(memory);
 export const deleteMemory = (id: string): Promise<boolean> => getRepo().memories.deleteMemory(id);
 

@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { parseActions, executeAction, resolveActionForConfirm, decideActionResponse, detectPhantomSave, extractJsonArray, buildRecruiterClassify } from "@/lib/actions";
+import { resolveAppAlias } from "@/config/app-aliases";
 import type { Candidate, Classification } from "@krishna/core/tools/recruiter-radar";
 import { invoke } from "@tauri-apps/api/core";
 import type { ExecuteActionResult } from "@/lib/actions";
@@ -386,6 +387,28 @@ describe("executeAction — open", () => {
     expect(result.kind).toBe("status");
     expect(result.ok).toBe(false);
     expect(result.spokenResponse).toContain("couldn't find an app");
+  });
+
+  it("resolves job pipeline alias via resolveAppAlias", () => {
+    const alias = resolveAppAlias("job pipeline");
+    expect(alias).not.toBeNull();
+    expect(alias!.type).toBe("url");
+    expect(alias!.launchCommand).toBe("https://job-hunter-x5l1.onrender.com/queue");
+  });
+
+  it("opens job pipeline URL via invoke when target matches alias", async () => {
+    vi.mocked(invoke).mockResolvedValue("OK");
+
+    const result = await executeAction({
+      action: "open",
+      target: "job pipeline",
+    });
+
+    expect(invoke).toHaveBeenCalledWith("open_target", {
+      target: "https://job-hunter-x5l1.onrender.com/queue",
+    });
+    expect(result.kind).toBe("status");
+    expect(result.spokenResponse).toBe("Opening Job Pipeline");
   });
 });
 

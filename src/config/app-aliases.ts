@@ -67,6 +67,12 @@ export const APP_ALIASES: AppAlias[] = [
     launchCommand: "control",
     type: "app",
   },
+  {
+    name: "Job Pipeline",
+    aliases: ["job pipeline", "job queue", "my jobs", "job tracker"],
+    launchCommand: "https://job-hunter-x5l1.onrender.com/queue",
+    type: "url",
+  },
 ];
 
 export function resolveAppAlias(input: string): AppAlias | null {

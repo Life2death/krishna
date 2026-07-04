@@ -11,3 +11,4 @@ export * from "./ComputerControlToggle";
 export * from "./VoiceIdSettings";
 export * from "./MapsSettings";
 export * from "./GmailSettings";
+export * from "./ApplicationProfileSettings";

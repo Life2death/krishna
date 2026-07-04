@@ -5,6 +5,7 @@ import type { Message } from "@/types";
 
 import {
   getAllMemories as localGetAllMemories,
+  getMemoryByKey as localGetMemoryByKey,
   createMemory as localCreateMemory,
   deleteMemory as localDeleteMemory,
   deleteAllMemories as localDeleteAllMemories,
@@ -41,6 +42,7 @@ import {
 
 export interface MemoriesRepo {
   getAllMemories(): Promise<Memory[]>;
+  getMemoryByKey(key: string): Promise<Memory | null>;
   createMemory(memory: Memory): Promise<Memory>;
   deleteMemory(id: string): Promise<boolean>;
   deleteAllMemories(): Promise<boolean>;
@@ -122,6 +124,7 @@ export interface Repo {
 const localRepo: Repo = {
   memories: {
     getAllMemories: localGetAllMemories,
+    getMemoryByKey: localGetMemoryByKey,
     createMemory: localCreateMemory,
     deleteMemory: localDeleteMemory,
     deleteAllMemories: localDeleteAllMemories,
