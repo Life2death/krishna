@@ -66,6 +66,10 @@ fn generate_state() -> String {
     base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(&bytes)
 }
 
+pub fn oauth_redirect_uri(port: u16) -> String {
+    format!("http://127.0.0.1:{}", port)
+}
+
 fn urlencode(s: &str) -> String {
     let mut result = String::new();
     for byte in s.bytes() {
@@ -118,7 +122,7 @@ pub async fn start_gmail_oauth(
     let code_verifier = generate_code_verifier();
     let code_challenge = generate_code_challenge(&code_verifier);
     let state_token = generate_state();
-    let redirect_uri = format!("http://127.0.0.1:{}", port);
+    let redirect_uri = oauth_redirect_uri(port);
 
     let auth_url = format!(
         "https://accounts.google.com/o/oauth2/v2/auth?\
@@ -157,7 +161,12 @@ pub async fn complete_gmail_oauth(
         guard.take().ok_or_else(|| "No OAuth listener started".to_string())?
     };
 
-    let (mut socket, addr) = listener
+    let listener_port = listener
+        .local_addr()
+        .map_err(|e| format!("Failed to get listener port: {}", e))?
+        .port();
+
+    let (mut socket, _addr) = listener
         .accept()
         .await
         .map_err(|e| format!("Failed to accept connection: {}", e))?;
@@ -176,11 +185,11 @@ pub async fn complete_gmail_oauth(
             format!("OAuth authorization denied or failed: {}", error)
         })?;
 
-    let redirect_uri = format!("http://127.0.0.1:{}", addr.port());
+    let redirect_uri = oauth_redirect_uri(listener_port);
 
-    let response = "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nConnection: close\r\n\r\n<!DOCTYPE html><html><body><p>Krishna Gmail authorized — you can close this tab.</p></body></html>";
+    let code_received_html = "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nConnection: close\r\n\r\n<!DOCTYPE html><html><body><p>Authorization code received — return to Krishna to finish connecting.</p></body></html>";
     socket
-        .write_all(response.as_bytes())
+        .write_all(code_received_html.as_bytes())
         .await
         .map_err(|e| format!("Failed to send response: {}", e))?;
     socket.flush().await.ok();
@@ -325,4 +334,16 @@ fn extract_query_param(request: &str, param: &str) -> Option<String> {
     }
 
     None
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_oauth_redirect_uri_uses_listener_port() {
+        let port: u16 = 54321;
+        let uri = oauth_redirect_uri(port);
+        assert_eq!(uri, "http://127.0.0.1:54321");
+    }
 }

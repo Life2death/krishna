@@ -22,6 +22,8 @@ export interface ToolContext {
   vars: Record<string, string>;
   /** Signal for cancellation */
   signal?: AbortSignal;
+  /** If true, skip internal confirmation prompts (used for resumed actions) */
+  preConfirmed?: boolean;
 }
 
 export interface ToolResult {
