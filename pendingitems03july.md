@@ -116,6 +116,15 @@ logged reason, not silence.
 
 Branch fresh off `main`, e.g. `fix/travel-error-visibility`. Commit prefix: `fix(travel-errvis-N)`.
 
+**Status (2026-07-04): commit `d52b4a7` reviewed — HALF DONE, do NOT merge yet.** The tool now
+captures the real error into `data.errorDetail` and propagates it to
+`ExecuteActionResult.errorDetail`, with tests — but **nothing consumes it** (`EV-1`, BLOCKER):
+`decideActionResponse`/`logOutcome` never read the field, and on the fallback path the tool
+returns `success:true`, so `command_log` still logs "answered" with no reason and no
+`speech_log` error entry is written. The diagnostic trail this item exists to create still
+doesn't reach the dashboard — same swallow-one-layer-up shape as Gmail G-2. Fix EV-1 (wire the
+sink + a handler/log-layer test), then it's done. Full detail: `TRAVEL_ERRVIS_REVIEW_FINDINGS.md`.
+
 ---
 
 ### 2. Model narrates actions it never executes (NEW — top priority)
@@ -138,6 +147,18 @@ cheaper and this is a weak-model instruction-following problem) — only add cod
 if the prompt fix doesn't hold up live.
 
 Branch fresh off `main`, e.g. `fix/no-narrated-actions`. Commit prefix: `fix(narrate-N)`.
+
+**Status (2026-07-04): commit `65fd417` reviewed — good fix for the symptom, ONE issue to fix
+before merge.** New `ONE ACTION PER TURN (CRITICAL)` prompt block is well-placed and clear, BUT
+its two blanket lines ("do exactly ONE thing per reply" + "ask which one first / do NOT chain
+them yourself") **contradict the existing multi-step `plan` feature** (lines 160–186: "play this
+song on YouTube" → `youtube_search → open_target`) **and the ACKNOWLEDGE-THEN-ACT rule** (line
+192: "this needs a couple of steps") — and this is a weak model, so an internal contradiction is
+risky (`NA-1`). Fix: scope the rule to NARRATION (never describe an action with no block that
+runs it in the same reply; a `plan` block IS the sanctioned multi-step path), keep the concrete
+bad examples, drop the "exactly one thing / don't chain" phrasing. Live retest must confirm both:
+double-narration gone AND "play <song> on YouTube" still emits a working plan.
+Full detail: `TRAVEL_ERRVIS_REVIEW_FINDINGS.md`.
 
 ---
 
