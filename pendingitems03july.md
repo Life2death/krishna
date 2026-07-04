@@ -223,6 +223,47 @@ reviewed. Don't start this until told to.
 
 ---
 
+### 9. Travel insights — best-departure suggestion + route watch (NEW — owner request 2026-07-04)
+
+**Plan:** `TRAVEL_INSIGHTS_PLAN.md` (read it in full). Two features: (A) "when should I leave
+for work?" — sample Google Routes at future `departureTime`s, speak the best window; (B) "tell
+me when the route home is under 40 minutes" — a one-shot route watch polled from the existing
+reminder-scheduler loop, spoken alert on trigger, truthful close-out on expiry.
+
+**Hard dependency: item 1 must land first** — both features multiply Routes API calls, and
+sampling/polling on top of the current empty `catch {}` blocks would multiply the blindness.
+Do item 1 → review → then P1 here.
+
+**Branch:** `feat/travel-insights` off `main`. **Commit prefix:** `feat(trvins-pN)` (P1–P4).
+Findings file: `TRAVEL_INSIGHTS_REVIEW_FINDINGS.md` (reviewer creates at first review).
+
+---
+
+### 10. Job autopilot — voice job pipeline + assisted apply (NEW — owner request 2026-07-04)
+
+**Plan:** `JOB_AUTOPILOT_PLAN.md` (read it in full — especially the "Reality check" and the
+three OWNER DECISIONS that gate J2/J4). Phased: J1 voice-open the pipeline URL (trivial,
+unblocked, can ship immediately), J2 queue read tool (blocked on job-hunter API decision),
+J3 application profile store (unblocked), J4 assisted apply via CDP-attached Chrome with a
+non-negotiable confirm-gated Submit (blocked on decisions #2/#3 + J2 + J3). Full unattended
+auto-apply is rejected permanently.
+
+**Owner (Vikram) — three answers needed before J2/J4 can start:**
+1. Does job-hunter (`https://job-hunter-x5l1.onrender.com`) expose a JSON queue API + auth, or
+   will you add one?
+2. Browser tech: OK with CDP into your real Chrome (recommended), or prefer the existing
+   computer-control/vision route?
+3. Which portals dominate the current queue (LinkedIn Easy Apply vs Naukri vs external ATS)?
+
+**Branch:** `feat/job-autopilot` off `main`. **Commit prefix:** `feat(jobap-jN)` (J1–J4).
+Findings file: `JOB_AUTOPILOT_REVIEW_FINDINGS.md` (reviewer creates at first review).
+
+**Suggested working order given owner interest (2026-07-04):** items 1 → 2 (small, top
+priority, already specced) → 9 (P1–P4) → 10 J1+J3 (unblocked parts) → 10 J2/J4 once the owner
+answers → then item 6 (network resilience) unless re-prioritized.
+
+---
+
 ## Parked (do not start without being asked)
 - M1.5 broad-question spoken brevity — was hardened, then reverted at owner's request
   (`fca491a`); currently unhardened again (broad questions can run 27–30s TTS). Not scheduled.
