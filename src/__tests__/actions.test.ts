@@ -230,6 +230,23 @@ describe("executeAction — travel_time", () => {
     expect(result.spokenResponse).toContain("Add a Maps API key");
   });
 
+  it("propagates errorDetail from tool data on API fallback", async () => {
+    mockTravelToolRun.mockResolvedValue({
+      success: true,
+      output: "I've opened the route on Maps — the live traffic lookup didn't go through this time, sir.",
+      data: { url: "https://google.com/maps/dir/", fallback: "true", errorDetail: "Google Routes API error (403): quota exceeded" },
+    });
+
+    const result = await executeAction({
+      action: "travel_time",
+      from: "home",
+      to: "work",
+    });
+
+    expect(result.errorDetail).toBe("Google Routes API error (403): quota exceeded");
+    expect(result.ok).toBe(true);
+  });
+
   it("returns kind:answer with ok:undefined on missing destination (clarification, not failure)", async () => {
     const result = await executeAction({
       action: "travel_time",

@@ -86,6 +86,7 @@ export interface ExecuteActionResult {
   learnedActionId?: string;
   input?: string;
   ok?: boolean;
+  errorDetail?: string;
 }
 
 export interface ActionResponsePlan {
@@ -194,6 +195,7 @@ export async function executeAction(
       kind: "answer",
       spokenResponse: result.output || "I couldn't find a route.",
       ok: result.success,
+      errorDetail: result.data?.errorDetail,
     };
   }
 
