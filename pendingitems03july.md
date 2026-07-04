@@ -168,6 +168,18 @@ because of that fix — see item 3).
 
 Commit prefix: `feat(local-p4a-N)`.
 
+**Status (2026-07-04): code landed as commit `8040301`, reviewed, NOT approved.** It was built
+out of priority order (before items 1–2) and committed directly on `fix/travel-t4` instead of a
+fresh `feat/local-p4-gmail` branch off `main` — both process deviations from this file's own
+instructions. Code review found 2 blockers (email header/CRLF injection via unsanitized
+to/subject/cc/bcc; real Gmail errors discarded at the actions.ts dispatch layer — the same
+swallow-the-error pattern item 1 above flags as top priority, reintroduced fresh) plus 4 more
+bugs (unverified-speaker confirm flow for `gmail_send` is a silent no-op dead end; the send
+confirmation prompt is garbled; "read a specific email from search results" can't work because no
+message ID ever reaches the model in either the conversation-history or plan-chaining path; zero
+new tests). Full detail + fixes: `GMAIL_REVIEW_FINDINGS.md` (new file, findings G-1 through G-10).
+**Do not live-test with a real Gmail account until G-1 through G-6 are fixed.**
+
 ---
 
 ### 6. Network resilience — turn queue + offline handling
