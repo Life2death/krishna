@@ -1,5 +1,10 @@
 # Pending items — 2026-07-03 (updated 2026-07-05) — cold-start handoff for the coding agent
 
+> **➡️ RESUME FROM `RESUME_HERE.md` — that is now the single source of truth** (clean, prioritized,
+> current). This file is retained for the detailed per-item history the coding agent may still want,
+> but the live status, priority queue, owner actions, and next instruction live in `RESUME_HERE.md`.
+
+
 > **Read this whole file before touching anything.** You are a fresh agent with no memory of
 > prior sessions. This file exists so you, the reviewer (Claude), and the owner (Vikram) stay
 > in sync without re-explaining context every time. Work items in the order listed. STOP after
