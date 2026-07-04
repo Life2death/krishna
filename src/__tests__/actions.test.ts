@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { parseActions, executeAction, resolveActionForConfirm, decideActionResponse, detectPhantomSave } from "@/lib/actions";
+import { parseActions, executeAction, resolveActionForConfirm, decideActionResponse, detectPhantomSave, extractJsonArray, buildRecruiterClassify } from "@/lib/actions";
+import type { Candidate, Classification } from "@krishna/core/tools/recruiter-radar";
 import { invoke } from "@tauri-apps/api/core";
 import type { ExecuteActionResult } from "@/lib/actions";
 
@@ -385,6 +386,80 @@ describe("executeAction — open", () => {
     expect(result.kind).toBe("status");
     expect(result.ok).toBe(false);
     expect(result.spokenResponse).toContain("couldn't find an app");
+  });
+});
+
+// ── extractJsonArray (recruiter-radar RR-3 robust JSON extraction) ──────
+
+describe("extractJsonArray", () => {
+  it("parses a bare JSON array", () => {
+    const result = extractJsonArray('[{"id":"m1","class":"recruiter_outreach"}]');
+    expect(Array.isArray(result)).toBe(true);
+    expect((result as any[])[0].id).toBe("m1");
+  });
+
+  it("strips ```json fence and preamble", () => {
+    const raw = "Here are the classifications:\n```json\n[{\"id\":\"m1\",\"class\":\"recruiter_outreach\"}]\n```";
+    const result = extractJsonArray(raw);
+    expect(Array.isArray(result)).toBe(true);
+    expect((result as any[])[0].class).toBe("recruiter_outreach");
+  });
+
+  it("strips bare ``` fence", () => {
+    const raw = "```\n[{\"id\":\"m1\",\"class\":\"job_alert_digest\"}]\n```";
+    const result = extractJsonArray(raw);
+    expect(Array.isArray(result)).toBe(true);
+    expect((result as any[])[0].class).toBe("job_alert_digest");
+  });
+
+  it("extracts array from text with trailing sentences", () => {
+    const raw = '```json\n[{"id":"m1","class":"other"}]\n```\nThat\'s all, sir.';
+    const result = extractJsonArray(raw);
+    expect(Array.isArray(result)).toBe(true);
+    expect((result as any[])[0].class).toBe("other");
+  });
+
+  it("throws on missing array brackets", () => {
+    expect(() => extractJsonArray("no brackets here")).toThrow("No JSON array found");
+  });
+
+  it("throws on genuinely malformed JSON", () => {
+    expect(() => extractJsonArray("[broken json")).toThrow();
+  });
+});
+
+describe("buildRecruiterClassify", () => {
+  it("parses fenced JSON and returns classifications (LLM path taken, not degraded)", async () => {
+    const llmFallback = vi.fn().mockResolvedValue(
+      'Here are the classifications:\n```json\n[{"id":"m1","class":"recruiter_outreach","recruiterName":"Priya","company":"ABC","via":"direct"},{"id":"m2","class":"job_alert_digest","via":"linkedin"}]\n```',
+    );
+    const classify = buildRecruiterClassify(llmFallback);
+
+    const candidates: Candidate[] = [
+      { id: "m1", from: "priya@abc.com", subject: "Role", snippet: "..." },
+      { id: "m2", from: "jobs@linkedin.com", subject: "Digest", snippet: "..." },
+    ];
+    const result = await classify(candidates);
+
+    expect(result).toHaveLength(2);
+    expect(result[0].class).toBe("recruiter_outreach");
+    expect(result[0].recruiterName).toBe("Priya");
+    expect(result[1].class).toBe("job_alert_digest");
+    // LLM path was taken — no error thrown, so downstream checkRecruiters
+    // will see valid classifications and NOT fall back to heuristic
+    expect(llmFallback).toHaveBeenCalledTimes(1);
+  });
+
+  it("throws on empty LLM response (falls through to heuristic safety net)", async () => {
+    const llmFallback = vi.fn().mockResolvedValue(null);
+    const classify = buildRecruiterClassify(llmFallback);
+    await expect(classify([])).rejects.toThrow("LLM classify returned empty");
+  });
+
+  it("throws on missing array brackets (falls through to heuristic safety net)", async () => {
+    const llmFallback = vi.fn().mockResolvedValue("no brackets here");
+    const classify = buildRecruiterClassify(llmFallback);
+    await expect(classify([])).rejects.toThrow("No JSON array found");
   });
 });
 

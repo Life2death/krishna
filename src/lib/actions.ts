@@ -175,7 +175,20 @@ export function detectPhantomSave(
 
 type LlmFallbackFn = (input: string) => Promise<string | null>;
 
-function buildRecruiterClassify(
+export function extractJsonArray(raw: string): unknown {
+  const cleaned = raw
+    .replace(/```(?:json)?\s*/gi, "")
+    .replace(/```/g, "")
+    .trim();
+  const start = cleaned.indexOf("[");
+  const end = cleaned.lastIndexOf("]");
+  if (start === -1 || end === -1 || end <= start) {
+    throw new Error("No JSON array found in LLM response");
+  }
+  return JSON.parse(cleaned.slice(start, end + 1));
+}
+
+export function buildRecruiterClassify(
   llmFallback: LlmFallbackFn,
 ): (candidates: Candidate[]) => Promise<Classification[]> {
   return async (candidates: Candidate[]): Promise<Classification[]> => {
@@ -194,7 +207,7 @@ ${JSON.stringify(candidates.map((c) => ({ id: c.id, from: c.from, subject: c.sub
     const raw = await llmFallback(prompt);
     if (!raw) throw new Error("LLM classify returned empty");
 
-    const parsed: unknown = JSON.parse(raw);
+    const parsed = extractJsonArray(raw);
     if (!Array.isArray(parsed)) throw new Error("LLM classify did not return an array");
 
     return parsed as Classification[];
