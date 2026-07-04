@@ -23,6 +23,57 @@ conflicts, linear history (branch = `main` + R1 only).
 
 ---
 
+## R1 NITs — ALL FIXED + verified (`3f65991`)
+
+Reviewer-verified in the diff: **N1** dead import removed. **N2** `isValidClassifications` now
+enforces a true bijection (returned-id set == candidate-id set; a duplicate+omitted id is
+rejected → falls to heuristic) + test. **N3** `checkRecruiters(candidates, classify, capHit?)`
+takes an explicit `capHit`, `?? ` falls back to the count inference (precedence correct:
+`capHit ?? (len >= MAX)`) + test. **N4** `buildBrief` fallback strips angle-bracket emails and
+otherwise uses the local-part before `@` — no raw address spoken + tests. **N5** `formatSince`
+now reads the timestamp's clock hour for "this morning"/"this afternoon"/"earlier today". All
+green. Residual (cosmetic, not tracked): a 6–23h-ago timestamp whose clock hour is evening can
+be labelled "earlier today" even when it was actually yesterday evening — inherent fuzziness of
+"since" phrasing, ignore unless it grates live.
+
+## R2 review (`033e7cc`) — state primitives CORRECT, but the windowing SEMANTICS are missing (fix before R3)
+
+**Good:** migration `recruiter-radar-v1.sql` (version 19, Tauri + Brain inline) is **LF-normalized
+(0 CRLF — T4-F5 gotcha avoided)**; creates `recruiter_seen(message_id PK, first_seen_at)` +
+`recruiter_radar_state(key PK, value)`. State module `recruiter-radar-state.ts` is correct via
+the `setDriver`/`getDatabase` DI seam: `getLastCheckAt` (cold start 0), `setLastCheckAt`
+(INSERT OR REPLACE), `getSeenIds` → Set, `markSeen` (INSERT OR IGNORE, idempotent). 6 solid
+state tests incl. the load-bearing "second ask same day returns nothing new".
+
+**RR-1 · BLOCKER-for-R3 · the bare-vs-explicit windowing logic isn't shippable code.** The R2
+plan row calls for *"stateful bare-ask vs stateless explicit-window semantics."* But:
+- `checkRecruiters` does **not** apply the seen-filter. The "filter outreach to unseen ids"
+  step exists **only inside the load-bearing test** (`result2.outreach.filter(o => !seen.has(o.id))`),
+  not in any function the app can call.
+- The **explicit-window path** (plan lines 82–84: don't filter for reporting, but still upsert
+  seen, cap 14) has **no code and no test at all**.
+- Nothing composes `getSeenIds → checkRecruiters → filter → markSeen → setLastCheckAt`.
+
+**Fix (in R2, before starting R3):** add a pure, DI'd orchestrator, e.g.
+```ts
+export async function runRecruiterRadar(
+  candidates: Candidate[],
+  classify: (c: Candidate[]) => Promise<Classification[]>,
+  opts?: { windowDays?: number; capHit?: boolean },
+): Promise<{ result: RecruiterRadarResult; newOutreach: Classification[]; since: number }>
+```
+that: reads `getSeenIds()` + `getLastCheckAt()`; runs `checkRecruiters`; **bare ask** (no
+`windowDays`) → `newOutreach = outreach.filter(unseen)`; **explicit window** → `newOutreach =
+outreach` (report the whole window); in BOTH cases `markSeen(all candidate ids)` +
+`setLastCheckAt(now)`; returns `since` for the formatter. Tests: bare-ask "second ask returns
+nothing new" (move the inline filter into the function), **explicit-window returns already-seen
+matches but still upserts** (currently untested), cold-start window = 7 days. Then R3 is purely
+action-parse + prompt + fetch + `logOutcome`/`errorDetail` wiring around this function.
+(Alternative, only if the owner prefers: consciously move this orchestration into R3 and amend
+the plan's R2/R3 split — but do not leave the semantic as test-only code.)
+
+<details><summary>R1 original review (pre-NIT-fix, kept for history)</summary>
+
 ## R1 review (`c393ee2`) — APPROVED. Well-structured; no blockers. NITs only.
 
 `packages/core/tools/recruiter-radar.ts` (+193) + `src/__tests__/recruiter-radar.test.ts`
@@ -55,9 +106,11 @@ across 27 files; identical file tree post-relocation, so unchanged).
   "this morning" regardless of clock time (10h ago at 2am isn't "this morning"). Cosmetic;
   leave unless it grates live.
 
+</details>
+
 ---
 
-## R2 — where to work (scope from plan §"State", lines 72–84)
+## R2 — where to work (scope from plan §"State", lines 72–84) — SUPERSEDED by the R2 review above; see RR-1
 
 **File(s):** new DB migration + a small state-access module; extend `checkRecruiters`'s
 **caller** (not the pure core) to apply the seen-filter. Keep `checkRecruiters` pure — the

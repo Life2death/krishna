@@ -130,27 +130,30 @@ the no-push rule — it already happened once with `fix/gmail-latest-email`; do 
     ensure the tree is clean, then `git checkout fix/gmail-recruiter-radar` and work there.
     Do NOT keep using `fix/gmail-latest-email` (redundant now — delete it after switching) and
     do NOT branch a new one.
-  - **R1 STATUS: done + reviewer-APPROVED (`c393ee2`), but 5 NITs MUST be fixed BEFORE R2**
-    (one cleanup commit `fix(recradar-r1-nits)` on the same branch, tsc+vitest green, then STOP
-    and report). The NITs (full detail in the findings file):
-    1. Remove the dead `import type { ToolContext }` (recruiter-radar.ts line 1).
-    2. `isValidClassifications`: reject a non-bijection — require the set of returned ids to
-       equal the set of candidate ids (today a repeated id + omitted id passes and silently
-       drops a candidate).
-    3. `capHit`: stop inferring it from `count >= MAX_CANDIDATES`; the fetch layer must pass
-       `capHit` explicitly (wire this when R2's fetch lands — acceptable to defer the actual
-       wiring to R2, but change the signature/contract now so R2 can supply it).
-    4. Fallback brief must not speak the raw `from` email address (`buildBrief`, line 161) —
-       use a display-name/trimmed sender (same "no raw data in speech" rule as item 14).
-    5. `formatSince` "this morning" is time-of-day-blind — cosmetic, fix only if quick.
+  - **R1 STATUS: done + APPROVED (`c393ee2`); all 5 NITs FIXED + verified (`3f65991`).**
+  - **R2 STATUS: state primitives DONE + correct (`033e7cc`) — migration LF-normalized (v19,
+    Tauri+Brain), `recruiter-radar-state.ts` via setDriver/getDatabase DI, 6 state tests incl.
+    "second ask same day". BUT NOT DONE / not merge-ready — one finding to fix first:**
+    - **RR-1:** the bare-vs-explicit **windowing semantics** (the core of the R2 row) are NOT
+      shippable code — the seen-filter lives only inside the load-bearing test, and the
+      explicit-window path has no code or test. Add a pure DI'd orchestrator
+      (`runRecruiterRadar(candidates, classify, {windowDays?, capHit?})`) that composes
+      getSeenIds → checkRecruiters → (bare: filter unseen / explicit: don't) → markSeen(all) →
+      setLastCheckAt, returning `since` for the formatter; test BOTH paths + cold-start 7-day.
+      Commit `fix(recradar-r2-windowing)` (or fold into R2), STOP, report. Full spec: findings
+      file, RR-1. Only after RR-1 does R3 (action/prompt/fetch/logOutcome wiring) start.
 
-**→ NEXT for the agent: Item 14 (travel route-name garble) FIRST — tiny (~1 line), live daily-use
-bug the owner hit at 18:03 today.** (Branch `fix/travel-route-name` off `main`, prefix
-`fix(trvspeak-N)`.) Then **Item 13 recruiter radar**, in this exact order on the ALREADY-EXISTING
-branch `fix/gmail-recruiter-radar` (relocation done by reviewer — do NOT re-branch):
-  1. Switch `krishna-m15` to `fix/gmail-recruiter-radar` (see Item 13 branch note).
-  2. **Fix the 5 R1 NITs** → commit `fix(recradar-r1-nits)` → tsc+vitest green → STOP + report.
-  3. Only after that: R2 (state + windowing), then R3 (action/prompt wiring).
+**→ DONE this round:** Item 14 (`1654a0c`, **merged to main**). Item 13 R1 NITs (`3f65991`) +
+R2 state primitives (`033e7cc`) — reviewed, on `fix/gmail-recruiter-radar`, NOT yet merged.
+Reviewer also hotfixed a tsc break on main from the item-12 merge (`9da1803`).
+
+**→ NEXT for the agent, on `fix/gmail-recruiter-radar` (do NOT re-branch):**
+  1. **Fix RR-1** — add the `runRecruiterRadar` windowing orchestrator (bare-vs-explicit) +
+     both-path tests. Commit `fix(recradar-r2-windowing)`, tsc+vitest green, **STOP + report.**
+  2. Then **R3** — action parse/execute wiring, prompt examples, fetch, `logOutcome`/`errorDetail`.
+**Process reminder:** ONE phase per commit, then STOP and wait — this round chained item-14 +
+R1-NITs + R2 into one report; land each phase and pause for review so gaps like RR-1 are caught
+before the next phase builds on them.
 Then **Item 10-J1 + J3** — pipeline URL alias (J1) + application profile store (J3),
 both in the Krishna repo, both unblocked. Branch `feat/job-autopilot` off `main`. See `JOB_AUTOPILOT_PLAN.md`.
 
@@ -392,7 +395,13 @@ ACKNOWLEDGE-THEN-ACT prompt region — coordinate so they don't collide).
 
 ---
 
-### 14. Travel tool speaks the raw slash-joined road chain — TTS garbles it (NEW — live, owner-reported 2026-07-04 18:03) — PRIORITY: do first, ahead of item 13
+### 14. Travel tool speaks the raw slash-joined road chain — TTS garbles it — ✅ DONE (`1654a0c`, merged to `main`)
+
+**Fixed:** `get-travel-time.ts:274` now speaks `best.description.split("/")[0].trim()` (first road
+segment only) and drops the "faster" clause when that's empty; +2 tests. Reviewer-approved, merged.
+Original report below.
+
+
 
 **Live repro (owner, 18:03):** asked "how much time to work?" → Krishna said *"By car it's about
 48 minutes with current traffic — about 11 slower than usual. Bengaluru - Mumbai Hwy/Mumbai
