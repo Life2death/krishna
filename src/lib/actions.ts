@@ -4,8 +4,11 @@ import { resolveAppAlias, isUrl, isFilePath } from "@/config/app-aliases";
 import { resolveTarget, saveAndConfirm, needsConfirmation } from "@/lib/resolver";
 import type { ResolveResult } from "@/lib/resolver";
 import { getTravelTimeTool } from "@krishna/core/tools/get-travel-time";
-import { gmailSearchMessagesTool, gmailReadMessageTool, gmailListLabelsTool, gmailSendEmailTool } from "@krishna/core/tools/gmail";
+import { gmailSearchMessagesTool, gmailReadMessageTool, gmailListLabelsTool, gmailSendEmailTool, gmailFetchRecruiterCandidates } from "@krishna/core/tools/gmail";
 import { getResponseSettings } from "@krishna/core/settings";
+import { runRecruiterRadar, formatRecruiterOutput, COLD_START_DAYS } from "@krishna/core/tools/recruiter-radar";
+import type { Candidate, Classification } from "@krishna/core/tools/recruiter-radar";
+import { getLastCheckAt } from "@krishna/core/tools/recruiter-radar-state";
 
 const ACTION_REGEX = /```action\n([\s\S]*?)```/g;
 const JSON_BLOCK_REGEX = /```json\n([\s\S]*?)```/g;
@@ -67,6 +70,9 @@ export function parseActions(reply: string): ParsedReply {
         }
         if (parsed && parsed.action === "gmail_send") {
           actions.push({ action: "gmail_send", to: parsed.to ?? "", subject: parsed.subject ?? "", body: parsed.body ?? "", cc: parsed.cc, bcc: parsed.bcc });
+        }
+        if (parsed && parsed.action === "gmail_recruiters") {
+          actions.push({ action: "gmail_recruiters", window_days: parsed.window_days });
         }
       } catch {
         // Not valid JSON, ignore
@@ -169,6 +175,32 @@ export function detectPhantomSave(
 
 type LlmFallbackFn = (input: string) => Promise<string | null>;
 
+function buildRecruiterClassify(
+  llmFallback: LlmFallbackFn,
+): (candidates: Candidate[]) => Promise<Classification[]> {
+  return async (candidates: Candidate[]): Promise<Classification[]> => {
+    const prompt = `Classify each email below as "recruiter_outreach", "job_alert_digest", or "other".
+
+- recruiter_outreach: human recruiter/TA/consultancy outreach, LinkedIn InMail/messaging notifications, Naukri recruiter-contact notifications. Extract when present: recruiterName, company, roleTitle, via ("direct"|"linkedin"|"naukri"|"other").
+- job_alert_digest: LinkedIn/Naukri/Indeed "N new jobs" digests, newsletters, marketing.
+- other: everything else.
+
+Respond with ONLY a valid JSON array, no other text. Example:
+[{"id":"msg1","class":"recruiter_outreach","recruiterName":"Priya","company":"ABC","roleTitle":"Engineer","via":"linkedin"}]
+
+Emails:
+${JSON.stringify(candidates.map((c) => ({ id: c.id, from: c.from, subject: c.subject, snippet: c.snippet })))}`;
+
+    const raw = await llmFallback(prompt);
+    if (!raw) throw new Error("LLM classify returned empty");
+
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) throw new Error("LLM classify did not return an array");
+
+    return parsed as Classification[];
+  };
+}
+
 export async function executeAction(
   action: Action,
   llmFallback?: LlmFallbackFn,
@@ -231,6 +263,62 @@ export async function executeAction(
       spokenResponse: result.success ? (result.output || "I couldn't list labels.") : (result.error || "I couldn't list labels."),
       ok: result.success,
     };
+  }
+
+  if (action.action === "gmail_recruiters") {
+    try {
+      const now = Date.now();
+      const since = action.window_days
+        ? now - action.window_days * 86400000
+        : (await getLastCheckAt()) || now - COLD_START_DAYS * 86400000;
+
+      const { candidates, capHit, inboxFallback } = await gmailFetchRecruiterCandidates(since);
+
+      if (candidates.length === 0) {
+        const prefix = inboxFallback ? "I checked your inbox, sir — " : "";
+        return {
+          kind: "answer",
+          spokenResponse: `${prefix}No recruiter emails since the last check, sir.`,
+          ok: true,
+        };
+      }
+
+      const classify = llmFallback
+        ? buildRecruiterClassify(llmFallback)
+        : () => Promise.reject<Classification[]>(new Error("No LLM fallback"));
+
+      const { result, newOutreach, since: actualSince } = await runRecruiterRadar(
+        candidates,
+        classify,
+        { windowDays: action.window_days, capHit },
+      );
+
+      const prefix = inboxFallback ? "I checked your inbox, sir — " : "";
+      let spokenResponse = prefix + formatRecruiterOutput(newOutreach, candidates, {
+        since: actualSince,
+        capHit: result.capHit,
+        degraded: result.degraded,
+      });
+
+      if (newOutreach.length > 0) {
+        spokenResponse += ` To read the newest one, use gmail_read with id "${newOutreach[0].id}".`;
+      }
+
+      return {
+        kind: "answer",
+        spokenResponse,
+        ok: true,
+        errorDetail: result.error,
+      };
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return {
+        kind: "answer",
+        ok: false,
+        spokenResponse: "I couldn't check recruiter mail, sir.",
+        errorDetail: msg,
+      };
+    }
   }
 
   if (action.action === "gmail_send") {

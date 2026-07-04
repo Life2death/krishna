@@ -3,6 +3,8 @@ import { getSecret } from "../secrets";
 import { getHttpFetch } from "../http";
 import { getResponseSettings } from "../settings";
 import { getVerbatimConfirm } from "./mcp-bridge";
+import type { Candidate } from "./recruiter-radar";
+import { MAX_CANDIDATES } from "./recruiter-radar";
 
 const GMAIL_API_BASE = "https://gmail.googleapis.com/gmail/v1/users/me";
 
@@ -31,7 +33,7 @@ async function getTokens(): Promise<GmailTokens | null> {
   }
 }
 
-async function gmailFetch(
+export async function gmailFetch(
   path: string,
   options: RequestInit = {},
   retried = false,
@@ -254,6 +256,53 @@ function base64UrlEncode(str: string): string {
     binary += String.fromCharCode(bytes[i]);
   }
   return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+export async function gmailFetchRecruiterCandidates(
+  since: number,
+): Promise<{ candidates: Candidate[]; capHit: boolean; inboxFallback: boolean }> {
+  const sinceSec = Math.floor(since / 1000);
+  let inboxFallback = false;
+
+  async function tryFetch(query: string): Promise<{ candidates: Candidate[]; capHit: boolean }> {
+    const qs = `q=${encodeURIComponent(query)}&maxResults=${MAX_CANDIDATES}`;
+    const resp = await gmailFetch(`/messages?${qs}`);
+    const data = await resp.json();
+    const messages: { id: string }[] = data.messages ?? [];
+
+    if (messages.length === 0) {
+      return { candidates: [], capHit: false };
+    }
+
+    const results: Candidate[] = [];
+    for (const msg of messages) {
+      const detail = await gmailFetch(
+        `/messages/${msg.id}?format=metadata&metadataHeaders=From&metadataHeaders=Subject&metadataHeaders=Date`,
+      );
+      const detailData = await detail.json();
+      const headers = detailData.payload?.headers ?? [];
+      results.push({
+        id: msg.id,
+        from: extractHeader(headers, "From"),
+        subject: extractHeader(headers, "Subject"),
+        snippet: detailData.snippet ?? "",
+      });
+    }
+
+    return { candidates: results, capHit: messages.length >= MAX_CANDIDATES };
+  }
+
+  try {
+    const result = await tryFetch(`category:primary after:${sinceSec}`);
+    if (result.candidates.length > 0) {
+      return { ...result, inboxFallback: false };
+    }
+  } catch {
+    // Fall through to inbox fallback
+  }
+
+  const result = await tryFetch(`in:inbox after:${sinceSec}`);
+  return { ...result, inboxFallback: true };
 }
 
 export const gmailSearchMessagesTool: Tool = {
