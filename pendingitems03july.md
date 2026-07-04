@@ -80,20 +80,26 @@ the main checkout. You never merge or push.
 
 ## CURRENT WORKING ORDER (updated 2026-07-04 — agent: work top to bottom, one phase at a time)
 
-1. **Item 1** — travel error visibility (small, gates item 9) — **review EV-1 FIXED** (`4b9c997`)
-2. **Item 2** — no narrated-but-unexecuted actions (small prompt fix) — **review NA-1 FIXED** (`3b85777`)
-3. **Item 10-H1** — job-hunter bearer token (`JOB_HUNTER_API_PLAN.md`, in the
-   `D:\Learning\job-hunter` repo — then STOP: owner sets Render env vars + deploys)
-   **REVIEWED (`072a2ff`): functionally correct, NOT exploitable, but 2 small hardening
-   fixes recommended before deploy** — H1-1 (explicit endpoint allowlist instead of the broad
-   `/api/` prefix + regression test; `/api/settings` is only incidentally protected today) and
-   H1-2 (byte-compare so a non-ASCII token gives 401 not 500). See `JOB_AUTOPILOT_REVIEW_FINDINGS.md`.
-4. **Item 10-J1 + J3** — pipeline URL alias; application profile store (Krishna repo)
-5. **Item 9 P1–P4** — travel insights (best departure time + route watch)
-6. **Item 10-J2** — queue read tool (needs H1 deployed)
-7. **Item 10-J4** — assisted apply, LinkedIn Easy Apply first; then J4b Naukri
-8. **Item 11 V1–V4** — natural speech (V2 must come after item 2 — same prompt region)
-9. **Item 6** — network resilience; then item 7 (fix Gmail G-11 first), then item 8.
+- ✅ **Item 1** — travel error visibility — EV-1 FIXED (`4b9c997`), reviewed+verified, **merged to main**.
+- ✅ **Item 2** — no narrated-but-unexecuted actions — NA-1 FIXED (`3b85777`), reviewed+verified, **merged to main**.
+- ✅ **Item 10-H1** — job-hunter bearer token — H1-1/H1-2/H1-3 FIXED (`96ac399` on `feat/krishna-api-token`
+  in `D:\Learning\job-hunter`), reviewed+verified (pytest 14/14). **Code done — awaiting OWNER DEPLOY**
+  (see owner action below); not merged by the reviewer since it's a separate repo the owner pushes.
+
+**→ NEXT for the agent: Item 10-J1 + J3** — pipeline URL alias (J1) + application profile store (J3),
+both in the Krishna repo, both unblocked. Branch `feat/job-autopilot` off `main`. See `JOB_AUTOPILOT_PLAN.md`.
+
+**→ OWNER action (parallel, unblocks item 10-J2):** merge `feat/krishna-api-token` into job-hunter's
+`main`, generate a token (`python -c "import secrets; print(secrets.token_urlsafe(48))"`), set
+`KRISHNA_API_TOKEN` + `KRISHNA_API_USER_EMAIL=vikram.panmand@gmail.com` in the Render dashboard, push
+(Render auto-deploys). Until this is live, the agent must NOT start J2.
+
+Remaining order after J1+J3:
+1. **Item 9 P1–P4** — travel insights (now unblocked; item 1 landed).
+2. **Item 10-J2** — queue read tool (needs H1 DEPLOYED by owner).
+3. **Item 10-J4** — assisted apply, LinkedIn Easy Apply first; then J4b Naukri.
+4. **Item 11 V1–V4** — natural speech (V2 after item 2 — already merged, so V2 is clear to go).
+5. **Item 6** — network resilience; then item 7 (fix Gmail G-11 first), then item 8.
 
 Owner can reshuffle at any time; if he does, the reviewer updates this block.
 
