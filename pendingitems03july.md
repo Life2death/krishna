@@ -165,9 +165,16 @@ the no-push rule — it already happened once with `fix/gmail-latest-email`; do 
 flaky-test fix, merged `0f2f342`. Main green (tsc clean, affected suites 100/100). Recruiter
 radar item 13 is code-complete; only RR-2 remains (waits for G-13 live data).
 
-**→ NEXT — Item 10-J1 + J3** (unblocked, Krishna repo). Branch `feat/job-autopilot` off `main`.
-See `JOB_AUTOPILOT_PLAN.md`. J1 = voice-open the pipeline URL; J3 = application profile store.
-(J2 still needs the owner to DEPLOY H1 on job-hunter/Render.)
+**→ DONE + MERGED (2026-07-05):** Item 10 **J1** (`3500695`, Job Pipeline URL alias +
+open-action + prompt) and **J3** (`e910938`, ApplicationProfile store — 12 fields, Settings UI,
+persisted via keyed memory row that `createMemory` upserts on key → SQLCipher DB, `getMemoryByKey`
+added to repo layer). Merged; tsc clean, application-profile + actions 72/72 green. (Agent chained
+J1+J3 into one report again — reinforce ONE-phase-then-STOP.)
+
+**→ NEXT — Item 10-J2 is still BLOCKED** on the owner deploying H1 (`KRISHNA_API_TOKEN` +
+`KRISHNA_API_USER_EMAIL` on job-hunter/Render). Until then, the agent's next codeable items are
+**item 9 (travel insights P1)** or **item 11 (natural speech V1)** — both unblocked, off `main`.
+J4 (assisted apply) is later. RR-2 waits for G-13 live.
 **Process reminder:** ONE phase per commit, then STOP and wait.
 Then **Item 10-J1 + J3** — pipeline URL alias (J1) + application profile store (J3),
 both in the Krishna repo, both unblocked. Branch `feat/job-autopilot` off `main`. See `JOB_AUTOPILOT_PLAN.md`.
