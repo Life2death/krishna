@@ -273,7 +273,10 @@ export function formatTravelOutput(
     if (alternatives.length > 0) {
       const best = alternatives[0];
       const altMin = Math.round(best.duration / 60);
-      text += `. ${best.description} is faster today at ${altMin}`;
+      const routeName = (best.description ?? "").split("/")[0].trim();
+      if (routeName) {
+        text += `. ${routeName} is faster today at ${altMin}`;
+      }
     }
   }
 

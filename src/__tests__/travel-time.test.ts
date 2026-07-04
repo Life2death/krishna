@@ -99,6 +99,25 @@ describe("formatTravelOutput", () => {
     expect(result).toContain("via Eastern Expressway is faster today at 35");
   });
 
+  it("speaks only first road segment when description is slash-joined", () => {
+    const routes: RouteInfo[] = [
+      { duration: 2400, staticDuration: 2300, distanceMeters: 40000, description: "via Western Express Highway" },
+      { duration: 1800, staticDuration: 1700, distanceMeters: 30000, description: "Bengaluru - Mumbai Hwy/Mumbai Hwy/Mumbai - Pandharpur Rd/Mumbai - Pune Hwy" },
+    ];
+    const result = formatTravelOutput(routes, "car");
+    expect(result).toContain("Bengaluru - Mumbai Hwy is faster today at 30");
+    expect(result).not.toContain("/");
+  });
+
+  it("drops faster alternative clause when first segment is empty", () => {
+    const routes: RouteInfo[] = [
+      { duration: 2400, staticDuration: 2300, distanceMeters: 40000, description: "via Western Express Highway" },
+      { duration: 1800, staticDuration: 1700, distanceMeters: 30000, description: "/Mumbai Hwy/Pune Hwy" },
+    ];
+    const result = formatTravelOutput(routes, "car");
+    expect(result).not.toContain("is faster today");
+  });
+
   it("uses honorific when provided", () => {
     const routes: RouteInfo[] = [
       { duration: 1200, staticDuration: 1200, distanceMeters: 20000 },
