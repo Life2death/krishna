@@ -84,6 +84,10 @@ the main checkout. You never merge or push.
 2. **Item 2** — no narrated-but-unexecuted actions (small prompt fix)
 3. **Item 10-H1** — job-hunter bearer token (`JOB_HUNTER_API_PLAN.md`, in the
    `D:\Learning\job-hunter` repo — then STOP: owner sets Render env vars + deploys)
+   **REVIEWED (`072a2ff`): functionally correct, NOT exploitable, but 2 small hardening
+   fixes recommended before deploy** — H1-1 (explicit endpoint allowlist instead of the broad
+   `/api/` prefix + regression test; `/api/settings` is only incidentally protected today) and
+   H1-2 (byte-compare so a non-ASCII token gives 401 not 500). See `JOB_AUTOPILOT_REVIEW_FINDINGS.md`.
 4. **Item 10-J1 + J3** — pipeline URL alias; application profile store (Krishna repo)
 5. **Item 9 P1–P4** — travel insights (best departure time + route watch)
 6. **Item 10-J2** — queue read tool (needs H1 deployed)
