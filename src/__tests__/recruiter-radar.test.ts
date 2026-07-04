@@ -98,6 +98,31 @@ describe("checkRecruiters", () => {
     expect(result.capHit).toBe(true);
     expect(result.totalFetched).toBe(MAX_CANDIDATES);
   });
+
+  it("accepts explicit capHit from fetch layer", async () => {
+    const candidates: Candidate[] = [
+      makeCandidate({ id: "m1" }),
+    ];
+    const classify = vi.fn<(...args: unknown[]) => unknown>().mockResolvedValue([
+      makeClassify({ id: "m1", class: "other" }),
+    ]);
+    const result = await checkRecruiters(candidates, classify as any, true);
+    expect(result.capHit).toBe(true);
+  });
+
+  it("rejects non-bijection (duplicate id, omitted id)", async () => {
+    const candidates: Candidate[] = [
+      makeCandidate({ id: "m1" }),
+      makeCandidate({ id: "m2" }),
+    ];
+    const classify = vi.fn<(...args: unknown[]) => unknown>().mockResolvedValue([
+      makeClassify({ id: "m1", class: "recruiter_outreach" }),
+      makeClassify({ id: "m1", class: "recruiter_outreach" }),
+    ]);
+    const result = await checkRecruiters(candidates, classify as any);
+    expect(result.degraded).toBe(true);
+    expect(result.error).toContain("validation failed");
+  });
 });
 
 describe("formatRecruiterOutput — zero outreach", () => {
@@ -173,8 +198,21 @@ describe("formatRecruiterOutput — with outreach", () => {
       capHit: false,
       degraded: false,
     });
-    expect(output).toContain("priya@abc.com");
+    expect(output).toContain("priya");
+    expect(output).not.toContain("@");
     expect(output).toContain("Delivery Head");
+  });
+
+  it("strips angle-bracket email in fallback brief", () => {
+    const candWithBrackets: Candidate[] = [makeCandidate({ id: "x1", from: "Priya Singh <priya@abc.com>", subject: "Role" })];
+    const bareOutreach: Classification[] = [makeClassify({ id: "x1", recruiterName: undefined, company: undefined, roleTitle: undefined, via: "direct" })];
+    const output = formatRecruiterOutput(bareOutreach, candWithBrackets, {
+      since: Date.now() - 86400000,
+      capHit: false,
+      degraded: false,
+    });
+    expect(output).toContain("Priya Singh");
+    expect(output).not.toContain("priya@abc.com");
   });
 });
 
@@ -195,9 +233,16 @@ describe("formatSince", () => {
     expect(formatSince(Date.now() - 3600000 * 3)).toBe("3 hours ago");
   });
 
-  it('returns "this morning" for 6-23 hours ago', () => {
-    const tenHoursAgo = Date.now() - 3600000 * 10;
-    expect(formatSince(tenHoursAgo)).toBe("this morning");
+  it('returns "this morning" when timestamp falls in morning hours', () => {
+    const d = new Date();
+    d.setHours(8, 0, 0, 0);
+    expect(formatSince(d.getTime())).toBe("this morning");
+  });
+
+  it('returns "earlier today" for pre-dawn timestamp', () => {
+    const d = new Date();
+    d.setHours(2, 0, 0, 0);
+    expect(formatSince(d.getTime())).toBe("earlier today");
   });
 
   it('returns "yesterday" for 1 day', () => {

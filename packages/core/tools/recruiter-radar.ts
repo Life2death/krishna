@@ -1,5 +1,3 @@
-import type { ToolContext } from "./index";
-
 export interface Candidate {
   id: string;
   from: string;
@@ -70,19 +68,25 @@ function isValidClassifications(
   if (!Array.isArray(classifications)) return false;
   if (classifications.length !== candidates.length) return false;
   const validClasses = new Set<CandidateClass>(["recruiter_outreach", "job_alert_digest", "other"]);
-  return classifications.every(
+  if (!classifications.every(
     (c: unknown) =>
       c &&
       typeof c === "object" &&
       typeof (c as Classification).id === "string" &&
       validClasses.has((c as Classification).class) &&
       candidates.some((cand) => cand.id === (c as Classification).id),
-  );
+  )) return false;
+  const returnedIds = new Set(classifications.map((c: Classification) => c.id));
+  const candidateIds = new Set(candidates.map((c) => c.id));
+  if (returnedIds.size !== candidateIds.size) return false;
+  for (const id of returnedIds) if (!candidateIds.has(id)) return false;
+  return true;
 }
 
 export async function checkRecruiters(
   candidates: Candidate[],
   classify: (candidates: Candidate[]) => Promise<Classification[]>,
+  capHit?: boolean,
 ): Promise<RecruiterRadarResult> {
   if (candidates.length === 0) {
     return { outreach: [], totalFetched: 0, capHit: false, degraded: false };
@@ -108,7 +112,7 @@ export async function checkRecruiters(
   return {
     outreach,
     totalFetched: candidates.length,
-    capHit: candidates.length >= MAX_CANDIDATES,
+    capHit: capHit ?? candidates.length >= MAX_CANDIDATES,
     degraded,
     error: classifyError,
   };
@@ -158,7 +162,16 @@ function buildBrief(item: Classification, candidate?: Candidate): string {
 
   if (parts.length > 0) return parts.join(" ") + ".";
 
-  const fallback = candidate ? `${candidate.from} — "${candidate.subject}"` : `Message ${item.id}`;
+  const displayName = candidate
+    ? (() => {
+        const hasBrackets = /<[^>]+>/.test(candidate.from);
+        const extracted = hasBrackets
+          ? candidate.from.replace(/<[^>]+>/g, "").trim()
+          : "";
+        return extracted || candidate.from.split("@")[0].trim();
+      })()
+    : "";
+  const fallback = displayName ? `${displayName} — "${candidate!.subject}"` : `Message ${item.id}`;
   return fallback;
 }
 
@@ -182,7 +195,12 @@ export function formatSince(timestamp: number): string {
   }
 
   const diffDays = Math.floor(diffHours / 24);
-  if (diffDays < 1) return "this morning";
+  if (diffDays < 1) {
+    const hour = new Date(timestamp).getHours();
+    if (hour >= 5 && hour < 12) return "this morning";
+    if (hour >= 12 && hour < 17) return "this afternoon";
+    return "earlier today";
+  }
   if (diffDays === 1) return "yesterday";
   if (diffDays < 7) return `${diffDays} days ago`;
   if (diffDays < 14) return "last week";
