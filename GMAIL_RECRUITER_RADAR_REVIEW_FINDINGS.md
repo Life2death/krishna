@@ -6,9 +6,9 @@ Track: item 13. Plan: `GMAIL_RECRUITER_RADAR_PLAN.md`. Branch: `fix/gmail-recrui
 **STATUS 2026-07-04: R1+R2+R3 all reviewed, approved, MERGED to `main` (R3 merge `63b9afb`).
 Feature is code-complete. NOT yet live-verified end-to-end (needs G-13).**
 
-**STATUS 2026-07-05: RR-3 FIXED (`acb1d59`, approved, NOT yet merged — held for RR-4). RR-4 found:
-2 `formatSince` tests are time-of-day-flaky and currently RED on `main`. Fix RR-4 on the RR-3
-branch, then merge both → green main. RR-2 still open (needs G-13 live data).**
+**STATUS 2026-07-05: RR-3 (`acb1d59`) + RR-4 (`6504c80`) FIXED, approved, MERGED (`0f2f342`).
+Main GREEN (tsc clean; recruiter-radar 34/34 + actions 66/66, verified post-midnight so RR-4
+holds). Recruiter-radar item 13 code-complete. Only RR-2 remains (needs G-13 live data).**
 
 ## RR-3 review (`acb1d59`) — APPROVED (merge held for RR-4)
 `extractJsonArray(raw)` strips ```json/``` fences, extracts first `[` → last `]`, parses; throws
@@ -16,6 +16,16 @@ on missing brackets/malformed → downstream heuristic fallback. `buildRecruiter
 instead of raw `JSON.parse`. 9 tests incl. a fenced-JSON mock proving the LLM path (degraded=false)
 + safety-net throws. Correct. (Minor, non-blocking: first-`[`-to-last-`]` can mis-extract if
 trailing prose itself contains `]` → degrades safely, acceptable.)
+
+## RR-4 · FIXED (`6504c80`, merged) · `formatSince` tests were time-of-day-dependent
+
+Fix verified: `formatSince` describe now pins the clock in `beforeAll` (`vi.useFakeTimers()` +
+`vi.setSystemTime("2026-07-05T15:00")`), builds the 8am/2am timestamps from that fixed base, and
+restores real timers in `afterAll` (scoped to the describe — no leak into the state/orchestrator
+blocks that need real time). Confirmed green at 01:31 (was RED at 00:10 pre-fix). Original finding
+below.
+
+<details><summary>RR-4 original finding (kept for history)</summary>
 
 ## RR-4 · BUG (main is RED) · `formatSince` tests are time-of-day-dependent
 From the R1-NITs N5 change (`3f65991`). Two tests in `recruiter-radar.test.ts` build absolute
@@ -33,7 +43,7 @@ relative to that fixed base so BOTH the delta (≥6h, same day) and the clock ho
 `vi.useRealTimers()` in cleanup. Do it on the `fix/recradar-rr3` branch (commit `fix(recradar-rr4)`
 or fold into rr3), then reviewer merges rr3+rr4 together.
 
----
+</details>
 
 ---
 

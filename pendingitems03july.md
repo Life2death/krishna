@@ -5,9 +5,10 @@
 > in sync without re-explaining context every time. Work items in the order listed. STOP after
 > each numbered item's phase and report — do not chain multiple items into one commit.
 >
-> **⚠️ 2026-07-05: `main`'s test suite is RED (RR-4 — flaky `formatSince` tests).** Fix that
-> FIRST on branch `fix/recradar-rr3` before anything else — see the IMMEDIATE note in the
-> working-order block below. RR-3 (`acb1d59`) is approved but its merge is held until RR-4 lands.
+> **2026-07-05: `main` is GREEN again.** RR-3 (`acb1d59`) + RR-4 (`6504c80`) reviewed, merged
+> (`0f2f342`); tsc clean, recruiter-radar 34/34 + actions 66/66 green (verified post-midnight,
+> so RR-4's fake-timer fix holds). Recruiter-radar (item 13) code is now fully done. **Next code:
+> item 10 J1 + J3** — see the working-order block below.
 
 ## What this project is
 
@@ -160,16 +161,13 @@ the no-push rule — it already happened once with `fix/gmail-latest-email`; do 
 **→ DONE + MERGED to main:** Item 14 (`1654a0c`); Item 13 recruiter radar R1+R2+R3 COMPLETE
 (`f6f9719` R1+R2, `63b9afb` R3). Reviewer hotfixed a tsc break from the item-12 merge (`9da1803`).
 
-**→ IMMEDIATE — RR-4 (main is RED):** on the existing `fix/recradar-rr3` branch, fix the 2
-time-of-day-flaky `formatSince` tests (`recruiter-radar.test.ts`) with `vi.useFakeTimers()` +
-`vi.setSystemTime(<fixed afternoon>)` and base the timestamps on that fixed clock so the delta
-(≥6h same day) and the clock hour are deterministic; `vi.useRealTimers()` in cleanup. Commit
-`fix(recradar-rr4)`, full `vitest run` green (verify at any time of day), STOP + report.
-**Reviewer then merges RR-3 + RR-4 together** (RR-3 `acb1d59` is approved, held only for this).
+**→ DONE + MERGED (2026-07-05):** RR-3 (`acb1d59`) fenced-JSON extraction + RR-4 (`6504c80`)
+flaky-test fix, merged `0f2f342`. Main green (tsc clean, affected suites 100/100). Recruiter
+radar item 13 is code-complete; only RR-2 remains (waits for G-13 live data).
 
-**→ THEN — Item 10-J1 + J3** (unblocked, Krishna repo). Branch `feat/job-autopilot` off `main`.
+**→ NEXT — Item 10-J1 + J3** (unblocked, Krishna repo). Branch `feat/job-autopilot` off `main`.
 See `JOB_AUTOPILOT_PLAN.md`. J1 = voice-open the pipeline URL; J3 = application profile store.
-(J2 still needs the owner to DEPLOY H1 on job-hunter/Render.) RR-2 waits for G-13 live data.
+(J2 still needs the owner to DEPLOY H1 on job-hunter/Render.)
 **Process reminder:** ONE phase per commit, then STOP and wait.
 Then **Item 10-J1 + J3** — pipeline URL alias (J1) + application profile store (J3),
 both in the Krishna repo, both unblocked. Branch `feat/job-autopilot` off `main`. See `JOB_AUTOPILOT_PLAN.md`.
