@@ -1,3 +1,5 @@
+import { getSeenIds, getLastCheckAt, markSeen, setLastCheckAt } from "./recruiter-radar-state";
+
 export interface Candidate {
   id: string;
   from: string;
@@ -173,6 +175,29 @@ function buildBrief(item: Classification, candidate?: Candidate): string {
     : "";
   const fallback = displayName ? `${displayName} — "${candidate!.subject}"` : `Message ${item.id}`;
   return fallback;
+}
+
+export async function runRecruiterRadar(
+  candidates: Candidate[],
+  classify: (c: Candidate[]) => Promise<Classification[]>,
+  opts?: { windowDays?: number; capHit?: boolean },
+): Promise<{ result: RecruiterRadarResult; newOutreach: Classification[]; since: number }> {
+  const seenIds = await getSeenIds();
+  const since = opts?.windowDays
+    ? Date.now() - opts.windowDays * 86400000
+    : (await getLastCheckAt()) || Date.now() - COLD_START_DAYS * 86400000;
+
+  const result = await checkRecruiters(candidates, classify, opts?.capHit);
+
+  const newOutreach = opts?.windowDays
+    ? result.outreach
+    : result.outreach.filter((o) => !seenIds.has(o.id));
+
+  const now = Date.now();
+  await markSeen(candidates.map((c) => c.id), now);
+  await setLastCheckAt(now);
+
+  return { result, newOutreach, since };
 }
 
 export function formatSince(timestamp: number): string {

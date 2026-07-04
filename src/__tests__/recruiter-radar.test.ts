@@ -378,3 +378,144 @@ describe("recruiter radar state", () => {
     expect(newOutreach).toHaveLength(0);
   });
 });
+
+describe("runRecruiterRadar", () => {
+  let runRecruiterRadar: typeof import("@krishna/core/tools/recruiter-radar").runRecruiterRadar;
+  let getLastCheckAt: typeof import("@krishna/core/tools/recruiter-radar-state").getLastCheckAt;
+  let setLastCheckAt: typeof import("@krishna/core/tools/recruiter-radar-state").setLastCheckAt;
+  let getSeenIds: typeof import("@krishna/core/tools/recruiter-radar-state").getSeenIds;
+  let markSeen: typeof import("@krishna/core/tools/recruiter-radar-state").markSeen;
+  let setDriver: typeof import("@krishna/core/database/driver").setDriver;
+
+  const store = new Map<string, { value: number }>();
+  const seenStore = new Map<string, { message_id: string; first_seen_at: number }>();
+
+  const mockDriver = {
+    select: vi.fn((sql: string, _params?: unknown[]) => {
+      if (sql.includes("FROM recruiter_radar_state")) {
+        const rows = [...store.values()];
+        return Promise.resolve(rows.length > 0 ? [rows[0]] : []);
+      }
+      if (sql.includes("FROM recruiter_seen")) {
+        return Promise.resolve([...seenStore.values()]);
+      }
+      return Promise.resolve([]);
+    }),
+    execute: vi.fn((sql: string, params?: unknown[]) => {
+      if (sql.includes("INSERT OR REPLACE INTO recruiter_radar_state")) {
+        const val = Number(params?.[params.length - 1] ?? 0);
+        store.set("last_check_at", { value: val });
+        return Promise.resolve({ rowsAffected: 1, lastInsertId: undefined });
+      }
+      if (sql.includes("INSERT OR IGNORE INTO recruiter_seen")) {
+        const id = String(params?.[0]);
+        if (!seenStore.has(id)) {
+          seenStore.set(id, { message_id: id, first_seen_at: Number(params?.[params.length - 1]) });
+        }
+        return Promise.resolve({ rowsAffected: 1, lastInsertId: undefined });
+      }
+      return Promise.resolve({ rowsAffected: 0, lastInsertId: undefined });
+    }),
+  };
+
+  beforeEach(async () => {
+    store.clear();
+    seenStore.clear();
+    mockDriver.select.mockClear();
+    mockDriver.execute.mockClear();
+    const radar = await import("@krishna/core/tools/recruiter-radar");
+    runRecruiterRadar = radar.runRecruiterRadar;
+    const state = await import("@krishna/core/tools/recruiter-radar-state");
+    getLastCheckAt = state.getLastCheckAt;
+    setLastCheckAt = state.setLastCheckAt;
+    getSeenIds = state.getSeenIds;
+    markSeen = state.markSeen;
+    const driverMod = await import("@krishna/core/database/driver");
+    setDriver = driverMod.setDriver;
+    setDriver(mockDriver as any);
+  });
+
+  it("bare ask filters outreach to unseen ids", async () => {
+    await setLastCheckAt(1000);
+    await markSeen(["m1"], 1000);
+
+    const candidates: Candidate[] = [
+      makeCandidate({ id: "m1", from: "hr@co.com", subject: "Job opening" }),
+      makeCandidate({ id: "m2", from: "other@co.com", subject: "Senior role" }),
+    ];
+    const classify = vi.fn().mockResolvedValue([
+      makeClassify({ id: "m1", class: "recruiter_outreach", recruiterName: "HR" }),
+      makeClassify({ id: "m2", class: "recruiter_outreach", roleTitle: "Senior Engineer" }),
+    ]);
+
+    const { newOutreach, result } = await runRecruiterRadar(candidates, classify as any);
+
+    // m1 is already seen — should not appear
+    expect(newOutreach).toHaveLength(1);
+    expect(newOutreach[0].id).toBe("m2");
+    // result.outreach still includes all (the orchestrator's newOutreach is the filtered set)
+    expect(result.outreach).toHaveLength(2);
+
+    // All candidates now marked seen
+    const seen = await getSeenIds();
+    expect(seen.has("m1")).toBe(true);
+    expect(seen.has("m2")).toBe(true);
+
+    // lastCheckAt updated
+    const lastCheck = await getLastCheckAt();
+    expect(lastCheck).toBeGreaterThan(1000);
+  });
+
+  it("explicit window returns all outreach including already-seen", async () => {
+    await markSeen(["m1"], 1000);
+
+    const candidates: Candidate[] = [
+      makeCandidate({ id: "m1", from: "hr@co.com", subject: "Job opening" }),
+      makeCandidate({ id: "m2", from: "other@co.com", subject: "Senior role" }),
+    ];
+    const classify = vi.fn().mockResolvedValue([
+      makeClassify({ id: "m1", class: "recruiter_outreach", recruiterName: "HR" }),
+      makeClassify({ id: "m2", class: "recruiter_outreach", roleTitle: "Senior Engineer" }),
+    ]);
+
+    const { newOutreach, result, since } = await runRecruiterRadar(candidates, classify as any, { windowDays: 7 });
+
+    // m1 is seen but explicit window includes it anyway
+    expect(newOutreach).toHaveLength(2);
+    expect(newOutreach[0].id).toBe("m1");
+    expect(newOutreach[1].id).toBe("m2");
+    expect(result.outreach).toHaveLength(2);
+
+    // since should be ~7 days ago
+    const approx7Days = 7 * 86400000;
+    expect(Math.abs(Date.now() - since - approx7Days)).toBeLessThan(5000);
+
+    // Seen state still upserted afterward
+    const seen = await getSeenIds();
+    expect(seen.has("m1")).toBe(true);
+    expect(seen.has("m2")).toBe(true);
+
+    // lastCheckAt updated
+    const lastCheck = await getLastCheckAt();
+    expect(lastCheck).toBeGreaterThan(1000);
+  });
+
+  it("cold-start bare ask uses 7-day window when no state exists", async () => {
+    const candidates: Candidate[] = [
+      makeCandidate({ id: "m1", from: "hr@co.com", subject: "Job opening" }),
+    ];
+    const classify = vi.fn().mockResolvedValue([
+      makeClassify({ id: "m1", class: "recruiter_outreach" }),
+    ]);
+
+    const { since, result } = await runRecruiterRadar(candidates, classify as any);
+
+    // since should be ~7 days ago (COLD_START_DAYS)
+    const approx7Days = 7 * 86400000;
+    expect(Math.abs(Date.now() - since - approx7Days)).toBeLessThan(5000);
+
+    // Result still processed normally
+    expect(result.outreach).toHaveLength(1);
+    expect(result.degraded).toBe(false);
+  });
+});
