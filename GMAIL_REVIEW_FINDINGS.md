@@ -260,3 +260,45 @@ be fixed before Voice-ID Phase 3 ships, not before this. Remaining open NITs fro
 (G-7 test-coverage gap — now partially closed but still doesn't cover the resume/confirm
 integration path that hid G-11; G-8 unused OAuth state; G-9 no cancel button for a stuck OAuth
 connect; G-10 duplicated token-refresh logic) are still open, still low priority, not blocking.
+
+---
+
+## Live-test finding — 2026-07-04, owner's first real Gmail session (OAuth connected fine)
+
+### G-12 · BUG (real, reproducible, hit live immediately) · "what's the latest email?" (no filter) fails with "Missing required arg: query"
+**Repro (from `command_log`/`speech_log`, confirmed via DB query):** owner said *"what is the
+latest email I have arrived in my Gmail inbox?"* twice (17:24:39, 17:26:13). Both times Krishna
+replied *"Missing required arg: query"* — logged verbatim as both the spoken response and
+`command_log.detail` (this is G-2's error-propagation fix working correctly in production — the
+real reason surfaced instead of a generic fallback, which is exactly why this was diagnosable
+from the DB in under a minute instead of needing a repro session).
+
+**Root cause:** the model has no example for "show me the newest email, no filter" — the
+`BASE_SYSTEM_PROMPT` GMAIL section (`krishna.context.tsx:145-155`) only shows (a) a *filtered*
+search (`query:"from:hdfc"`) and (b) "read the latest email" which wrongly assumes a prior
+search already produced a message id. Faced with an unfiltered "latest email" request, the model
+emitted `gmail_search` with an empty/omitted `query`. `gmailSearchMessagesTool.run`
+(`packages/core/tools/gmail.ts:263-267`) hard-rejects that:
+```ts
+const query = String(args.query ?? "");
+if (!query) {
+  return { success: false, error: "Missing required arg: query" };
+}
+```
+But **Gmail's own `messages.list` API does not require `q`** — omitting it lists the mailbox's
+messages (Gmail's default ordering surfaces the most recent first), which is exactly what "what's
+my latest email" needs. The tool is stricter than the API it wraps, for the single most obvious
+first thing a new user would ask.
+
+**Fix (two parts, both needed):**
+1. **Tool:** allow an empty `query` to mean "no filter" — call `/messages?maxResults=N` without
+   the `q` param instead of erroring. (Keep the existing behavior when a non-empty query IS
+   given.) Add a test: empty/omitted query returns the N most recent messages, unfiltered.
+2. **Prompt:** add an explicit example for the unfiltered case, e.g. *"what's my latest email?" /
+   "any new mail?"* → `{"action":"gmail_search","query":"","maxResults":1}` (or `"in:inbox"` if
+   the agent prefers a non-empty sentinel — either works once the tool no longer hard-errors on
+   empty). This is a day-one usage pattern, not an edge case — prioritize accordingly.
+
+Branch: continue on a Gmail follow-up branch off current `main` (this is a bug-fix on already-
+merged Gmail code, not new Phase-4a scope) — e.g. `fix/gmail-latest-email`. Commit prefix:
+`fix(gmail-g12)`.

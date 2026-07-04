@@ -86,7 +86,16 @@ the main checkout. You never merge or push.
   in `D:\Learning\job-hunter`), reviewed+verified (pytest 14/14). **Code done — awaiting OWNER DEPLOY**
   (see owner action below); not merged by the reviewer since it's a separate repo the owner pushes.
 
-**→ NEXT for the agent: Item 10-J1 + J3** — pipeline URL alias (J1) + application profile store (J3),
+- 🔴 **NEW — Item 12 (live-blocking, top priority): Gmail "latest email" (no filter) fails** —
+  owner hit this live 2026-07-04, first real Gmail session, immediately (OAuth/connection are
+  fine). Asking "what's my latest email?" makes the model call `gmail_search` with an empty
+  `query`, and the tool hard-errors on that even though Gmail's own API doesn't require `q`.
+  Fix is two small parts: tool accepts empty query as "no filter, most recent N", plus one new
+  prompt example. Full repro + fix in `GMAIL_REVIEW_FINDINGS.md` (finding **G-12**). Branch
+  `fix/gmail-latest-email` off `main`. Commit prefix: `fix(gmail-g12)`.
+
+**→ NEXT for the agent: Item 12 (G-12) first — small, live-blocking, already-merged-code bug.**
+Then **Item 10-J1 + J3** — pipeline URL alias (J1) + application profile store (J3),
 both in the Krishna repo, both unblocked. Branch `feat/job-autopilot` off `main`. See `JOB_AUTOPILOT_PLAN.md`.
 
 **→ OWNER action (parallel, unblocks item 10-J2):** merge `feat/krishna-api-token` into job-hunter's
