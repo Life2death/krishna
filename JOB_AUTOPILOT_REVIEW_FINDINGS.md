@@ -27,36 +27,35 @@ So **no cross-user or privilege-escalation hole exists today.** The findings are
 settings is safe.
 
 ### H1-1 · NIT (robustness — not exploitable today, fix before/at deploy) · `/api/` prefix allowlist is broader than spec; `/api/settings` is only *incidentally* protected
-`check_auth()` allows the token for anything under `/api/` (and `/apply/`). But
-`JOB_HUNTER_API_PLAN.md` specified the token is for the "job data plane... not the web UI or
-admin surface," and explicitly named **settings** as something to reject. `/api/settings`
-(GET+**POST**, writes the owner's search config) sits under the `/api/` prefix, so the gate
-lets the token through — it's blocked *only* because `api_settings()` happens to check
-`session.get("email")` directly (line 1707) instead of `uid()`. The security boundary for
-settings therefore lives in the endpoint, not the gate. Fragile in two ways: (a) any NEW
-`/api/`-prefixed endpoint is auto-exposed to the token unless someone remembers to session-guard
-it; (b) if `api_settings` is ever refactored to use `uid()` (natural, since the rest of the API
-does), the token silently gains settings write with no test catching it. **Fix:** make the
-allowlist explicit in `check_auth` — a set of the intended endpoints/paths (jobs read+count+
-stats+breakdown, jobs/<id>/status, jobs/hide, apply) rather than a bare `/api/` prefix — so the
-boundary is in ONE place and matches the spec. Add a regression test: `POST /api/settings` with
-a valid token must be rejected (asserts the boundary, not the incidental session check).
+**FIXED (commit `96ac399`).** Replaced bare `/api/` prefix with explicit
+`TOKEN_ALLOWED_PREFIXES = ("/api/jobs", "/apply/")` tuple. `/api/settings` is now
+rejected at the gate (403) rather than incidentally by the endpoint session check.
+Added regression tests: `GET /api/settings` and `POST /api/settings` with valid
+token both assert 403.
 
 ### H1-2 · NIT · Non-ASCII bearer token raises `TypeError` → 500 instead of a clean 401
-`hmac.compare_digest(token, KRISHNA_API_TOKEN)` requires both args be ASCII-only `str` (or both
-bytes). `token` comes straight from the attacker-controllable `Authorization` header — a header
-like `Bearer <non-ascii>` makes `compare_digest` raise `TypeError`, which surfaces as an
-unhandled 500 rather than the intended 401. **Fix:** compare bytes —
-`hmac.compare_digest(token.encode(), KRISHNA_API_TOKEN.encode())` — which never raises on input
-charset and stays constant-time. Add a test with a non-ASCII token asserting 401.
+**FIXED (commit `96ac399`).** Changed to byte comparison (`token.encode()` /
+`KRISHNA_API_TOKEN.encode()`). Added regression test: non-ASCII `\u00e9\u00e0\u00fc`
+token returns 401, not 500.
 
 ### H1-3 · NIT (documentation) · make the uid()/session split intentional
+**FIXED (commit `96ac399`).** Added doc comment above the bearer block documenting
+the invariant: job-data endpoints use `uid()` (bearer-aware), settings/admin/page
+routes read `session` directly (bearer-blind). The `TOKEN_ALLOWED_PREFIXES` tuple is
+noted as the single security boundary.
 The coherent-but-implicit rule keeping the token in its lane is: **job-data endpoints resolve
 identity via `uid()` (bearer-aware); anything that must stay owner-web-only reads `session`
 directly (bearer-blind).** One comment at the bearer block stating this would turn today's
 accidental correctness into a documented invariant future endpoints can follow.
 
-**Verdict:** H1 is functionally correct and not exploitable as-is. Recommend landing H1-1
+**Retest (reviewer, `96ac399`): all 3 findings VERIFIED FIXED.** Re-read the diff and ran
+`pytest test_bearer_auth.py` → 14/14 green (54/54 whole suite per agent). H1-1: allowlist is now
+`("/api/jobs", "/apply/")` — traced every route, this covers exactly the 6 job endpoints + apply
+and excludes `/api/settings` (now 403 at the gate, with GET+POST regression tests). H1-2:
+`.encode()` byte compare, non-ASCII `éàü` token → 401 test passes. H1-3: doc comment present.
+**H1 approved — ready for the owner to deploy.**
+
+**Verdict (original):** H1 is functionally correct and not exploitable as-is. Recommend landing H1-1
 (explicit allowlist + regression test) and H1-2 (byte compare) before the owner deploys — both
 are small and they convert a security boundary from robust-by-accident to robust-by-design. H1-3
 optional. After that, the owner's deploy steps (generate token → set `KRISHNA_API_TOKEN` +

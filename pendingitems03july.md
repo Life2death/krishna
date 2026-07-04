@@ -80,8 +80,8 @@ the main checkout. You never merge or push.
 
 ## CURRENT WORKING ORDER (updated 2026-07-04 — agent: work top to bottom, one phase at a time)
 
-1. **Item 1** — travel error visibility (small, gates item 9)
-2. **Item 2** — no narrated-but-unexecuted actions (small prompt fix)
+1. **Item 1** — travel error visibility (small, gates item 9) — **review EV-1 FIXED** (`4b9c997`)
+2. **Item 2** — no narrated-but-unexecuted actions (small prompt fix) — **review NA-1 FIXED** (`3b85777`)
 3. **Item 10-H1** — job-hunter bearer token (`JOB_HUNTER_API_PLAN.md`, in the
    `D:\Learning\job-hunter` repo — then STOP: owner sets Render env vars + deploys)
    **REVIEWED (`072a2ff`): functionally correct, NOT exploitable, but 2 small hardening

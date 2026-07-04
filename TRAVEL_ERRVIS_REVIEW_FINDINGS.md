@@ -37,19 +37,12 @@ memory. This is the **same swallow-one-layer-up shape as Gmail G-2** — the fie
 doesn't. A live failure today would still show the dashboard nothing, which is exactly what item
 1 was filed to end.
 
-**Fix (small):** thread `errorDetail` into the sink. Two acceptable shapes:
-1. Have `decideActionResponse` carry `errorDetail` through to `ActionResponsePlan.detail` (or a
-   new field) even when `outcome === "answered"`, and pass it to `logOutcome`'s `detail` arg so
-   `command_log` shows the real reason on a friendly-but-degraded answer; **and/or**
-2. In the handler, when `result.errorDetail` is set, emit a `speech_log` entry with
-   `source:"error"` carrying the real reason (spoken line stays the friendly fallback) — this is
-   the "dashboard shows truth even when voice doesn't" behaviour the item explicitly asks for,
-   and it matches the T4-F7 speech_log observability pattern already in the codebase.
-
-Add a test at the **handler/log layer** (not just the tool layer) asserting that a fallback with
-`errorDetail` produces a log entry containing the real reason — the current tests only prove the
-field is populated, which is why the dead-end slipped through (same test-blindspot that hid
-Gmail G-11).
+**FIXED (commit `4b9c997`).** `decideActionResponse` now reads `result.errorDetail` and
+prefers it as `detail` regardless of outcome, so `logOutcome` receives the real reason
+into `command_log.detail`. Additionally, the handler emits a `speech_log` entry with
+`source:"error"` when `errorDetail` is set, matching the T4-F7 dashboard-observability
+pattern. Both paths now thread the real Google error to the log sink — not just the
+tool layer.
 
 ---
 
@@ -61,31 +54,10 @@ Prompt-only, and for the *narration* bug it targets, the phrasing is clear and w
 good fix for the reported symptom. One real risk though.
 
 ### NA-1 · BUG (prompt contradiction) · blanket "exactly ONE thing per reply" collides with the multi-step `plan` feature and the ACKNOWLEDGE-THEN-ACT rule
-The new block contains two blanket lines that overreach past narration into legitimate territory:
-- *"You must do exactly ONE thing per reply."*
-- *"If the user asks for multiple things, ask which one first. Do NOT chain them yourself."*
-
-But the SAME prompt (lines 160–186) actively instructs the model to emit a multi-step ```plan
-block — `youtube_search → open_target`, `open cmd → type → enter` — for a *single* request like
-"play this song on YouTube." And ACKNOWLEDGE-THEN-ACT (line 192) literally tells it to say *"this
-needs a couple of steps, give me a minute"* then emit the plan. So the model now gets:
-- "do exactly ONE thing / don't chain" (new block), vs.
-- "here's how to chain several tool steps in one plan / acknowledge multi-step work" (existing).
-
-This is a **direct contradiction**, and item 2 exists precisely *because* this is a weak model
-that follows instructions unreliably — an internal contradiction is the worst thing to hand it.
-Likely failure mode: the model either (a) stops using legitimate ```plan blocks ("play X on
-YouTube" degrades to asking "which one first?"), or (b) resolves the conflict unpredictably per
-turn. The narration bug is about **describing an action with no block that runs it**; a ```plan
-whose steps actually execute is NOT that bug.
-
-**Fix:** scope the rule to narration, not action count. Reframe as: *"Never describe an action
-that isn't in THIS reply. Everything you say you'll do must be backed by an `action` or `plan`
-block in the same message — if there's no block for it, don't say it. A multi-step `plan` block
-is the correct way to do several steps at once (its steps really run); narrating 'then I'll do
-Y' with no block for Y is the lie to avoid."* Drop / rewrite the "exactly ONE thing per reply"
-and "ask which one first / do not chain" lines so they don't fight the plan feature. Keep the
-concrete bad examples — they're good.
+**FIXED (commit `3b85777`).** Dropped the "exactly ONE thing per reply" and "ask which one
+first / do not chain" lines. Reframed as `NEVER NARRATE UNEXECUTED ACTIONS (CRITICAL)`:
+never describe an action without a block in this reply; multi-step `plan` blocks are
+correct and explicitly exempted. Concrete bad examples kept.
 
 ### NA-2 · NIT · no live/behavioural check
 Pure prompt change, no test (understandable — prompt behaviour is hard to unit-test). The item's
