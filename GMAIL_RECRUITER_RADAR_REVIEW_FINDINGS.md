@@ -45,6 +45,17 @@ the `setDriver`/`getDatabase` DI seam: `getLastCheckAt` (cold start 0), `setLast
 (INSERT OR REPLACE), `getSeenIds` → Set, `markSeen` (INSERT OR IGNORE, idempotent). 6 solid
 state tests incl. the load-bearing "second ask same day returns nothing new".
 
+**RR-1 · FIXED (`d8c0c32`), verified + merged (`f6f9719`).** `runRecruiterRadar(candidates,
+classify, {windowDays?, capHit?})` now composes `getSeenIds` + `getLastCheckAt` → `checkRecruiters`
+→ bare-ask filters outreach to unseen / explicit-window returns all → `markSeen(all candidate ids)`
++ `setLastCheckAt(now)`, returning `{result, newOutreach, since}`. Ordering verified correct
+(seen-ids + old last-check read *before* the run and the overwrite; cold-start `0 || now-7d` →
+7-day window). All 3 paths tested (bare filters, explicit includes-seen + upserts, cold-start
+7-day). **Contract for R3: speak `newOutreach` (filtered), not `result.outreach`.** Original
+finding below.
+
+<details><summary>RR-1 original finding (kept for history)</summary>
+
 **RR-1 · BLOCKER-for-R3 · the bare-vs-explicit windowing logic isn't shippable code.** The R2
 plan row calls for *"stateful bare-ask vs stateless explicit-window semantics."* But:
 - `checkRecruiters` does **not** apply the seen-filter. The "filter outreach to unseen ids"
@@ -71,6 +82,8 @@ matches but still upserts** (currently untested), cold-start window = 7 days. Th
 action-parse + prompt + fetch + `logOutcome`/`errorDetail` wiring around this function.
 (Alternative, only if the owner prefers: consciously move this orchestration into R3 and amend
 the plan's R2/R3 split — but do not leave the semantic as test-only code.)
+
+</details>
 
 <details><summary>R1 original review (pre-NIT-fix, kept for history)</summary>
 

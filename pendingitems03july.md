@@ -131,29 +131,33 @@ the no-push rule — it already happened once with `fix/gmail-latest-email`; do 
     Do NOT keep using `fix/gmail-latest-email` (redundant now — delete it after switching) and
     do NOT branch a new one.
   - **R1 STATUS: done + APPROVED (`c393ee2`); all 5 NITs FIXED + verified (`3f65991`).**
-  - **R2 STATUS: state primitives DONE + correct (`033e7cc`) — migration LF-normalized (v19,
-    Tauri+Brain), `recruiter-radar-state.ts` via setDriver/getDatabase DI, 6 state tests incl.
-    "second ask same day". BUT NOT DONE / not merge-ready — one finding to fix first:**
-    - **RR-1:** the bare-vs-explicit **windowing semantics** (the core of the R2 row) are NOT
-      shippable code — the seen-filter lives only inside the load-bearing test, and the
-      explicit-window path has no code or test. Add a pure DI'd orchestrator
-      (`runRecruiterRadar(candidates, classify, {windowDays?, capHit?})`) that composes
-      getSeenIds → checkRecruiters → (bare: filter unseen / explicit: don't) → markSeen(all) →
-      setLastCheckAt, returning `since` for the formatter; test BOTH paths + cold-start 7-day.
-      Commit `fix(recradar-r2-windowing)` (or fold into R2), STOP, report. Full spec: findings
-      file, RR-1. Only after RR-1 does R3 (action/prompt/fetch/logOutcome wiring) start.
+  - **R2 STATUS: DONE + APPROVED + MERGED.** State primitives (`033e7cc`, migration v19
+    LF-normalized Tauri+Brain, `recruiter-radar-state.ts` via setDriver DI) + windowing
+    orchestrator (`d8c0c32`, **RR-1 FIXED**: `runRecruiterRadar` composes getSeenIds +
+    getLastCheckAt → checkRecruiters → bare filters unseen / explicit returns all → markSeen(all)
+    + setLastCheckAt, returns `{result, newOutreach, since}`; all 3 paths tested). R1+R2 merged
+    to `main` (`f6f9719`); tsc clean, 489 green.
+  - **R3 STATUS: cleared to start.** Action parse/execute (`{"action":"gmail_recruiters"}`,
+    optional `window_days`), GMAIL prompt trigger examples, Stage-1 fetch (`category:primary`
+    with `in:inbox` fallback), formatter call, `logOutcome`/`errorDetail` (G-2 pattern),
+    `kind:"answer"`. **R3 must speak `newOutreach` (the filtered set), NOT `result.outreach`.**
+    First: sync the branch with current `main` (`git merge main` in m15) so R3's edits to
+    actions.ts / krishna.context.tsx land on top of item-14 + the tsc hotfix and avoid a final
+    merge conflict.
 
-**→ DONE this round:** Item 14 (`1654a0c`, **merged to main**). Item 13 R1 NITs (`3f65991`) +
-R2 state primitives (`033e7cc`) — reviewed, on `fix/gmail-recruiter-radar`, NOT yet merged.
-Reviewer also hotfixed a tsc break on main from the item-12 merge (`9da1803`).
+**→ DONE + MERGED to main:** Item 14 (`1654a0c`), Item 13 R1+R2 incl. RR-1 windowing
+(`f6f9719` merge). Reviewer also hotfixed a tsc break on main from the item-12 merge (`9da1803`).
 
 **→ NEXT for the agent, on `fix/gmail-recruiter-radar` (do NOT re-branch):**
-  1. **Fix RR-1** — add the `runRecruiterRadar` windowing orchestrator (bare-vs-explicit) +
-     both-path tests. Commit `fix(recradar-r2-windowing)`, tsc+vitest green, **STOP + report.**
-  2. Then **R3** — action parse/execute wiring, prompt examples, fetch, `logOutcome`/`errorDetail`.
-**Process reminder:** ONE phase per commit, then STOP and wait — this round chained item-14 +
-R1-NITs + R2 into one report; land each phase and pause for review so gaps like RR-1 are caught
-before the next phase builds on them.
+  1. **Sync branch with main first:** in m15, `git merge main` into `fix/gmail-recruiter-radar`
+     so R3's edits sit on top of the merged R1+R2, item-14, and the tsc hotfix.
+  2. **R3** — `gmail_recruiters` action parse/execute (+ optional `window_days`), GMAIL prompt
+     examples, Stage-1 fetch (`category:primary` → `in:inbox` fallback), formatter (speak
+     `newOutreach`, not `result.outreach`), `logOutcome`/`errorDetail` (G-2 pattern), G-6
+     first-message read hint. Commit `feat(recradar-r3)`, tsc+vitest green, **STOP + report.**
+**Process reminder:** ONE phase per commit, then STOP and wait — the previous round chained
+item-14 + R1-NITs + R2 into one report; landing each phase and pausing let RR-1 be caught before
+R3 built on it.
 Then **Item 10-J1 + J3** — pipeline URL alias (J1) + application profile store (J3),
 both in the Krishna repo, both unblocked. Branch `feat/job-autopilot` off `main`. See `JOB_AUTOPILOT_PLAN.md`.
 
