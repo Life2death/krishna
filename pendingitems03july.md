@@ -1,9 +1,13 @@
-# Pending items — 2026-07-03 (updated 2026-07-04) — cold-start handoff for the coding agent
+# Pending items — 2026-07-03 (updated 2026-07-05) — cold-start handoff for the coding agent
 
 > **Read this whole file before touching anything.** You are a fresh agent with no memory of
 > prior sessions. This file exists so you, the reviewer (Claude), and the owner (Vikram) stay
 > in sync without re-explaining context every time. Work items in the order listed. STOP after
 > each numbered item's phase and report — do not chain multiple items into one commit.
+>
+> **⚠️ 2026-07-05: `main`'s test suite is RED (RR-4 — flaky `formatSince` tests).** Fix that
+> FIRST on branch `fix/recradar-rr3` before anything else — see the IMMEDIATE note in the
+> working-order block below. RR-3 (`acb1d59`) is approved but its merge is held until RR-4 lands.
 
 ## What this project is
 
