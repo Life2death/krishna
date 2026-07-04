@@ -167,7 +167,7 @@ export async function executeAction(
       return { kind: "answer", spokenResponse: "Where would you like to go?" };
     }
 
-    const result = await getTravelTimeTool.run({ from: action.from, to, mode }, { vars: {} });
+    const result = await getTravelTimeTool.run({ from: action.from ?? "home", to, mode }, { vars: {} });
 
     if (result.data?.url) {
       try {
