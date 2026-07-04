@@ -144,6 +144,10 @@ export const BASE_SYSTEM_PROMPT = [
   '',
   'GMAIL:',
   '- You can search, read, list labels, and send emails through Gmail. All Gmail actions are client-side (no brain required).',
+  '- "what\'s my latest email?" / "any new mail?" →',
+  '```action',
+  '{"action":"gmail_search","query":"","maxResults":1}',
+  '```',
   '- "do I have any mail from HDFC?" →',
   '```action',
   '{"action":"gmail_search","query":"from:hdfc","maxResults":5}',
@@ -1122,7 +1126,7 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
             setStatus("thinking");
             try {
               const action = JSON.parse(pending.pendingResult.actionToResume);
-              const result = await executeAction(action, llmFallback);
+              const result = await executeAction(action, llmFallback, { preConfirmed: true });
               if (result.spokenResponse) {
                 const plan = decideActionResponse(result, false);
                 if (plan?.shouldSpeak) {

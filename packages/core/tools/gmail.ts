@@ -117,13 +117,15 @@ export function formatSearchOutput(
   query: string,
   honorific: string,
 ): string {
+  const label = query ? `"${query}"` : "your inbox";
+
   if (results.length === 0) {
-    return `No messages found matching "${query}", ${honorific}.`;
+    return `No messages found matching ${label}, ${honorific}.`;
   }
 
   const top = results[0];
   const count = results.length;
-  let output = `Found ${count} message${count > 1 ? "s" : ""} matching "${query}"${count > 0 ? ` — newest is from ${top.from}: "${top.subject}"` : ""}, ${honorific}.`;
+  let output = `Found ${count} message${count > 1 ? "s" : ""} matching ${label}${count > 0 ? ` — newest is from ${top.from}: "${top.subject}"` : ""}, ${honorific}.`;
   if (count > 0) {
     output += ` To read the newest one, use gmail_read with id "${top.id}".`;
   }
@@ -263,14 +265,11 @@ export const gmailSearchMessagesTool: Tool = {
     const query = String(args.query ?? "");
     const maxResults = Math.min(Math.max(Number(args.maxResults ?? 10), 1), 50);
 
-    if (!query) {
-      return { success: false, error: "Missing required arg: query" };
-    }
-
     try {
-      const resp = await gmailFetch(
-        `/messages?q=${encodeURIComponent(query)}&maxResults=${maxResults}`,
-      );
+      const qs = query
+        ? `q=${encodeURIComponent(query)}&maxResults=${maxResults}`
+        : `maxResults=${maxResults}`;
+      const resp = await gmailFetch(`/messages?${qs}`);
       const data = await resp.json();
       const messages: { id: string; threadId: string }[] = data.messages ?? [];
 
@@ -428,7 +427,7 @@ export const gmailSendEmailTool: Tool = {
   description:
     "Send an email via Gmail. Constructs and sends a plain-text email. SEND verb - user confirmation will be required. " +
     "Args: to (recipient email), subject, body (plain text), cc (optional), bcc (optional).",
-  run: async (args) => {
+  run: async (args, ctx) => {
     const to = sanitizeEmailField(String(args.to ?? ""));
     const subject = sanitizeEmailField(String(args.subject ?? ""));
     const body = String(args.body ?? "").trim();
@@ -449,7 +448,7 @@ export const gmailSendEmailTool: Tool = {
       return { success: false, error: `Invalid bcc email: "${bcc}"` };
     }
 
-    if (!(await confirmOrAbort(`Send email to ${to} with subject "${subject}"`))) {
+    if (!ctx?.preConfirmed && !(await confirmOrAbort(`Send email to ${to} with subject "${subject}"`))) {
       return { success: false, error: "User declined" };
     }
 

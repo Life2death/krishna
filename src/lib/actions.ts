@@ -171,7 +171,8 @@ type LlmFallbackFn = (input: string) => Promise<string | null>;
 
 export async function executeAction(
   action: Action,
-  llmFallback?: LlmFallbackFn
+  llmFallback?: LlmFallbackFn,
+  options?: { preConfirmed?: boolean }
 ): Promise<ExecuteActionResult> {
   if (action.action === "travel_time") {
     const to = action.to || "";
@@ -235,7 +236,7 @@ export async function executeAction(
   if (action.action === "gmail_send") {
     const result = await gmailSendEmailTool.run(
       { to: action.to, subject: action.subject, body: action.body, cc: action.cc ?? "", bcc: action.bcc ?? "" },
-      { vars: {} },
+      { vars: {}, preConfirmed: options?.preConfirmed },
     );
     return {
       kind: "status",
