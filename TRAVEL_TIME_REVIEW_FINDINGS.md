@@ -379,5 +379,40 @@ hypothesis), flagged 6 HIGH-risk sites in `speaker/*.rs` for awareness, and mark
 instruction. No action needed until the crash reproduces (post-P3-merge, since P3 changed the
 error path the crash occurred in).
 
+## T4-F5 · BUG (infra, not a T1–T4 code bug) · FIXED (data-only, no commit) — startup crash: "migration 15 was previously applied but has been modified"
+
+**Not the T4-F2 crash** — a separate, unrelated startup panic hit during the 2026-07-04 T4
+retest attempt, before the app ever opened. `krishna-crash.txt` (the existing panic hook,
+`lib.rs:68-79`) showed: `PluginInitialization("sql", "migration 15 was previously applied but
+has been modified")`.
+
+**Root cause, confirmed by direct evidence (not inferred):** `src-tauri/src/db/migrations/
+sync-v2.sql` (migration version 15, `fix_text_updated_at_for_sync`) was edited *after* it had
+already run against the owner's live DB (`%APPDATA%/com.krishna.assistant/krishna.db`) — a
+defensive `CREATE TABLE IF NOT EXISTS voiceprints` clause was added later (good intent: fixes
+a fresh-install "no such table: voiceprints" failure), but nobody bumped it to a new migration
+number. The Tauri SQL plugin's `_sqlx_migrations` table stores a SHA-384 checksum per applied
+migration and refuses to start the app if a previously-applied migration's file content no
+longer matches — the exact anti-pattern flagged hypothetically elsewhere in this project's
+history (editing shipped migrations vs. adding new ones) actually landed and bit the owner.
+Verified precisely: computed SHA-384 of the current `sync-v2.sql` (`9a6872fe...`) against the
+recorded checksum for version 15 in `_sqlx_migrations` (`c2940746f3bec6...`) — genuinely
+different, not a false alarm.
+
+**Fix applied (owner-authorized, reviewer executed):** `UPDATE _sqlx_migrations SET
+checksum=<new SHA-384> WHERE version=15` on the owner's live DB only — read-only-verified
+first, single-column write, nothing else touched (memories/conversations/voiceprints
+untouched). Migration 15's actual effect (drop trigger, backfill epoch-ms, create-table-if-
+not-exists) is idempotent with what's already applied, so accepting the new checksum as
+"already done" is correct and safe. No code change was needed or made — the current file
+content is fine going forward; only the historical bookkeeping record was stale.
+
+**Process fix (for the agent, next time a migration needs a fix post-merge):** NEVER edit a
+migration file under `src-tauri/src/db/migrations/` once it has shipped/been applied anywhere
+— add a new migration with the next version number instead, even for a one-line defensive
+addition. This will otherwise recur on every other machine (or CI, or a fresh dev environment
+that already ran migrations once) that has migration 15 applied from before this edit landed.
+No further action needed on `sync-v2.sql` itself; just don't repeat the pattern.
+
 ---
 *Log format for the agent: change `OPEN` → `FIXED (p<N> commit <sha>)` with a one-line note.*
