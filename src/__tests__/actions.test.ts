@@ -8,6 +8,10 @@ const mockGmailSearchRun = vi.hoisted(() => vi.fn());
 const mockGmailReadRun = vi.hoisted(() => vi.fn());
 const mockGmailListLabelsRun = vi.hoisted(() => vi.fn());
 const mockGmailSendRun = vi.hoisted(() => vi.fn());
+const mockGmailFetchRecruiterCandidates = vi.hoisted(() => vi.fn());
+const mockRunRecruiterRadar = vi.hoisted(() => vi.fn());
+const mockFormatRecruiterOutput = vi.hoisted(() => vi.fn());
+const mockGetLastCheckAt = vi.hoisted(() => vi.fn());
 const mockResolveTarget = vi.hoisted(() => vi.fn());
 
 vi.mock("@krishna/core/tools/get-travel-time", () => ({
@@ -21,6 +25,17 @@ vi.mock("@krishna/core/tools/gmail", () => ({
   gmailReadMessageTool: { run: mockGmailReadRun },
   gmailListLabelsTool: { run: mockGmailListLabelsRun },
   gmailSendEmailTool: { run: mockGmailSendRun },
+  gmailFetchRecruiterCandidates: mockGmailFetchRecruiterCandidates,
+}));
+
+vi.mock("@krishna/core/tools/recruiter-radar", () => ({
+  runRecruiterRadar: mockRunRecruiterRadar,
+  formatRecruiterOutput: mockFormatRecruiterOutput,
+  COLD_START_DAYS: 7,
+}));
+
+vi.mock("@krishna/core/tools/recruiter-radar-state", () => ({
+  getLastCheckAt: mockGetLastCheckAt,
 }));
 
 vi.mock("@/lib/resolver", () => ({
@@ -109,6 +124,17 @@ describe("parseActions", () => {
     const result = parseActions('```json\n{"action":"travel_time","from":"home","to":"work"}\n```');
     expect(result.actions).toHaveLength(1);
     expect(result.actions[0]).toEqual({ action: "travel_time", from: "home", to: "work" });
+  });
+
+  it("parses gmail_recruiters action from action block", () => {
+    const result = parseActions('Checking recruiter mail.\n```action\n{"action":"gmail_recruiters"}\n```');
+    expect(result.actions).toHaveLength(1);
+    expect(result.actions[0]).toEqual({ action: "gmail_recruiters" });
+  });
+
+  it("parses gmail_recruiters with window_days", () => {
+    const result = parseActions('```action\n{"action":"gmail_recruiters","window_days":7}\n```');
+    expect(result.actions[0]).toEqual({ action: "gmail_recruiters", window_days: 7 });
   });
 });
 
@@ -450,6 +476,56 @@ describe("executeAction — gmail (error propagation G-2)", () => {
     expect(result.kind).toBe("status");
     expect(result.ok).toBe(true);
     expect(result.spokenResponse).toContain("Email sent");
+  });
+
+  it("gmail_recruiters returns answer kind with readable output", async () => {
+    mockGetLastCheckAt.mockResolvedValue(Date.now() - 86400000);
+    mockGmailFetchRecruiterCandidates.mockResolvedValue({
+      candidates: [{ id: "m1", from: "hr@co.com", subject: "Job opening", snippet: "Hello" }],
+      capHit: false,
+      inboxFallback: false,
+    });
+    mockRunRecruiterRadar.mockResolvedValue({
+      result: { outreach: [{ id: "m1", class: "recruiter_outreach", via: "direct" }], totalFetched: 1, capHit: false, degraded: false },
+      newOutreach: [{ id: "m1", class: "recruiter_outreach", via: "direct" }],
+      since: Date.now() - 86400000,
+    });
+    mockFormatRecruiterOutput.mockReturnValue("Priya from ABC about a role, sir.");
+
+    const result = await executeAction({ action: "gmail_recruiters" });
+
+    expect(result.kind).toBe("answer");
+    expect(result.ok).toBe(true);
+    expect(mockGmailFetchRecruiterCandidates).toHaveBeenCalled();
+    expect(mockRunRecruiterRadar).toHaveBeenCalled();
+    expect(result.spokenResponse).toContain("Priya from ABC");
+    expect(result.spokenResponse).toContain('gmail_read with id "m1"');
+  });
+
+  it("gmail_recruiters returns error on fetch failure", async () => {
+    mockGmailFetchRecruiterCandidates.mockRejectedValue(new Error("Gmail API down"));
+
+    const result = await executeAction({ action: "gmail_recruiters" });
+
+    expect(result.kind).toBe("answer");
+    expect(result.ok).toBe(false);
+    expect(result.spokenResponse).toContain("couldn't check recruiter mail");
+    expect(result.errorDetail).toBe("Gmail API down");
+  });
+
+  it("gmail_recruiters with window_days passes windowDays to runRecruiterRadar", async () => {
+    mockGetLastCheckAt.mockResolvedValue(Date.now() - 86400000);
+    mockGmailFetchRecruiterCandidates.mockResolvedValue({
+      candidates: [],
+      capHit: false,
+      inboxFallback: false,
+    });
+
+    const result = await executeAction({ action: "gmail_recruiters", window_days: 7 });
+
+    expect(result.kind).toBe("answer");
+    expect(result.ok).toBe(true);
+    expect(result.spokenResponse).toContain("No recruiter emails");
   });
 });
 

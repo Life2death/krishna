@@ -13,7 +13,8 @@ export type Action =
   | { action: "gmail_search"; query: string; maxResults?: number }
   | { action: "gmail_read"; id: string }
   | { action: "gmail_list_labels" }
-  | { action: "gmail_send"; to: string; subject: string; body: string; cc?: string; bcc?: string };
+  | { action: "gmail_send"; to: string; subject: string; body: string; cc?: string; bcc?: string }
+  | { action: "gmail_recruiters"; window_days?: number };
 
 export interface StepAction {
   tool: string;
