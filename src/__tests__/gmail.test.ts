@@ -130,21 +130,21 @@ describe("gmailSearchMessagesTool — empty query", () => {
 
   it("omits q param when query is empty and returns success", async () => {
     mockHttpOk({ messages: [] });
-    const result = await gmailSearchMessagesTool.run({ query: "" });
+    const result = await gmailSearchMessagesTool.run({ query: "" }, { vars: {} });
     expect(result.success).toBe(true);
     expect(result.output).toContain("No messages found");
   });
 
   it("omits q param when query is undefined and returns success", async () => {
     mockHttpOk({ messages: [] });
-    const result = await gmailSearchMessagesTool.run({});
+    const result = await gmailSearchMessagesTool.run({}, { vars: {} });
     expect(result.success).toBe(true);
     expect(result.output).toContain("No messages found");
   });
 
   it("returns GMAIL_NOT_CONFIGURED when no tokens exist", async () => {
     setSecretGetter(async () => null);
-    const result = await gmailSearchMessagesTool.run({ query: "test" });
+    const result = await gmailSearchMessagesTool.run({ query: "test" }, { vars: {} });
     expect(result.success).toBe(false);
     expect(result.error).toContain("Gmail is not connected");
   });
