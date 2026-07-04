@@ -266,6 +266,22 @@ NIT (G-14): zero new tests in `0173980`** — no empty-query tool test, no preCo
 confirm test. Add both when convenient (the G-11 path especially — it's exactly the mocked-away
 integration seam that hid G-11 in the first place). Not blocking merge.
 
+### G-13 · FIXED (commit `0d847f1`, reviewer-verified in diff; live Connect retest still pending owner) · OAuth token exchange ALWAYS failed — redirect_uri built from the browser's port, not the listener's
+
+**Fix landed (`0d847f1`, merged to `main`):** `oauth_redirect_uri(port)` helper now feeds BOTH
+`start_gmail_oauth` and `complete_gmail_oauth`, so the auth-request URI and the exchange URI are
+provably identical. `listener_port` is captured from `listener.local_addr()` BEFORE `accept()`
+(never the peer `addr`); `_addr` rename kills the unused-var warning. Truthful tab copy shipped
+("Authorization code received — return to Krishna to finish connecting."). Frontend chain
+re-verified: `completeOAuthFlow` only reaches `secureStorage.set(TOKENS_KEY,…)` after the Rust
+call resolves, which it now will. **Last gate is owner-only** (cargo test is a trivial format
+check, can't exercise `accept()`): in-app Connect → Settings flips to ✓ Connected → a `from:`
+search returns real mail. **G-14 (was a NIT): DONE in the same commit** — 6 vitest tests added
+(3 empty/undefined-query + not-connected for search; 3 preConfirmed skip/call/decline for send),
+all traced to the real control-flow paths, 23/23 green on merged main.
+
+<details><summary>Original root-cause (kept for history)</summary>
+
 ### G-13 · BLOCKER (live, root-caused in code) · OAuth token exchange ALWAYS fails — redirect_uri built from the browser's port, not the listener's
 **Live repro (owner, 2026-07-04 17:44):** *"any email from Archer?"* → *"Gmail is not connected,
 sir — check Settings."* — despite the browser having shown *"Krishna Gmail authorized — you can
@@ -308,3 +324,5 @@ well-formed query, so it was the first to touch the (empty) token store.
 
 **Priority: G-13 first — nothing in Gmail works until tokens persist.** G-12/G-11 fixes can't
 even be live-verified until this lands.
+
+</details>

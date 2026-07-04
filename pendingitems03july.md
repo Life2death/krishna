@@ -86,19 +86,25 @@ the main checkout. You never merge or push.
   in `D:\Learning\job-hunter`), reviewed+verified (pytest 14/14). **Code done — awaiting OWNER DEPLOY**
   (see owner action below); not merged by the reviewer since it's a separate repo the owner pushes.
 
-- 🔴 **Item 12 (live-blocking, top priority): Gmail live-repair — G-13 NOW LEADS.**
+- ✅ **Item 12 — Gmail live-repair — G-13 + G-12 + G-14 DONE, reviewed, merged to `main`.**
   Status 2026-07-04 evening:
-  - **G-13 · OPEN · BLOCKER:** OAuth token exchange has ALWAYS failed — `complete_gmail_oauth`
-    builds `redirect_uri` from the **browser's ephemeral port** (`accept()` returns the peer
-    addr) instead of the listener's port, so Google rejects every exchange and tokens are never
-    stored. The "Krishna Gmail authorized" browser tab is written BEFORE the exchange, so it
-    lies. Owner hit this live at 17:44 ("any email from Archer?" → "Gmail is not connected").
-    Root-caused in code, full fix spec in `GMAIL_REVIEW_FINDINGS.md` G-13. **Fix this FIRST —
-    no Gmail feature works until tokens persist.** Same branch `fix/gmail-latest-email`,
-    prefix `fix(gmail-g13)`.
-  - **G-12 (empty query) + G-11 (double confirm): FIXED in `0173980`, reviewer-verified in the
-    diff — but cannot be live-verified until G-13 lands.** NIT G-14: `0173980` added zero
-    tests (empty-query + preConfirmed-skip tests wanted, not blocking).
+  - **G-13 · FIXED (`0d847f1`), merged:** OAuth `redirect_uri` now built from the LISTENER's
+    port (`listener.local_addr()` before `accept()`), not the browser's ephemeral peer port —
+    token exchange no longer fails. `oauth_redirect_uri(port)` helper unifies both call sites +
+    cargo test; truthful tab copy ("Authorization code received…"). Reviewer-verified in the
+    diff. **ONE live gate remains, owner-only:** in-app Connect → Settings flips to ✓ Connected
+    → a `from:` search returns real mail. Until you run that once, we know it *should* work but
+    haven't seen tokens persist live.
+  - **G-12 (empty query): FIXED (`0173980`), merged.** **G-14 (was a NIT): DONE (`0d847f1`)** —
+    6 vitest tests (empty/undefined-query + not-connected; preConfirmed skip/call/decline);
+    23/23 green on merged main. **G-11 (double-confirm) verified fixed earlier in `0173980`.**
+  - ⚠️ **Process notes for the coding agent (don't repeat):** (1) commit `8ed1684` (recruiter-
+    radar R1) was made on the **`fix/gmail-latest-email` branch** — wrong branch; recruiter
+    radar must be its own `fix/gmail-recruiter-radar` off `main` (see Item 13). R1 was
+    deliberately EXCLUDED from the item-12 merge and still sits on that branch — relocate it to
+    a fresh branch before continuing R2/R3. (2) The agent **pushed** `fix/gmail-latest-email`
+    to origin — this violates the no-`git push` rule (can trigger the auto-release pipeline).
+    `origin/main` was NOT advanced, so no release fired, but do not push again.
 
 - 🆕 **Item 13 — Recruiter radar** (`GMAIL_RECRUITER_RADAR_PLAN.md`, owner request 2026-07-04):
   "any emails from recruiters?" as a first-class action — two-stage (broad Primary-category
@@ -108,8 +114,10 @@ the main checkout. You never merge or push.
   `fix/gmail-recruiter-radar` off `main` **after item 12 merges** (both touch gmail.ts + the
   GMAIL prompt section). Commit prefix `feat(recradar-rN)` (R1–R3).
 
-**→ NEXT for the agent: Item 12 (G-12) first — small, live-blocking, already-merged-code bug.**
-Then **Item 13 (R1–R3, recruiter radar)** — owner's top day-to-day ask.
+**→ NEXT for the agent: Item 14 (travel route-name garble) FIRST — tiny (~1 line), live daily-use
+bug the owner hit at 18:03 today.** Then **Item 13 (R1 done → R2–R3, recruiter radar)** — owner's
+top day-to-day ask; first relocate R1 (`8ed1684`) off `fix/gmail-latest-email` onto a fresh
+`fix/gmail-recruiter-radar` off the new `main`.
 Then **Item 10-J1 + J3** — pipeline URL alias (J1) + application profile store (J3),
 both in the Krishna repo, both unblocked. Branch `feat/job-autopilot` off `main`. See `JOB_AUTOPILOT_PLAN.md`.
 
@@ -348,6 +356,41 @@ flow. No realtime per-ack LLM calls, no external phrase APIs. V1 alone kills the
 Findings file: `NATURAL_SPEECH_REVIEW_FINDINGS.md` (reviewer creates at first review).
 Unblocked — no owner decisions needed; V2 pairs naturally with item 2 (both edit the same
 ACKNOWLEDGE-THEN-ACT prompt region — coordinate so they don't collide).
+
+---
+
+### 14. Travel tool speaks the raw slash-joined road chain — TTS garbles it (NEW — live, owner-reported 2026-07-04 18:03) — PRIORITY: do first, ahead of item 13
+
+**Live repro (owner, 18:03):** asked "how much time to work?" → Krishna said *"By car it's about
+48 minutes with current traffic — about 11 slower than usual. Bengaluru - Mumbai Hwy/Mumbai
+Hwy/Mumbai - Pandharpur Rd/Mumbai - Pune Hwy/Mumbai - Satara Hwy/Sion - Panvel Hwy/Solapur -
+Mumbai Hwy আৰু Palm Beach Rd is faster today at 57, sir."* The alternative-route name is Google's
+raw `route.description`, a **slash-joined chain of every constituent road**. TTS reads the whole
+chain at machine-gun speed ("went on very high mode on reading words"); it's unusable. The stray
+`আৰু` (Assamese "and") is a secondary weak-model artifact — the model re-rendered a `/` as a
+localized conjunction. Both symptoms share one root: **the raw slash-list must never reach the
+spoken layer.**
+
+**Root cause:** `packages/core/tools/get-travel-time.ts:276`
+```ts
+text += `. ${best.description} is faster today at ${altMin}`;
+```
+`best.description` = Google Routes `route.description` (set at line 150), which for driving
+alternatives is `"Road A/Road B/Road C/…"`.
+
+**Fix (owner-specified):** speak only the FIRST road name — the segment before the first `/`.
+```ts
+const routeName = best.description.split("/")[0].trim();
+text += `. ${routeName} is faster today at ${altMin}`;
+```
+Guard the empty case (if `description` is empty after split, drop the "X is faster" clause rather
+than speaking a bare "is faster today at 57"). Apply the same first-segment rule anywhere else a
+route `description` is spoken. The transit branch (line 257, `transitSummary`) is already clean —
+leave it. Add a test: a `description` with multiple `/`-joined roads → spoken output contains only
+the first road name and no `/`.
+
+**Branch:** fresh off `main`, e.g. `fix/travel-route-name`. **Commit prefix:** `fix(trvspeak-N)`.
+Findings: append to `TRAVEL_TIME_REVIEW_FINDINGS.md` (reviewer, at first review).
 
 ---
 
