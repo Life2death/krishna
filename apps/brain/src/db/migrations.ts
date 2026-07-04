@@ -117,6 +117,14 @@ CREATE INDEX IF NOT EXISTS idx_devices_last_seen ON devices(last_seen);`],
   created_at TEXT DEFAULT (datetime('now')) NOT NULL,
   updated_at TEXT DEFAULT (datetime('now')) NOT NULL
 );`],
+  ["recruiter-radar-v1.sql", `CREATE TABLE IF NOT EXISTS recruiter_seen (
+  message_id TEXT PRIMARY KEY,
+  first_seen_at INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS recruiter_radar_state (
+  key TEXT PRIMARY KEY,
+  value INTEGER NOT NULL
+);`],
   ["rag.sql", `CREATE TABLE IF NOT EXISTS memory_embeddings (
   id TEXT PRIMARY KEY,
   memory_id TEXT,

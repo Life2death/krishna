@@ -124,5 +124,12 @@ pub fn migrations() -> Vec<Migration> {
             sql: include_str!("migrations/speech-log.sql"),
             kind: MigrationKind::Up,
         },
+        // Migration 19: Recruiter Radar state — seen message ids + last-check timestamp
+        Migration {
+            version: 19,
+            description: "create_recruiter_radar_state",
+            sql: include_str!("migrations/recruiter-radar-v1.sql"),
+            kind: MigrationKind::Up,
+        },
     ]
 }
