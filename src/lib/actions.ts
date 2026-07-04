@@ -86,6 +86,7 @@ export interface ExecuteActionResult {
   learnedActionId?: string;
   input?: string;
   ok?: boolean;
+  errorDetail?: string;
 }
 
 export interface ActionResponsePlan {
@@ -108,7 +109,7 @@ export function decideActionResponse(
       recordTurn: true,
       outcome: result.ok !== false ? "answered" : "failed",
       failureReason: result.ok !== false ? undefined : "tool_failed",
-      detail: result.ok !== false ? undefined : result.spokenResponse,
+      detail: result.errorDetail || (result.ok !== false ? undefined : result.spokenResponse),
     };
   }
 
@@ -122,7 +123,7 @@ export function decideActionResponse(
       recordTurn: true,
       outcome: toolFailed ? "failed" : "answered",
       failureReason: toolFailed ? "tool_failed" : undefined,
-      detail: toolFailed ? result.spokenResponse : undefined,
+      detail: result.errorDetail || (toolFailed ? result.spokenResponse : undefined),
     };
   }
 
@@ -138,7 +139,7 @@ export function decideActionResponse(
     recordTurn: true,
     outcome: toolFailed ? "failed" : "answered",
     failureReason: toolFailed ? "tool_failed" : undefined,
-    detail: toolFailed ? result.spokenResponse : undefined,
+    detail: result.errorDetail || (toolFailed ? result.spokenResponse : undefined),
   };
 }
 
@@ -194,6 +195,7 @@ export async function executeAction(
       kind: "answer",
       spokenResponse: result.output || "I couldn't find a route.",
       ok: result.success,
+      errorDetail: result.data?.errorDetail,
     };
   }
 

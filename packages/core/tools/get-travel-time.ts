@@ -351,7 +351,8 @@ export const getTravelTimeTool: Tool = {
             fallback: "false",
           } as Record<string, string>,
         };
-      } catch {
+      } catch (err) {
+        const errorDetail = err instanceof Error ? err.message : String(err);
         const mapsUrl = buildMapsUrl(origin, destination, mode);
         return {
           success: true,
@@ -359,6 +360,7 @@ export const getTravelTimeTool: Tool = {
           data: {
             url: mapsUrl,
             fallback: "true",
+            errorDetail,
           } as Record<string, string>,
         };
       }

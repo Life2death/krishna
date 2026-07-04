@@ -434,6 +434,24 @@ describe("getTravelTimeTool", () => {
     expect(result.output).toContain("didn't go through this time");
     expect(result.output).not.toContain("Add a Maps API key");
     expect(result.data?.fallback).toBe("true");
+    expect(result.data?.errorDetail).toContain("Google Routes API error (403)");
+  });
+
+  it("no routes found produces a distinguishable error detail", async () => {
+    mockFetch.mockReset();
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ routes: [] }),
+    });
+
+    const result = await getTravelTimeTool.run(
+      { from: "A", to: "B" },
+      { vars: {} },
+    );
+
+    expect(result.success).toBe(true);
+    expect(result.data?.fallback).toBe("true");
+    expect(result.data?.errorDetail).toContain("No routes found");
   });
 
   it("uses configured honorific from settings", async () => {
