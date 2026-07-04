@@ -137,27 +137,32 @@ the no-push rule — it already happened once with `fix/gmail-latest-email`; do 
     getLastCheckAt → checkRecruiters → bare filters unseen / explicit returns all → markSeen(all)
     + setLastCheckAt, returns `{result, newOutreach, since}`; all 3 paths tested). R1+R2 merged
     to `main` (`f6f9719`); tsc clean, 489 green.
-  - **R3 STATUS: cleared to start.** Action parse/execute (`{"action":"gmail_recruiters"}`,
-    optional `window_days`), GMAIL prompt trigger examples, Stage-1 fetch (`category:primary`
-    with `in:inbox` fallback), formatter call, `logOutcome`/`errorDetail` (G-2 pattern),
-    `kind:"answer"`. **R3 must speak `newOutreach` (the filtered set), NOT `result.outreach`.**
-    First: sync the branch with current `main` (`git merge main` in m15) so R3's edits to
-    actions.ts / krishna.context.tsx land on top of item-14 + the tsc hotfix and avoid a final
-    merge conflict.
+  - **R3 STATUS: DONE + APPROVED + MERGED (`255a2de`; merge `63b9afb`).** gmail_recruiters
+    action (parse/execute), GMAIL prompt triggers, Stage-1 fetch, `buildRecruiterClassify` via
+    llmFallback, `runRecruiterRadar` wiring, speaks `newOutreach`, G-6 read hint, G-2
+    `errorDetail` (verified logged at krishna.context.tsx:1927), KNOWN_SAFE, +76 lines handler
+    tests. tsc clean, 496 green. **Item 13 is now feature-complete on `main`.**
+  - **Two non-blocking follow-ups (do after G-13 live; details in findings file):**
+    - **RR-2 (fetch):** `category:primary` fallback fires on "0 results", not just on operator
+      failure → every empty-primary bare ask does a full inbox sweep AND leaks the spoken
+      "I checked your inbox, sir —" prefix. Resolve after the G-13 live pre-flight determines
+      whether `category:primary` is honored on the account.
+    - **RR-3 (classify):** `JSON.parse(raw)` isn't robust to ```json fences / preambles from the
+      weak model → stage-2 likely degrades to the regex heuristic on every ask. Strip fences +
+      extract `[`…`]` before parse; add a fenced-JSON test. **Fix before relying on the
+      classifier live.**
+  - **LIVE GATE:** whole feature is untested end-to-end until G-13 Connect is done.
 
-**→ DONE + MERGED to main:** Item 14 (`1654a0c`), Item 13 R1+R2 incl. RR-1 windowing
-(`f6f9719` merge). Reviewer also hotfixed a tsc break on main from the item-12 merge (`9da1803`).
+**→ DONE + MERGED to main:** Item 14 (`1654a0c`); Item 13 recruiter radar R1+R2+R3 COMPLETE
+(`f6f9719` R1+R2, `63b9afb` R3). Reviewer hotfixed a tsc break from the item-12 merge (`9da1803`).
 
-**→ NEXT for the agent, on `fix/gmail-recruiter-radar` (do NOT re-branch):**
-  1. **Sync branch with main first:** in m15, `git merge main` into `fix/gmail-recruiter-radar`
-     so R3's edits sit on top of the merged R1+R2, item-14, and the tsc hotfix.
-  2. **R3** — `gmail_recruiters` action parse/execute (+ optional `window_days`), GMAIL prompt
-     examples, Stage-1 fetch (`category:primary` → `in:inbox` fallback), formatter (speak
-     `newOutreach`, not `result.outreach`), `logOutcome`/`errorDetail` (G-2 pattern), G-6
-     first-message read hint. Commit `feat(recradar-r3)`, tsc+vitest green, **STOP + report.**
-**Process reminder:** ONE phase per commit, then STOP and wait — the previous round chained
-item-14 + R1-NITs + R2 into one report; landing each phase and pausing let RR-1 be caught before
-R3 built on it.
+**→ NEXT for the agent — Item 10-J1 + J3** (unblocked, Krishna repo). Branch `feat/job-autopilot`
+off `main`. See `JOB_AUTOPILOT_PLAN.md`. J1 = voice-open the pipeline URL; J3 = application
+profile store. (J2 still needs the owner to DEPLOY H1 on job-hunter/Render.)
+  - **Optional quick win first:** recruiter **RR-3** (fenced-JSON robustness) is a cheap,
+    high-value fix — small branch `fix/recradar-rr3` off `main`, or fold into the first
+    live-tuning pass after G-13. RR-2 waits for G-13 live data.
+**Process reminder:** ONE phase per commit, then STOP and wait.
 Then **Item 10-J1 + J3** — pipeline URL alias (J1) + application profile store (J3),
 both in the Krishna repo, both unblocked. Branch `feat/job-autopilot` off `main`. See `JOB_AUTOPILOT_PLAN.md`.
 

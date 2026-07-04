@@ -3,6 +3,47 @@
 Track: item 13. Plan: `GMAIL_RECRUITER_RADAR_PLAN.md`. Branch: `fix/gmail-recruiter-radar`
 (off `main`, contains R1 `c393ee2`). Commit prefix `feat(recradar-rN)`.
 
+**STATUS 2026-07-04: R1+R2+R3 all reviewed, approved, MERGED to `main` (R3 merge `63b9afb`).
+Feature is code-complete + tsc clean + 496 tests green. Two non-blocking follow-up findings
+(RR-2, RR-3) remain, best resolved after the G-13 live Connect. NOT yet live-verified end-to-end
+(needs G-13).**
+
+---
+
+## R3 review (`255a2de`) — APPROVED + merged. Well-wired; 2 non-blocking follow-ups.
+
+Action type + parse (bare + `window_days`), execute handler (fetch → `buildRecruiterClassify`
+via `llmFallback` → `runRecruiterRadar` with `{windowDays, capHit}` → speak `newOutreach` via
+`formatRecruiterOutput` → G-6 read hint → G-2 `errorDetail`), Stage-1 fetch, GMAIL prompt
+triggers, `KNOWN_SAFE`. G-2 verified end-to-end: `errorDetail` is logged to `speech_log`
+(`source:"error"`) at krishna.context.tsx:1927 even on `ok:true` degraded answers. `capHit`
+threaded correctly. Graceful degrade to heuristic when no `llmFallback`. +76 lines of handler
+tests (mocked fetch+classify: happy path, fetch-failure, window_days). tsc clean, 496 green.
+
+**RR-2 · MEDIUM · follow-up (needs G-13 live data) · Stage-1 fallback fires on "0 results", not
+just on operator failure.** `gmailFetchRecruiterCandidates` (gmail.ts) does
+`tryFetch("category:primary …")` and falls through to `in:inbox` whenever primary returns
+**0 OR throws**. Consequence: on the COMMON bare ask with simply no new primary mail, it does a
+full inbox sweep (1 list + up to 25 metadata fetches + an LLM classify on random inbox mail)
+**and** leaks the spoken prefix *"I checked your inbox, sir — "* on every empty-primary ask —
+misrepresenting normal operation as a fallback. The plan's pre-flight intent was a **one-time**
+determination of whether `category:primary` is honored on the account, not a per-request
+"0 → sweep." **Fix after G-13 live pre-flight:** if `category:primary` IS honored → fall back
+only on **error**, treat 0 as a valid empty answer (no prefix, no sweep); if it is NOT honored
+on the owner's account → drop `category:primary` entirely and use `in:inbox` (then it's not a
+fallback, so no prefix). Fails safe today (never misses mail), so non-blocking.
+
+**RR-3 · MEDIUM · follow-up (fix before relying on stage-2) · classify JSON parsing is not robust
+to fenced/prefixed model output.** `buildRecruiterClassify` (actions.ts) does `JSON.parse(raw)`
+directly. This is a **weak model**; it frequently wraps JSON in ```json fences or adds a
+preamble ("Here is the classification:"). Any of that → `JSON.parse` throws →
+`checkRecruiters` catches → **silent heuristic degradation** (the crude regex + a "running blind"
+hedge) on EVERY ask — i.e. stage-2 LLM classification may never actually run in practice, which
+defeats the two-stage design's whole point. **Fix (cheap, high value):** before parsing, strip
+```json / ``` fences and extract the substring from the first `[` to the last `]`; then parse.
+Add a test with a fenced-JSON mock. Fails safe (degrades, doesn't crash), so non-blocking — but
+do this before trusting the classifier live.
+
 ---
 
 ## Branch relocation (2026-07-04, reviewer)
