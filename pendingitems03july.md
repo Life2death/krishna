@@ -40,8 +40,20 @@ git checkout -b <track-name> main
 the reviewer's `D:\Learning\krishna` and git will refuse. Branching off it directly (as above)
 works fine.
 
+**One branch per track — never mix tracks on one branch.** Each item below names the exact
+branch to use. If a branch is named as ALREADY EXISTING (e.g. `fix/gmail-recruiter-radar` for
+item 13, which the reviewer relocated R1 onto), **check it out and continue on it** — do NOT
+create a new one and do NOT stack a second track's commits on another track's branch. (This
+already bit us once: recruiter-radar R1 was wrongly committed on the gmail-fix branch and the
+reviewer had to relocate it.)
+
+**Fix outstanding review NITs/bugs before the NEXT phase of the same track.** If a phase is
+APPROVED-with-NITs, land a dedicated cleanup commit (e.g. `fix(<track>-<phase>-nits)`) that
+clears them — tsc+vitest green, STOP, report — *before* starting the next phase.
+
 When a track's work is reviewed and approved, the reviewer merges your branch into `main` from
-the main checkout. You never merge or push.
+the main checkout. You never merge or push. (Pushing a feature branch to origin also violates
+the no-push rule — it already happened once with `fix/gmail-latest-email`; do not repeat.)
 
 ## Commit + review protocol
 
@@ -110,14 +122,35 @@ the main checkout. You never merge or push.
   "any emails from recruiters?" as a first-class action — two-stage (broad Primary-category
   recall → one LLM classification call), stateful "since I last asked", spoken count + up to
   3 briefs. Owner says this will be his MOST-ASKED question — prioritized right after G-12.
-  All 4 design decisions already captured from the owner in the plan header. Branch
-  `fix/gmail-recruiter-radar` off `main` **after item 12 merges** (both touch gmail.ts + the
-  GMAIL prompt section). Commit prefix `feat(recradar-rN)` (R1–R3).
+  All 4 design decisions already captured from the owner in the plan header. Commit prefix
+  `feat(recradar-rN)` (R1–R3). **Findings/review:** `GMAIL_RECRUITER_RADAR_REVIEW_FINDINGS.md`.
+  - **BRANCH TO USE (fixed — do not create another):** `fix/gmail-recruiter-radar`. It already
+    exists off the post-item-12 `main` and contains R1 (reviewer relocated R1 there as
+    `c393ee2`; the old `8ed1684` on `fix/gmail-latest-email` is abandoned). In `krishna-m15`:
+    ensure the tree is clean, then `git checkout fix/gmail-recruiter-radar` and work there.
+    Do NOT keep using `fix/gmail-latest-email` (redundant now — delete it after switching) and
+    do NOT branch a new one.
+  - **R1 STATUS: done + reviewer-APPROVED (`c393ee2`), but 5 NITs MUST be fixed BEFORE R2**
+    (one cleanup commit `fix(recradar-r1-nits)` on the same branch, tsc+vitest green, then STOP
+    and report). The NITs (full detail in the findings file):
+    1. Remove the dead `import type { ToolContext }` (recruiter-radar.ts line 1).
+    2. `isValidClassifications`: reject a non-bijection — require the set of returned ids to
+       equal the set of candidate ids (today a repeated id + omitted id passes and silently
+       drops a candidate).
+    3. `capHit`: stop inferring it from `count >= MAX_CANDIDATES`; the fetch layer must pass
+       `capHit` explicitly (wire this when R2's fetch lands — acceptable to defer the actual
+       wiring to R2, but change the signature/contract now so R2 can supply it).
+    4. Fallback brief must not speak the raw `from` email address (`buildBrief`, line 161) —
+       use a display-name/trimmed sender (same "no raw data in speech" rule as item 14).
+    5. `formatSince` "this morning" is time-of-day-blind — cosmetic, fix only if quick.
 
 **→ NEXT for the agent: Item 14 (travel route-name garble) FIRST — tiny (~1 line), live daily-use
-bug the owner hit at 18:03 today.** Then **Item 13 (R1 done → R2–R3, recruiter radar)** — owner's
-top day-to-day ask; first relocate R1 (`8ed1684`) off `fix/gmail-latest-email` onto a fresh
-`fix/gmail-recruiter-radar` off the new `main`.
+bug the owner hit at 18:03 today.** (Branch `fix/travel-route-name` off `main`, prefix
+`fix(trvspeak-N)`.) Then **Item 13 recruiter radar**, in this exact order on the ALREADY-EXISTING
+branch `fix/gmail-recruiter-radar` (relocation done by reviewer — do NOT re-branch):
+  1. Switch `krishna-m15` to `fix/gmail-recruiter-radar` (see Item 13 branch note).
+  2. **Fix the 5 R1 NITs** → commit `fix(recradar-r1-nits)` → tsc+vitest green → STOP + report.
+  3. Only after that: R2 (state + windowing), then R3 (action/prompt wiring).
 Then **Item 10-J1 + J3** — pipeline URL alias (J1) + application profile store (J3),
 both in the Krishna repo, both unblocked. Branch `feat/job-autopilot` off `main`. See `JOB_AUTOPILOT_PLAN.md`.
 
