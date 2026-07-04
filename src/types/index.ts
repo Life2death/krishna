@@ -9,3 +9,4 @@ export * from "./learned-action";
 export * from "./plan";
 export * from "./skill";
 export * from "./memory";
+export * from "./application-profile";

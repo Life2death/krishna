@@ -12,6 +12,7 @@ import {
   VoiceIdSettings,
   MapsSettings,
   GmailSettings,
+  ApplicationProfileSettings,
 } from "./components";
 import {
   ResponseLength,
@@ -104,6 +105,9 @@ const Settings = () => {
 
       {/* Gmail */}
       <GmailSettings />
+
+      {/* Application Profile */}
+      <ApplicationProfileSettings />
 
       {/* Integrations (GitHub, etc.) */}
       <Integrations />
