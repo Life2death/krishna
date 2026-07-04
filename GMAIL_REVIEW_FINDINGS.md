@@ -177,3 +177,86 @@ urgent, but worth consolidating into one module next time this file is touched.
 top-priority defect class already called out elsewhere in this queue); G-4/G-5/G-6 mean the
 confirm flow and the search→read flow don't actually work as documented for real usage. Fix
 G-1 through G-6 before this is live-tested with a real Gmail account.
+
+---
+
+## Fix pass — commit 7f39732 (`fix/gmail-review-G1-G6`, reviewed 2026-07-04)
+
+Checked the real diff (`git show 7f39732`), not just the summary. 17 gmail unit tests + 9 actions
+tests added.
+
+### G-1 · FIXED (commit 7f39732) — verified correct
+`sanitizeEmailField()` strips `\r`/`\n` from `to`/`subject`/`cc`/`bcc` before header construction;
+`isValidEmail()` additionally rejects the field if it doesn't look like `local@domain.tld` (which
+also catches whitespace left behind by concatenation, e.g. a stripped
+`"victim@test.com\r\nBcc: x@evil.com"` becomes `"victim@test.comBcc: x@evil.com"` — no longer a
+valid email, so `isValidEmail` rejects it too). Sanitize-then-validate is solid defense in depth.
+Tests directly exercise the stripping (`gmail.test.ts`). Confirmed fixed.
+
+### G-2 · FIXED (commit 7f39732) — verified correct
+All four `gmail_*` branches in `src/lib/actions.ts` now do
+`result.success ? (result.output || fallback) : (result.error || fallback)`. Real errors reach
+`spokenResponse` → `logOutcome`. Matches the fix pattern exactly. Confirmed fixed.
+
+### G-3 · FIXED (commit 7f39732) — verified correct
+Each catch block now does `getResponseSettings().honorific` (wrapped in try/catch for the case
+settings aren't available) and interpolates it directly instead of leaving the `{honorific}`
+template token. Confirmed fixed.
+
+### G-4 · FIXED but introduced a new bug — see G-11 below
+`resolveActionForConfirm` now returns `pendingResult: { found: true, target: "", displayName,
+actionToResume: JSON.stringify(action) }` for both `gmail_send` and `travel_time`, and
+`krishna.context.tsx` gained a new `pending.type === "action" && pending.pendingResult?.actionToResume`
+branch (correctly ordered *before* the pre-existing `pending.pendingResult?.target` branch, so it
+doesn't get shadowed) that parses and re-executes the action via `executeAction()` on "yes". The
+dead-end is genuinely gone — confirming now does something. But see **G-11**: for `gmail_send`
+specifically, this resume path calls `executeAction`, which unconditionally calls
+`gmailSendEmailTool.run()`, which unconditionally calls `confirmOrAbort()` again internally —
+producing a second confirmation prompt the design didn't intend.
+
+### G-5 · FIXED (commit 7f39732) — verified correct
+New `setVerbatimConfirm`/`getVerbatimConfirm` pair in `mcp-bridge.ts`, wired in
+`krishna.context.tsx` to speak the question string verbatim (no "Should I run the tool..."
+wrapping). `gmail.ts`'s `confirmOrAbort` now calls `getVerbatimConfirm()` instead of
+`getConfirmAction()`. Confirmed fixed — the send confirmation is now a clean, correct sentence.
+
+### G-6 · FIXED (commit 7f39732), with one UX trade-off worth a follow-up
+`formatSearchOutput` now appends `` `To read the newest one, use gmail_read with id "${top.id}".` ``
+so the ID lands in `spokenResponse`, which is what gets recorded into `ConversationTurn` — the
+model can now genuinely echo the ID back in a later turn. This solves the actual bug. **New,
+lower-priority observation:** because `spokenResponse` is also literally what gets spoken via TTS
+(`speakLogged(result.spokenResponse, ...)`), Krishna will now read the raw Gmail message ID
+(a long opaque alphanumeric string, e.g. "18abc123") out loud on every search with results. That's
+a real UX cost traded for correctness — worth a future pass to split "what's spoken" from "what's
+recorded for model context" (there's precedent for this kind of split in the `kind: "answer" |
+"status"` field already in this codebase) rather than overload one string for both. Not blocking.
+
+### G-11 · NEW BUG (found during this retest) · gmail_send now requires TWO confirmations under the unverified-speaker gate
+Trace: unverified speaker says "send email to X" → `resolveActionForConfirm` asks "Send email to
+X with subject Y?" (confirmation #1) → user says "yes" → the new `actionToResume` branch in
+`krishna.context.tsx` calls `executeAction(action)` → which calls `gmailSendEmailTool.run()`
+(`packages/core/tools/gmail.ts`) → which **unconditionally** calls
+`confirmOrAbort(`Send email to ${to}...`)` → `getVerbatimConfirm()` → this sets up a *second*
+`pendingConfirmationRef` (type `"mcp_tool"`) and speaks the *same question again* (confirmation
+#2), which the user must also answer "yes" to before the email actually sends. The tool has no
+way to know it's being invoked from an already-confirmed resume path, so it re-asks. Not a
+security hole (worst case is an annoying double-yes, not an unconfirmed send), and it only
+manifests when `isUnverified` is true (voice-ID enrolled + mature + speaker mismatch — not yet the
+default path per `voice-id-android-control-plan` status), so it does **not** block live-testing
+gmail_send on the normal (verified-speaker) path. It does need a fix before Voice-ID Phase 3
+(pending item 7) goes live, or a real user will get double-prompted for every unverified-speaker
+email send. New tests (`actions.test.ts` G-4 suite) mock `gmailSendEmailTool.run` directly, which
+is why this didn't surface — they never exercise the real tool's internal `confirmOrAbort` call
+in the resumed-execution path. **Fix:** thread a "pre-confirmed" flag/context through
+`executeAction`/`gmailSendEmailTool.run` for the resume path (e.g. an optional `ctx.preConfirmed`
+that `confirmOrAbort` short-circuits on), or have the resume branch call a lower-level
+send-without-reconfirm function directly instead of going back through the full tool.
+
+---
+**Verdict: G-1, G-2, G-3, G-5, G-6 confirmed fixed — approved for live-testing gmail_send /
+search / read on the normal (verified-speaker) path**, which is what real usage exercises today
+(Voice-ID gating isn't live yet). G-11 (double-confirm under the unverified-speaker path) should
+be fixed before Voice-ID Phase 3 ships, not before this. Remaining open NITs from the first pass
+(G-7 test-coverage gap — now partially closed but still doesn't cover the resume/confirm
+integration path that hid G-11; G-8 unused OAuth state; G-9 no cancel button for a stuck OAuth
+connect; G-10 duplicated token-refresh logic) are still open, still low priority, not blocking.
