@@ -789,7 +789,81 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
+  // Explicit user save-commands that skip the confirmation gate (owner request 2026-07-04):
+  // when the user literally says "remember …" / "update your database", asking "should I
+  // remember?" is redundant — save straight to the DB and just confirm it's done. The confirm
+  // gate still applies to PROACTIVE/inferred saves (the model deciding to remember something
+  // on its own), which don't match this pattern.
+  const EXPLICIT_SAVE_INTENT = /\bremember\b|\bupdate\s+(your\s+)?(data\s?base|memory|notes?)\b|\bnote\s+(this|that)\s+down\b|\bmake\s+a\s+note\b/i;
+
+  // Single source of truth for actually persisting a memory (used by the instant-save path
+  // AND the confirm-"yes" path). Persists, audit-logs (reversible), records + speaks the
+  // confirmation, and logs the outcome truthfully.
+  const saveMemoryNow = async (
+    key: string | null,
+    value: string,
+    inputText: string,
+    captureId?: string,
+  ) => {
+    const hon = getResponseSettings().honorific || "sir";
+    setStatus("thinking");
+    try {
+      const now = Date.now();
+      const memoryId = String(now);
+      await createMemory({
+        id: memoryId,
+        key: key || null,
+        value,
+        source: "explicit",
+        confirmed: 1,
+        createdAt: now,
+        lastUsedAt: null,
+      });
+      try {
+        await createAuditEntry({
+          id: String(Date.now()),
+          actionType: "memory_write",
+          summary: "Remembered " + value,
+          result: "ok",
+          reversible: 1,
+          undoPayload: JSON.stringify({ kind: "memory", id: memoryId }),
+          createdAt: Date.now(),
+        });
+      } catch { /* non-critical */ }
+      const speak = key ? `Saved your ${key}, ${hon}.` : `Saved, ${hon}.`;
+      logOutcome(inputText ?? "", "answered", undefined, undefined, speak, "voice", captureId);
+      await recordTurn(inputText || "", speak);
+      setLastSpoken(speak);
+      setKrishnaSpeaking(true);
+      setStatus("speaking");
+      try {
+        await speakLogged(speak, "answer", captureId);
+      } finally {
+        setKrishnaSpeaking(false);
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Failed to save memory";
+      logOutcome(inputText ?? "", "failed", "tool_failed", msg, undefined, "voice", captureId);
+      const line = `I had trouble saving that, ${hon}.`;
+      await recordTurn(inputText || "", line);
+      setStatus("speaking");
+      setKrishnaSpeaking(true);
+      try {
+        await speakLogged(line, "error", captureId);
+      } finally {
+        setKrishnaSpeaking(false);
+      }
+    } finally {
+      setStatus("idle");
+    }
+  };
+
   const promptMemoryConfirmation = useCallback(async (key: string | null, value: string, inputText: string) => {
+    // Instant-save fast path: the user explicitly commanded a save — skip the confirm gate.
+    if (EXPLICIT_SAVE_INTENT.test(inputText)) {
+      await saveMemoryNow(key, value, inputText, currentCaptureIdRef.current ?? undefined);
+      return;
+    }
     // T4-F6(c): keep the read-back SHORT so it doesn't consume the 15s confirm window when the
     // value is long (e.g. a full address). Ask by key when we have one; only read a short value
     // back when there's no label to refer to.
@@ -979,55 +1053,12 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
               setStatus("idle");
             }
           } else if (pending.type === "memory" && pending.memoryData) {
-            setStatus("thinking");
-            try {
-              const now = Date.now();
-              const memoryId = String(now);
-              await createMemory({
-                id: memoryId,
-                key: pending.memoryData.key || null,
-                value: pending.memoryData.value,
-                source: "explicit",
-                confirmed: 1,
-                createdAt: now,
-                lastUsedAt: null,
-              });
-              try {
-                await createAuditEntry({
-                  id: String(Date.now()),
-                  actionType: "memory_write",
-                  summary: "Remembered " + pending.memoryData.value,
-                  result: "ok",
-                  reversible: 1,
-                  undoPayload: JSON.stringify({ kind: "memory", id: memoryId }),
-                  createdAt: Date.now(),
-                });
-              } catch { /* non-critical */ }
-              const speak = "Got it, I'll remember that " + pending.memoryData.value;
-              logOutcome(pending.input ?? "", "answered", undefined, undefined, speak, "voice", pending.captureId);
-              await recordTurn(pending.input || "", speak);
-              setLastSpoken(speak);
-              setKrishnaSpeaking(true);
-              setStatus("speaking");
-              try {
-                await speakLogged(speak, "answer", pending.captureId);
-              } finally {
-                setKrishnaSpeaking(false);
-              }
-            } catch (err) {
-              const msg = err instanceof Error ? err.message : "Failed to save memory";
-              logOutcome(pending.input ?? "", "failed", "tool_failed", msg, undefined, "voice", pending.captureId);
-              await recordTurn(pending.input || "", "I had trouble: " + msg);
-              setStatus("speaking");
-              setKrishnaSpeaking(true);
-              try {
-                await speakLogged("I had trouble: " + msg, "error", pending.captureId);
-              } finally {
-                setKrishnaSpeaking(false);
-              }
-            } finally {
-              setStatus("idle");
-            }
+            await saveMemoryNow(
+              pending.memoryData.key || null,
+              pending.memoryData.value,
+              pending.input ?? "",
+              pending.captureId,
+            );
           } else if (pending.type === "mcp_tool" && pending.resolve) {
             pending.resolve(true);
             setStatus("thinking");
