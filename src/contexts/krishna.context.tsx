@@ -1913,6 +1913,15 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
                   plan.detail,
                   result.spokenResponse,
                 );
+                if (result.errorDetail) {
+                  logSpeech({
+                    id: crypto.randomUUID(),
+                    text: result.errorDetail,
+                    source: "error",
+                    relatedCommandId: currentCaptureIdRef.current ?? null,
+                    createdAt: Date.now(),
+                  }).catch(() => {});
+                }
                 setStatus("speaking");
                 setLastSpoken(result.spokenResponse);
                 setKrishnaSpeaking(true);

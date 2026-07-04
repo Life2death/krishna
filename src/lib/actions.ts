@@ -109,7 +109,7 @@ export function decideActionResponse(
       recordTurn: true,
       outcome: result.ok !== false ? "answered" : "failed",
       failureReason: result.ok !== false ? undefined : "tool_failed",
-      detail: result.ok !== false ? undefined : result.spokenResponse,
+      detail: result.errorDetail || (result.ok !== false ? undefined : result.spokenResponse),
     };
   }
 
@@ -123,7 +123,7 @@ export function decideActionResponse(
       recordTurn: true,
       outcome: toolFailed ? "failed" : "answered",
       failureReason: toolFailed ? "tool_failed" : undefined,
-      detail: toolFailed ? result.spokenResponse : undefined,
+      detail: result.errorDetail || (toolFailed ? result.spokenResponse : undefined),
     };
   }
 
@@ -139,7 +139,7 @@ export function decideActionResponse(
     recordTurn: true,
     outcome: toolFailed ? "failed" : "answered",
     failureReason: toolFailed ? "tool_failed" : undefined,
-    detail: toolFailed ? result.spokenResponse : undefined,
+    detail: result.errorDetail || (toolFailed ? result.spokenResponse : undefined),
   };
 }
 
