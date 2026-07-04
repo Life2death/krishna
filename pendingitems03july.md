@@ -86,15 +86,30 @@ the main checkout. You never merge or push.
   in `D:\Learning\job-hunter`), reviewed+verified (pytest 14/14). **Code done — awaiting OWNER DEPLOY**
   (see owner action below); not merged by the reviewer since it's a separate repo the owner pushes.
 
-- 🔴 **NEW — Item 12 (live-blocking, top priority): Gmail "latest email" (no filter) fails** —
-  owner hit this live 2026-07-04, first real Gmail session, immediately (OAuth/connection are
-  fine). Asking "what's my latest email?" makes the model call `gmail_search` with an empty
-  `query`, and the tool hard-errors on that even though Gmail's own API doesn't require `q`.
-  Fix is two small parts: tool accepts empty query as "no filter, most recent N", plus one new
-  prompt example. Full repro + fix in `GMAIL_REVIEW_FINDINGS.md` (finding **G-12**). Branch
-  `fix/gmail-latest-email` off `main`. Commit prefix: `fix(gmail-g12)`.
+- 🔴 **Item 12 (live-blocking, top priority): Gmail live-repair — G-13 NOW LEADS.**
+  Status 2026-07-04 evening:
+  - **G-13 · OPEN · BLOCKER:** OAuth token exchange has ALWAYS failed — `complete_gmail_oauth`
+    builds `redirect_uri` from the **browser's ephemeral port** (`accept()` returns the peer
+    addr) instead of the listener's port, so Google rejects every exchange and tokens are never
+    stored. The "Krishna Gmail authorized" browser tab is written BEFORE the exchange, so it
+    lies. Owner hit this live at 17:44 ("any email from Archer?" → "Gmail is not connected").
+    Root-caused in code, full fix spec in `GMAIL_REVIEW_FINDINGS.md` G-13. **Fix this FIRST —
+    no Gmail feature works until tokens persist.** Same branch `fix/gmail-latest-email`,
+    prefix `fix(gmail-g13)`.
+  - **G-12 (empty query) + G-11 (double confirm): FIXED in `0173980`, reviewer-verified in the
+    diff — but cannot be live-verified until G-13 lands.** NIT G-14: `0173980` added zero
+    tests (empty-query + preConfirmed-skip tests wanted, not blocking).
+
+- 🆕 **Item 13 — Recruiter radar** (`GMAIL_RECRUITER_RADAR_PLAN.md`, owner request 2026-07-04):
+  "any emails from recruiters?" as a first-class action — two-stage (broad Primary-category
+  recall → one LLM classification call), stateful "since I last asked", spoken count + up to
+  3 briefs. Owner says this will be his MOST-ASKED question — prioritized right after G-12.
+  All 4 design decisions already captured from the owner in the plan header. Branch
+  `fix/gmail-recruiter-radar` off `main` **after item 12 merges** (both touch gmail.ts + the
+  GMAIL prompt section). Commit prefix `feat(recradar-rN)` (R1–R3).
 
 **→ NEXT for the agent: Item 12 (G-12) first — small, live-blocking, already-merged-code bug.**
+Then **Item 13 (R1–R3, recruiter radar)** — owner's top day-to-day ask.
 Then **Item 10-J1 + J3** — pipeline URL alias (J1) + application profile store (J3),
 both in the Krishna repo, both unblocked. Branch `feat/job-autopilot` off `main`. See `JOB_AUTOPILOT_PLAN.md`.
 

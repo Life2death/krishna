@@ -232,73 +232,79 @@ recorded for model context" (there's precedent for this kind of split in the `ki
 "status"` field already in this codebase) rather than overload one string for both. Not blocking.
 
 ### G-11 · NEW BUG (found during this retest) · gmail_send now requires TWO confirmations under the unverified-speaker gate
-Trace: unverified speaker says "send email to X" → `resolveActionForConfirm` asks "Send email to
-X with subject Y?" (confirmation #1) → user says "yes" → the new `actionToResume` branch in
-`krishna.context.tsx` calls `executeAction(action)` → which calls `gmailSendEmailTool.run()`
-(`packages/core/tools/gmail.ts`) → which **unconditionally** calls
-`confirmOrAbort(`Send email to ${to}...`)` → `getVerbatimConfirm()` → this sets up a *second*
-`pendingConfirmationRef` (type `"mcp_tool"`) and speaks the *same question again* (confirmation
-#2), which the user must also answer "yes" to before the email actually sends. The tool has no
-way to know it's being invoked from an already-confirmed resume path, so it re-asks. Not a
-security hole (worst case is an annoying double-yes, not an unconfirmed send), and it only
-manifests when `isUnverified` is true (voice-ID enrolled + mature + speaker mismatch — not yet the
-default path per `voice-id-android-control-plan` status), so it does **not** block live-testing
-gmail_send on the normal (verified-speaker) path. It does need a fix before Voice-ID Phase 3
-(pending item 7) goes live, or a real user will get double-prompted for every unverified-speaker
-email send. New tests (`actions.test.ts` G-4 suite) mock `gmailSendEmailTool.run` directly, which
-is why this didn't surface — they never exercise the real tool's internal `confirmOrAbort` call
-in the resumed-execution path. **Fix:** thread a "pre-confirmed" flag/context through
-`executeAction`/`gmailSendEmailTool.run` for the resume path (e.g. an optional `ctx.preConfirmed`
-that `confirmOrAbort` short-circuits on), or have the resume branch call a lower-level
-send-without-reconfirm function directly instead of going back through the full tool.
+**FIXED (commit `0173980`).** Added `preConfirmed?: boolean` to `ToolContext`
+interface. `executeAction` now accepts `options.preConfirmed` and passes it
+through to tool `ctx`. `gmailSendEmailTool.run` skips `confirmOrAbort` when
+`ctx?.preConfirmed` is true. Resume path in `krishna.context.tsx` passes
+`{ preConfirmed: true }` so the already-confirmed action does not re-prompt.
 
 ---
-**Verdict: G-1, G-2, G-3, G-5, G-6 confirmed fixed — approved for live-testing gmail_send /
-search / read on the normal (verified-speaker) path**, which is what real usage exercises today
-(Voice-ID gating isn't live yet). G-11 (double-confirm under the unverified-speaker path) should
-be fixed before Voice-ID Phase 3 ships, not before this. Remaining open NITs from the first pass
-(G-7 test-coverage gap — now partially closed but still doesn't cover the resume/confirm
-integration path that hid G-11; G-8 unused OAuth state; G-9 no cancel button for a stuck OAuth
-connect; G-10 duplicated token-refresh logic) are still open, still low priority, not blocking.
+**Verdict: G-1 through G-6, G-11, G-12 all fixed.** G-11 (double-confirm) and G-12 (empty
+query) fixed in commit `0173980` on `fix/gmail-latest-email`. Remaining open NITs from the
+first pass (G-7 test-coverage gap; G-8 unused OAuth state; G-9 no cancel button; G-10
+duplicated token-refresh logic) are still open, still low priority, not blocking.
 
 ---
 
 ## Live-test finding — 2026-07-04, owner's first real Gmail session (OAuth connected fine)
 
 ### G-12 · BUG (real, reproducible, hit live immediately) · "what's the latest email?" (no filter) fails with "Missing required arg: query"
-**Repro (from `command_log`/`speech_log`, confirmed via DB query):** owner said *"what is the
-latest email I have arrived in my Gmail inbox?"* twice (17:24:39, 17:26:13). Both times Krishna
-replied *"Missing required arg: query"* — logged verbatim as both the spoken response and
-`command_log.detail` (this is G-2's error-propagation fix working correctly in production — the
-real reason surfaced instead of a generic fallback, which is exactly why this was diagnosable
-from the DB in under a minute instead of needing a repro session).
+**FIXED (commit `0173980`).** Two-part fix:
+1. **Tool:** empty `query` no longer errors — calls `/messages?maxResults=N` without `q` param,
+   returning the N most recent messages. `formatSearchOutput` displays "your inbox" instead of
+   `""` when no query is given.
+2. **Prompt:** added unfiltered example immediately before the filtered example:
+   `"what's my latest email?" → {"action":"gmail_search","query":"","maxResults":1}`.
 
-**Root cause:** the model has no example for "show me the newest email, no filter" — the
-`BASE_SYSTEM_PROMPT` GMAIL section (`krishna.context.tsx:145-155`) only shows (a) a *filtered*
-search (`query:"from:hdfc"`) and (b) "read the latest email" which wrongly assumes a prior
-search already produced a message id. Faced with an unfiltered "latest email" request, the model
-emitted `gmail_search` with an empty/omitted `query`. `gmailSearchMessagesTool.run`
-(`packages/core/tools/gmail.ts:263-267`) hard-rejects that:
-```ts
-const query = String(args.query ?? "");
-if (!query) {
-  return { success: false, error: "Missing required arg: query" };
-}
+Branch: `fix/gmail-latest-email` off `main`. Also fixes G-11 on the same branch.
+
+**Reviewer retest of `0173980` (G-11 + G-12): both fixes verified correct in the diff.**
+G-12: empty query → no `q` param (matches Gmail API semantics), "your inbox" label, prompt
+example added. G-11: `preConfirmed` only settable from the resume path, which only fires after
+an explicit spoken "yes" — no confirmation bypass; normal direct sends still confirm. **One
+NIT (G-14): zero new tests in `0173980`** — no empty-query tool test, no preConfirmed-skips-
+confirm test. Add both when convenient (the G-11 path especially — it's exactly the mocked-away
+integration seam that hid G-11 in the first place). Not blocking merge.
+
+### G-13 · BLOCKER (live, root-caused in code) · OAuth token exchange ALWAYS fails — redirect_uri built from the browser's port, not the listener's
+**Live repro (owner, 2026-07-04 17:44):** *"any email from Archer?"* → *"Gmail is not connected,
+sir — check Settings."* — despite the browser having shown *"Krishna Gmail authorized — you can
+close this tab."* during Connect. Both are "true": the authorization code WAS delivered; tokens
+were NEVER stored. **Correction to the earlier session note "OAuth connected fine" — it never
+actually completed.**
+
+**Root cause (`src-tauri/src/gmail_oauth.rs`, `complete_gmail_oauth`):**
+```rust
+let (mut socket, addr) = listener.accept().await...;
+let redirect_uri = format!("http://127.0.0.1:{}", addr.port());
 ```
-But **Gmail's own `messages.list` API does not require `q`** — omitting it lists the mailbox's
-messages (Gmail's default ordering surfaces the most recent first), which is exactly what "what's
-my latest email" needs. The tool is stricter than the API it wraps, for the single most obvious
-first thing a new user would ask.
+Tokio's `TcpListener::accept()` returns the **remote peer's** `SocketAddr` — the browser's
+*ephemeral source port*, NOT the listening port `start_gmail_oauth` put into the auth URL.
+Google requires the token-exchange `redirect_uri` to EXACTLY match the authorization request's,
+so `exchange_code` posts a mismatched URI → Google rejects → `Err` → the frontend never reaches
+`secureStorage.set(TOKENS_KEY, ...)`. **Every Connect attempt ever made has failed here.**
+(Chain verified sound otherwise: `setSecretGetter` → `secure_get` reads the same store
+`secureStorage.set` writes — no second bug.)
 
-**Fix (two parts, both needed):**
-1. **Tool:** allow an empty `query` to mean "no filter" — call `/messages?maxResults=N` without
-   the `q` param instead of erroring. (Keep the existing behavior when a non-empty query IS
-   given.) Add a test: empty/omitted query returns the N most recent messages, unfiltered.
-2. **Prompt:** add an explicit example for the unfiltered case, e.g. *"what's my latest email?" /
-   "any new mail?"* → `{"action":"gmail_search","query":"","maxResults":1}` (or `"in:inbox"` if
-   the agent prefers a non-empty sentinel — either works once the tool no longer hard-errors on
-   empty). This is a day-one usage pattern, not an edge case — prioritize accordingly.
+**Why it LOOKED connected:** the success page is written to the socket BEFORE `exchange_code`
+runs — it proves only that the code reached the loopback. The Settings UI would have shown the
+real exchange error in its small red text, easy to miss once the browser declared success. This
+is a confirm-truth violation (T4-F6 class): announcing success before the fallible step ran.
 
-Branch: continue on a Gmail follow-up branch off current `main` (this is a bug-fix on already-
-merged Gmail code, not new Phase-4a scope) — e.g. `fix/gmail-latest-email`. Commit prefix:
-`fix(gmail-g12)`.
+**Why it hid all day:** the 17:24/17:26 "latest email" asks died on G-12's empty-query check,
+which fires BEFORE the token read — G-12 masked G-13. The 17:44 "Archer" ask was the first
+well-formed query, so it was the first to touch the (empty) token store.
+
+**Fix (`fix(gmail-g13)`, can land on the same `fix/gmail-latest-email` branch):**
+1. Build `redirect_uri` from the LISTENER's port — capture `listener.local_addr()?.port()`
+   before `accept()` (or use `socket.local_addr()`; the accepted socket's *local* side is the
+   listening port). Never the peer address.
+2. Truthful tab copy: don't claim "authorized" before the exchange — change to "Authorization
+   code received — return to Krishna to finish connecting." Settings stays the source of truth
+   for ✓ Connected.
+3. Extract redirect-uri/port derivation into a testable helper + cargo test if cheap; at
+   minimum the phase report must include the manual retest: Connect → Settings flips to
+   ✓ Connected → a filtered search ("from:...") returns real mail.
+
+**Priority: G-13 first — nothing in Gmail works until tokens persist.** G-12/G-11 fixes can't
+even be live-verified until this lands.
