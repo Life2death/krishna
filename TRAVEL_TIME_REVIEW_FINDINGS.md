@@ -414,5 +414,65 @@ addition. This will otherwise recur on every other machine (or CI, or a fresh de
 that already ran migrations once) that has migration 15 applied from before this edit landed.
 No further action needed on `sync-v2.sql` itself; just don't repeat the pattern.
 
+## T4 — owner live retest ROUND 2 (2026-07-04, FAILED again at acceptance item 1, new root cause)
+
+Reviewer verified against the live DB (read-only): **`memories` table = 0 rows** after the
+owner's two remember turns; `command_log` shows both turns logged `answered` with the model's
+"Saving that now, sir" / "Saved, sir…" prose. Sequence reconstructed from code + owner report
+(he repeatedly heard "I'll forget about it." — the literal string at the memory-confirm
+timeout, `krishna.context.tsx` ~731/~1353):
+
+### T4-F6 · BLOCKER · OPEN — memory confirmation flow: silent 15s timeout + model narrates success before the save is confirmed → "saved" in chat, 0 rows in DB, `answered` in the log
+The remember action WAS emitted this time (so `detectPhantomSave` correctly did not fire —
+this is a NEW failure mode, not a T4-F1 regression). The flow that actually happened:
+1. Model reply: "Saving that now, sir…" (+ remember action block) — spoken AND logged.
+2. App speaks the confirmation question ("Should I remember work address is …?") — **spoken
+   only, never logged/recorded anywhere.**
+3. Owner has already moved on (typing the next address); no "yes" within 15s.
+4. Timeout: `pendingConfirmationRef = null`, app speaks **"I'll forget about it."** — again
+   spoken only, no log row, no chat entry, no outcome update.
+5. Net state: chat + dashboard say success (`answered`), DB has nothing. The owner only
+   discovers via a mystery voice line ("I'll forget about it") with no paper trail. The
+   second address then repeated the identical cycle, and the promised travel-time follow-up
+   ("Now let me check the travel time for you") was **also never executed** (no travel_time
+   action ran or logged) — the model narrated an action it never performed (same
+   narrate-without-doing class as T4-F1, but for actions generally, not just saves).
+**Fixes needed (layered):**
+(a) **Outcome truth:** when a confirmation times out or is declined, UPDATE the originating
+    command's `command_log` row (e.g. outcome `declined` / new `timeout`, detail "memory
+    confirm timed out") and record the spoken timeout line via recordTurn so chat shows what
+    the user heard. A save may only ever be logged `answered` AFTER `addMemory` succeeded
+    (grounding rule from T4-F1 extended to the confirm flow).
+(b) **Prompt/grounding:** the model must not say "Saving/Saved" when emitting a remember
+    action — the action triggers a confirmation the model can't foresee. Teach it to say
+    "Let me confirm that with you, sir" (or say nothing and let the confirm flow speak). The
+    existing phantom-save few-shot should be extended: narrating a FUTURE action ("Now let me
+    check the travel time") that it doesn't emit is the same lie one tense over.
+(c) **UX of the confirm window:** 15s expires while the long address is still being read
+    back + owner is typing. Consider: accept typed "yes" (if text input routes through
+    processCommand), repeat the question once before discarding, and/or shorten the read-back
+    (key only: "Should I remember your work address?").
+(d) Also verify WHY the owner's follow-up speech didn't resolve the confirm — if he spoke
+    during Krishna's TTS, the mic may have been closed (no barge-in on confirm prompts?).
+
+### T4-F7 · FEATURE (owner-requested 2026-07-04) · OPEN — log EVERY spoken utterance to the dashboard, success or failure
+Owner: "I want each thing logged in dashboard whether success or failure … what he is reading
+there — not only success messages — so I can understand what's wrong and fine-tune it."
+Today at least these utterances are TTS-only ghosts (no chat entry, no command_log row):
+confirmation prompts ("Should I remember…?", "Should I run the tool/skill…?"), timeout/decline
+lines ("I'll forget about it.", "I'll take that as a no."), the 1500ms filler ("One moment…"),
+error sentences from the classified-error mapping (logged as detail but not as a spoken-line
+record), and some action-result/status lines depending on path.
+**Implementation sketch (agent):** create ONE choke point — e.g. `speakLogged(text, meta)` in
+`krishna.context.tsx` wrapping `ttsRef.current.speak` — and route EVERY call site through it
+(grep shows ~25+ `ttsRef.current.speak(` sites; none may bypass). `meta.source` enum:
+`answer | status | confirm_prompt | timeout | decline | filler | canned | error | ack`.
+Persist to a new `speech_log` table (id, text, source, related_command_id NULL, created_at)
+via migration **v18 — NEW migration file, do NOT edit existing ones (see T4-F5)** — and add a
+dashboard panel (pattern: LatencyPanel) listing recent utterances with source + linked
+command outcome. Direct `ttsRef.current.speak` becomes lint-forbidden by convention (add a
+code comment at the wrapper). This makes every future voice bug self-evident from the
+dashboard, which is exactly the owner's ask.
+
 ---
 *Log format for the agent: change `OPEN` → `FIXED (p<N> commit <sha>)` with a one-line note.*
