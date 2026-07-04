@@ -1,4 +1,4 @@
-# Pending items — 2026-07-03 — cold-start handoff for the coding agent
+# Pending items — 2026-07-03 (updated 2026-07-04) — cold-start handoff for the coding agent
 
 > **Read this whole file before touching anything.** You are a fresh agent with no memory of
 > prior sessions. This file exists so you, the reviewer (Claude), and the owner (Vikram) stay
@@ -57,7 +57,7 @@ the main checkout. You never merge or push.
 - If a plan document exists for your item (linked below), read it in full before coding — do
   not guess at scope.
 
-## Two gotchas that already bit us once each — do not repeat
+## Three gotchas that already bit us — do not repeat
 
 1. **Secret storage has two unrelated stores.** The app's real secret store is
    `secure_get`/`secure_set` Tauri commands → an AES-256-GCM blob in the app-data dir
@@ -69,41 +69,87 @@ the main checkout. You never merge or push.
 2. **Don't infer "should this be spoken" from string prefixes.** `ExecuteActionResult` (in
    `src/lib/actions.ts`) has an explicit `kind?: "answer" | "status"` field for this — set it
    correctly on every new action, don't reintroduce prefix-sniffing.
+3. **`command_log.outcome = "answered"` does NOT mean the underlying data actually persisted.**
+   Twice now the chat/dashboard showed a cheerful "Saved, sir" while the `memories` table had
+   zero rows — because the MODEL said it saved something without emitting the action block, or
+   narrated a future step it never executed. When debugging "it says X but X didn't happen,"
+   always check the actual table (`sqlite3` against `%APPDATA%/com.krishna.assistant/krishna.db`)
+   — never trust the spoken/logged outcome alone.
 
 ---
 
 ## Pending items, in priority order
 
-### 1. Finish `fix/travel-t4` — P3, P4, P5 (IN PROGRESS — resume here first)
+### 1. Travel tool swallows the real Google API error (NEW — top priority)
 
-**Plan:** `TRAVEL_T4_FIX_PLAN.md` · **Findings:** `TRAVEL_TIME_REVIEW_FINDINGS.md` · **Branch:**
-`fix/travel-t4` already exists in `krishna-m15` at commit `299d0b7` (based on `main`, not yet
-merged back at time of writing) — continue on it, don't create a new branch.
+**Found 2026-07-04** debugging a live failure with the owner. `packages/core/tools/
+get-travel-time.ts` has empty `catch {}` blocks around the Google Routes call and the URL-open
+fallback — when the call fails, the ACTUAL reason (e.g. "No routes found", a 4xx body, a
+malformed address) is discarded before it ever reaches `command_log` or `speech_log`. The user
+just hears "the live traffic lookup didn't go through this time" with zero diagnostic trail.
+This is exactly why today's real failure (empty `memories` table → literal "work" sent as an
+address → Google returned no route) took manual live API reproduction to diagnose instead of a
+five-second DB/log query.
 
-**State:** P1 (speech-filter fix) and P2 (phantom-save grounding) are done, reviewed, and
-merged into `main`. Findings T4-F4 and T4-F1 are `FIXED`. Two items remain **OPEN**:
-- **P3 — T4-F3:** raw network errors ("Network error during API request: Unknown error") are
-  currently spoken/stored verbatim. Plan section "Phase 3" has exact steps — map errors to
-  human sentences before they reach TTS/history; technical detail goes to `command_log` only.
-- **P4 — T4-F2:** a hard crash (`exit 0xcfffffff`) happened once during a network-failed turn.
-  **Repro first, do not blind-fix** — the plan's "Phase 4" section explains the protocol
-  (capture terminal output, audit Rust `unwrap()`/`expect()`/`panic!` in network paths, report
-  candidates before touching code).
-- **P5:** small folds (dedupe the `"home"` default, formatter pass) — only after P3/P4 are
-  green.
+**Fix:** stop swallowing the error. At minimum, pass the caught error's message into the tool's
+return `data` (or a dedicated field) so the caller can `logOutcome(..., "tool_failed", <real
+reason>, ...)` instead of nothing. Consider also emitting a `speech_log` entry with
+`source:"error"` carrying the real reason (redacted if needed) even though the SPOKEN line
+stays the friendly fallback sentence — the dashboard should show the truth even when the voice
+doesn't. Add tests: a Google 4xx and a "no routes found" case must each produce a distinguishable
+logged reason, not silence.
 
-Commit prefix: `fix(travel-t4-pN)`.
-
----
-
-### 2. Owner live-test T4 (not your task — flag it, don't block on it)
-Vikram needs to re-run the T4 acceptance script (save home/work address → confirm it's really
-in the DB → ask "how long to work?" → hear a spoken answer) once P3 is done. This is his task,
-not yours — just don't be surprised if he reports something new mid-way through your other work.
+Branch fresh off `main`, e.g. `fix/travel-error-visibility`. Commit prefix: `fix(travel-errvis-N)`.
 
 ---
 
-### 3. Phase 4a — Gmail client-side (queued after travel-t4 is fully closed)
+### 2. Model narrates actions it never executes (NEW — top priority)
+
+**Found 2026-07-04**, live, alongside item 1. Observed exact sequence: model said *"Saving that
+now, sir. Now let me check the travel time for you"* — the save didn't happen (T4-F6-class
+issue, separately mitigated) AND the travel-time check never ran (no `travel_time` action was
+ever emitted or logged). This is the SAME lying-about-actions pattern `detectPhantomSave`
+(`src/lib/actions.ts`) catches for memory saves specifically — but the model does this for
+OTHER future actions too ("let me check X", "I'll do Y next"), and nothing catches those.
+
+**Fix:** generalize the grounding. Either (a) extend the prompt's existing "never say
+saved/remembered without the action block" rule (`BASE_SYSTEM_PROMPT`, REMEMBER section) to a
+broader rule — never narrate a NEXT action in the same turn; each turn does ONE thing, then
+waits for the next user input — or (b) add a second detector alongside `detectPhantomSave` that
+flags future-tense action narration ("let me", "now I'll", "I'm going to check") with no
+corresponding action/plan block in the same reply, and have the context either strip that
+clause or ground it the same way T4-F1 grounds "saved" claims. Prefer (a) first (prompt fix is
+cheaper and this is a weak-model instruction-following problem) — only add code-side detection
+if the prompt fix doesn't hold up live.
+
+Branch fresh off `main`, e.g. `fix/no-narrated-actions`. Commit prefix: `fix(narrate-N)`.
+
+---
+
+### 3. `fix/travel-t4` — DONE, merged into `main`
+
+All of P1–P5 plus the later T4-F6/T4-F7 work (confirm-timeout truth, speech_log observability)
+landed and merged (`main` tip includes all of it as of 2026-07-04). **T4-F2 (the `0xcfffffff`
+crash) is the only item still open in that file — status `NEEDS-REPRO`**, not scheduled work
+until it recurs with a terminal capture. Nothing to resume here.
+
+Also done this session (2026-07-04, frontend-only, HMR'd + pushed): explicit "remember …" /
+"update your database" commands now save **instantly**, no confirmation prompt (owner request)
+— see `saveMemoryNow()` in `krishna.context.tsx`. The confirm gate still applies to
+proactive/inferred saves the model initiates on its own.
+
+---
+
+### 4. Owner live-test T4 in-app (not your task — flag it, don't block on it)
+Reviewer already seeded the owner's real home/work addresses directly into the DB and confirmed
+the Google Routes call succeeds with them (21.8 km, ~58 min with traffic, Panvel → Mahape). What
+has NOT yet been confirmed is the full voice path in the running app itself — Vikram saying
+"how long to work?" out loud and hearing the spoken answer. Not your task; don't be surprised if
+he reports something new mid-way through items 1–2.
+
+---
+
+### 5. Phase 4a — Gmail client-side (queued after items 1–2 are closed)
 
 **Plan:** `GMAIL_MCP_LOCAL_PHASE4_PLAN.md` (also read the "§Gmail & MCP" section of
 `LOCAL_FIRST_ARCHITECTURE_PLAN.md` it references, and `apps/brain/src/gmail/tools.ts` — you're
@@ -113,9 +159,9 @@ porting its arg/return shapes, not redesigning them). **Branch:** `feat/local-p4
 Goal: move Gmail's 4 tools (search/read/list-labels/send) from the Node "brain" to fully
 client-side (Tauri OAuth loopback + direct Gmail REST calls, no `googleapis` dependency in the
 app). Read tools → `KNOWN_SAFE`; `gmail_send_email` stays sensitive with a real spoken
-confirmation (recipient + subject). **Depends on item 1's P1 fix already being in `main`**
-(Gmail results are `kind:"answer"` speech — without that fix they'd be silently dropped, same
-bug class as T4-F4).
+confirmation (recipient + subject). **Depends on the T4-F4 speech-filter fix already being in
+`main`** (it is — merged; Gmail results are `kind:"answer"` speech, which only gets spoken
+because of that fix — see item 3).
 
 **Owner prerequisite (not yours):** Vikram needs to paste a Google OAuth client_id/secret
 (from the brain's existing keys) into a new Gmail Settings section once you build it.
@@ -124,13 +170,13 @@ Commit prefix: `feat(local-p4a-N)`.
 
 ---
 
-### 4. Network resilience — turn queue + offline handling
+### 6. Network resilience — turn queue + offline handling
 
 **Plan:** `NETWORK_RESILIENCE_PLAN.md`. **Branch:** fresh off `main`, e.g. `feat/network-p1`.
 
 Four phases: P1 turn queue (exactly one turn in flight, FIFO, barge-in preserved — this is the
 "serialize responses" ask), P2 error taxonomy (never speak/store raw errors — same spirit as
-item 1's P3, but this is the general-purpose version), P3 offline detection + one-time spoken
+item 1's fix, but this is the general-purpose version), P3 offline detection + one-time spoken
 announcement + banner, P4 single pre-stream retry. Read the "Explicitly rejected techniques"
 section too — don't reinvent an outbox/websocket/circuit-breaker design, that was already
 considered and rejected.
@@ -140,7 +186,7 @@ creates it at first review).
 
 ---
 
-### 5. Voice ID — Phase 3 + 4 (held since Phase 2, lower priority)
+### 7. Voice ID — Phase 3 + 4 (held since Phase 2, lower priority)
 
 **Plan:** `VOICE_ID_STATUS_METER_PLAN.md` · **Findings:** `VOICE_ID_STATUS_REVIEW_FINDINGS.md`.
 Phases 1 and 2 are done (shared hooks + the Status-page training-meter card). Phase 3 needs:
@@ -156,7 +202,7 @@ Branch fresh off `main`, e.g. `feat/voiceid-p3`. Commit prefix: `feat(voiceid-st
 
 ---
 
-### 6. Phase 4b/4c — MCP hub port + brain retirement
+### 8. Phase 4b/4c — MCP hub port + brain retirement
 Outline only in `GMAIL_MCP_LOCAL_PHASE4_PLAN.md` — detailed spec comes after Phase 4a is
 reviewed. Don't start this until told to.
 
