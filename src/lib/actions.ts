@@ -204,7 +204,7 @@ export async function executeAction(
     );
     return {
       kind: "answer",
-      spokenResponse: result.output || "I couldn't search Gmail.",
+      spokenResponse: result.success ? (result.output || "I couldn't search Gmail.") : (result.error || "I couldn't search Gmail."),
       ok: result.success,
     };
   }
@@ -216,7 +216,7 @@ export async function executeAction(
     );
     return {
       kind: "answer",
-      spokenResponse: result.output || "I couldn't read that message.",
+      spokenResponse: result.success ? (result.output || "I couldn't read that message.") : (result.error || "I couldn't read that message."),
       ok: result.success,
     };
   }
@@ -225,7 +225,7 @@ export async function executeAction(
     const result = await gmailListLabelsTool.run({}, { vars: {} });
     return {
       kind: "answer",
-      spokenResponse: result.output || "I couldn't list labels.",
+      spokenResponse: result.success ? (result.output || "I couldn't list labels.") : (result.error || "I couldn't list labels."),
       ok: result.success,
     };
   }
@@ -237,7 +237,7 @@ export async function executeAction(
     );
     return {
       kind: "status",
-      spokenResponse: result.output || "Failed to send email.",
+      spokenResponse: result.success ? (result.output || "Failed to send email.") : (result.error || "Failed to send email."),
       ok: result.success,
     };
   }
@@ -313,6 +313,12 @@ export async function resolveActionForConfirm(
     return {
       spokenResponse: `Check travel time from ${placeStr} by ${mode}?`,
       needsConfirmation: true,
+      pendingResult: {
+        found: true,
+        displayName: `travel_time: ${placeStr}`,
+        target: "",
+        actionToResume: JSON.stringify({ action: "travel_time", from, to, mode }),
+      } as any,
     };
   }
 
@@ -320,6 +326,12 @@ export async function resolveActionForConfirm(
     return {
       spokenResponse: `Send email to ${action.to} with subject "${action.subject}"?`,
       needsConfirmation: true,
+      pendingResult: {
+        found: true,
+        displayName: `gmail_send: ${action.to}`,
+        target: "",
+        actionToResume: JSON.stringify(action),
+      } as any,
     };
   }
 

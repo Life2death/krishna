@@ -2,7 +2,7 @@ import type { Tool } from "./index";
 import { getSecret } from "../secrets";
 import { getHttpFetch } from "../http";
 import { getResponseSettings } from "../settings";
-import { getConfirmAction } from "./mcp-bridge";
+import { getVerbatimConfirm } from "./mcp-bridge";
 
 const GMAIL_API_BASE = "https://gmail.googleapis.com/gmail/v1/users/me";
 
@@ -112,7 +112,7 @@ async function persistTokens(tokens: GmailTokens): Promise<void> {
   await secureStorage.set(TOKENS_KEY, JSON.stringify(tokens));
 }
 
-function formatSearchOutput(
+export function formatSearchOutput(
   results: SearchResult[],
   query: string,
   honorific: string,
@@ -123,7 +123,11 @@ function formatSearchOutput(
 
   const top = results[0];
   const count = results.length;
-  return `Found ${count} message${count > 1 ? "s" : ""} matching "${query}"${count > 0 ? ` — newest is from ${top.from}: "${top.subject}"` : ""}, ${honorific}.`;
+  let output = `Found ${count} message${count > 1 ? "s" : ""} matching "${query}"${count > 0 ? ` — newest is from ${top.from}: "${top.subject}"` : ""}, ${honorific}.`;
+  if (count > 0) {
+    output += ` To read the newest one, use gmail_read with id "${top.id}".`;
+  }
+  return output;
 }
 
 function formatReadOutput(
@@ -147,7 +151,7 @@ function formatListLabelsOutput(
   return `You have ${count} label${count > 1 ? "s" : ""}${count > 0 ? ` including ${top5}` : ""}, ${honorific}.`;
 }
 
-interface SearchResult {
+export interface SearchResult {
   id: string;
   threadId: string;
   from: string;
@@ -227,9 +231,17 @@ function extractAttachments(payload: any): { name: string; size: number }[] {
 }
 
 async function confirmOrAbort(description: string): Promise<boolean> {
-  const fn = getConfirmAction();
+  const fn = getVerbatimConfirm();
   if (!fn) return false;
   return fn(description);
+}
+
+export function sanitizeEmailField(value: string): string {
+  return value.replace(/[\r\n]/g, "").trim();
+}
+
+export function isValidEmail(value: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
 }
 
 function base64UrlEncode(str: string): string {
@@ -294,11 +306,13 @@ export const gmailSearchMessagesTool: Tool = {
       };
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
+      let h = "sir";
+      try { h = getResponseSettings().honorific || "sir"; } catch { /* settings not available */ }
       if (msg === "GMAIL_NOT_CONFIGURED") {
-        return { success: false, error: "Gmail is not connected, {honorific} — check Settings." };
+        return { success: false, error: `Gmail is not connected, ${h} — check Settings.` };
       }
       if (msg === "GMAIL_REFRESH_FAILED") {
-        return { success: false, error: "Gmail connection expired — reconnect in Settings, {honorific}." };
+        return { success: false, error: `Gmail connection expired — reconnect in Settings, ${h}.` };
       }
       return { success: false, error: `Gmail search failed: ${msg}` };
     }
@@ -358,11 +372,13 @@ export const gmailReadMessageTool: Tool = {
       };
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
+      let h = "sir";
+      try { h = getResponseSettings().honorific || "sir"; } catch { /* settings not available */ }
       if (msg === "GMAIL_NOT_CONFIGURED") {
-        return { success: false, error: "Gmail is not connected, {honorific} — check Settings." };
+        return { success: false, error: `Gmail is not connected, ${h} — check Settings.` };
       }
       if (msg === "GMAIL_REFRESH_FAILED") {
-        return { success: false, error: "Gmail connection expired — reconnect in Settings, {honorific}." };
+        return { success: false, error: `Gmail connection expired — reconnect in Settings, ${h}.` };
       }
       return { success: false, error: `Gmail read failed: ${msg}` };
     }
@@ -394,11 +410,13 @@ export const gmailListLabelsTool: Tool = {
       };
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
+      let h = "sir";
+      try { h = getResponseSettings().honorific || "sir"; } catch { /* settings not available */ }
       if (msg === "GMAIL_NOT_CONFIGURED") {
-        return { success: false, error: "Gmail is not connected, {honorific} — check Settings." };
+        return { success: false, error: `Gmail is not connected, ${h} — check Settings.` };
       }
       if (msg === "GMAIL_REFRESH_FAILED") {
-        return { success: false, error: "Gmail connection expired — reconnect in Settings, {honorific}." };
+        return { success: false, error: `Gmail connection expired — reconnect in Settings, ${h}.` };
       }
       return { success: false, error: `Gmail list labels failed: ${msg}` };
     }
@@ -411,14 +429,24 @@ export const gmailSendEmailTool: Tool = {
     "Send an email via Gmail. Constructs and sends a plain-text email. SEND verb - user confirmation will be required. " +
     "Args: to (recipient email), subject, body (plain text), cc (optional), bcc (optional).",
   run: async (args) => {
-    const to = String(args.to ?? "").trim();
-    const subject = String(args.subject ?? "").trim();
+    const to = sanitizeEmailField(String(args.to ?? ""));
+    const subject = sanitizeEmailField(String(args.subject ?? ""));
     const body = String(args.body ?? "").trim();
-    const cc = String(args.cc ?? "").trim();
-    const bcc = String(args.bcc ?? "").trim();
+    const cc = sanitizeEmailField(String(args.cc ?? ""));
+    const bcc = sanitizeEmailField(String(args.bcc ?? ""));
 
     if (!to || !subject || !body) {
       return { success: false, error: "Missing required args: to, subject, body" };
+    }
+
+    if (!isValidEmail(to)) {
+      return { success: false, error: `Invalid recipient email: "${to}"` };
+    }
+    if (cc && !isValidEmail(cc)) {
+      return { success: false, error: `Invalid cc email: "${cc}"` };
+    }
+    if (bcc && !isValidEmail(bcc)) {
+      return { success: false, error: `Invalid bcc email: "${bcc}"` };
     }
 
     if (!(await confirmOrAbort(`Send email to ${to} with subject "${subject}"`))) {
@@ -455,11 +483,13 @@ export const gmailSendEmailTool: Tool = {
       };
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
+      let h = "sir";
+      try { h = getResponseSettings().honorific || "sir"; } catch { /* settings not available */ }
       if (msg === "GMAIL_NOT_CONFIGURED") {
-        return { success: false, error: "Gmail is not connected, {honorific} — check Settings." };
+        return { success: false, error: `Gmail is not connected, ${h} — check Settings.` };
       }
       if (msg === "GMAIL_REFRESH_FAILED") {
-        return { success: false, error: "Gmail connection expired — reconnect in Settings, {honorific}." };
+        return { success: false, error: `Gmail connection expired — reconnect in Settings, ${h}.` };
       }
       return { success: false, error: `Gmail send failed: ${msg}` };
     }

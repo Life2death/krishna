@@ -12,6 +12,16 @@ export const setConfirmAction = (fn: ConfirmActionFn | null): void => {
 
 export const getConfirmAction = (): ConfirmActionFn | null => _confirmAction;
 
+export type VerbatimConfirmFn = (question: string) => Promise<boolean>;
+
+let _verbatimConfirm: VerbatimConfirmFn | null = null;
+
+export const setVerbatimConfirm = (fn: VerbatimConfirmFn | null): void => {
+  _verbatimConfirm = fn;
+};
+
+export const getVerbatimConfirm = (): VerbatimConfirmFn | null => _verbatimConfirm;
+
 interface McpToolDef {
   serverName: string;
   name: string;
