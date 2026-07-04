@@ -30,6 +30,11 @@
 ### Stage 1 — recall (one Gmail fetch, deliberately broad)
 - Query: `category:primary after:<since>` — **no keyword net at recall**. Since-last-ask is
   usually under a day of Primary mail; volume is small.
+- **Fallback:** `category:primary` may NOT be a recognized Gmail operator (Gmail's documented
+  categories are `social`, `promotions`, `updates`, `forums`; Primary is the implicit default).
+  If an API call with `category:primary` returns 0 results while the inbox visibly has mail,
+  fall back to `in:inbox after:<since>` — broader but safe (inbox is the superset of primary).
+  On fallback, prefix the spoken answer with "I checked your inbox, sir —".
 - `<since>`: last-check timestamp from state (below). **Cold start (no state): 7 days.**
   **Hard caps: 14-day max window, 25 messages max** (newest first). If the cap truncates,
   the spoken answer must SAY so ("I checked your last 25 primary emails") — no silent caps.
@@ -55,10 +60,14 @@
   the `actions.ts` branch supply `classify` built on `llmFallback`. Fully unit-testable with
   a mocked classify.
 - **Degradation path (required):** if the classification call fails (or returns garbage
-  twice), fall back to a keyword+domain heuristic (subject net above + digest-sender
-  blacklist), prefix the spoken answer with a hedge ("Roughly, sir — my filter is running
-  blind:"), and log the REAL failure reason via `errorDetail` → `command_log.detail` +
-  `speech_log source:"error"` (the item-1/EV-1 discipline, already wired for travel).
+  twice), fall back to a keyword+domain heuristic: subject-line regex
+  `/(jd|job|opening|opportunity|hiring|requirement|cv|resume|profile|shortlisted)/i`
+  combined with a digest-sender blacklist (`jobs-noreply@linkedin.com`,
+  `noreply@naukri.com`, indeed digest senders). If subject matches AND sender is not
+  blacklisted, treat as `recruiter_outreach`. Prefix the spoken answer with a hedge
+  ("Roughly, sir — my filter is running blind:"), and log the REAL failure reason via
+  `errorDetail` → `command_log.detail` + `speech_log source:"error"` (the item-1/EV-1
+  discipline, already wired for travel).
 
 ### State — "since I last asked"
 - New migration (LF-normalized — T4-F5 checksum gotcha) with two pieces:
@@ -106,6 +115,19 @@
 - A background poller ("tell me when a recruiter mails") — that's a future marriage of this
   classifier with the item-9 route-watch scheduler pattern; do not build it here.
 - Multi-account, non-Gmail providers, training a local classifier model.
+
+## Pre-flight checks (resolve before R1)
+
+- [ ] **Verify `category:primary` works** via Gmail API on the connected account. If it
+      returns 0 results despite visible Primary mail, delete the operator from the query and
+      rely on the Stage 1 fallback (`in:inbox`).
+- [ ] **Pick state mechanism** after inspecting existing DB/kv layer. If a `settings` or
+      `key_value` table already exists, use it for last-check timestamps + seen state rather
+      than creating a new migration.
+- [ ] **Confirm "dashboard" exists** or choose replacement text for the >3 spoken output line
+      ("…and N more, sir — they're on your email list.").
+- [ ] **Check `llmFallback` signature** — the classify wrapper needs to accept a prompt string
+      and return parsed JSON. Verify the existing signature supports this before wiring.
 
 ## Phases
 
