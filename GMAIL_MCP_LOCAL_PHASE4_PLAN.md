@@ -25,6 +25,19 @@
    in Tauri. Scopes stay exactly `gmail.readonly` + `gmail.send`. The owner re-authorizes
    once in-app; the brain's stored token file is NOT migrated (different store, cleaner).
 5. **English-only, brevity-first voice output** (owner rules from the travel/M1.5 work).
+6. **Build-vs-buy decision to make at 4a kickoff (added 2026-07-04):** Google now publishes
+   official MCP servers — github.com/google/mcp — including an open-source **Workspace MCP
+   server** (Gmail + Calendar + Docs/Sheets, Apache-2.0, Google-maintained). Alternative
+   path: reorder 4b (client-side MCP hub) FIRST, then plug Google's Workspace server in and
+   get Gmail + Calendar without hand-porting the 4 tools. Trade-offs vs the 4a hand-port:
+   (+) maintained by Google, broader scope (Calendar helps M2 reminders), less code to own;
+   (−) runs as a separate resident local process (owner's 2-core laptop), tool schemas
+   inflate the prompt (fights M1.5 latency work), raw JSON outputs need LLM summarization
+   for speech (weak on Haiku) instead of the travel-tool pattern's deterministic in-code
+   spoken formatting, and OAuth setup work is the same either way. Default remains the
+   hand-port (tighter voice integration, zero extra processes); revisit with the owner
+   before writing 4a code. The Maps MCP server is NOT interesting — travel tool already
+   built and speech-tuned.
 
 ## Phase 4a — Gmail client-side (owner priority: "Gmail search, local")
 
