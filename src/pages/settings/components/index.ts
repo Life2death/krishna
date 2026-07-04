@@ -10,3 +10,4 @@ export * from "./PersonaSelector";
 export * from "./ComputerControlToggle";
 export * from "./VoiceIdSettings";
 export * from "./MapsSettings";
+export * from "./GmailSettings";

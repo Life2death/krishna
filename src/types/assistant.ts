@@ -9,7 +9,11 @@ export interface KrishnaSettings {
 export type Action =
   | { action: "open"; target: string }
   | { action: "remember"; key: string | null; value: string }
-  | { action: "travel_time"; from?: string; to?: string; mode?: string };
+  | { action: "travel_time"; from?: string; to?: string; mode?: string }
+  | { action: "gmail_search"; query: string; maxResults?: number }
+  | { action: "gmail_read"; id: string }
+  | { action: "gmail_list_labels" }
+  | { action: "gmail_send"; to: string; subject: string; body: string; cc?: string; bcc?: string };
 
 export interface StepAction {
   tool: string;

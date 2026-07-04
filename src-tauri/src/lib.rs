@@ -5,6 +5,7 @@ mod assistant;
 mod automation;
 mod capture;
 mod db;
+mod gmail_oauth;
 #[cfg(target_os = "android")]
 mod keystore;
 mod mobile_bridge;
@@ -29,6 +30,7 @@ use tauri_plugin_posthog::{init as posthog_init, PostHogConfig, PostHogOptions};
 use tokio::task::JoinHandle;
 mod speaker;
 use capture::CaptureState;
+use gmail_oauth::OAuthState;
 use speaker::VadConfig;
 
 #[cfg(target_os = "macos")]
@@ -110,6 +112,7 @@ pub fn run() {
         .manage(shortcuts::RegisteredShortcuts::default())
         // LicenseState removed - app is free
         .manage(shortcuts::MoveWindowState::default())
+        .manage(OAuthState::new())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_http::init())
         .plugin(tauri_plugin_keychain::init())
@@ -178,6 +181,10 @@ pub fn run() {
             resolver::resolve_app,
             resolver::verify_target,
             tts::synthesize_speech_piper,
+            gmail_oauth::start_gmail_oauth,
+            gmail_oauth::complete_gmail_oauth,
+            gmail_oauth::cancel_gmail_oauth,
+            gmail_oauth::refresh_gmail_token,
             #[cfg(desktop)]
             automation::set_computer_control_enabled,
             #[cfg(desktop)]

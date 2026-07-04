@@ -8,6 +8,9 @@ const KNOWN_SAFE: ReadonlySet<string> = new Set([
   "get_travel_time",
   "memory_write",
   "open_target",
+  "gmail_search_messages",
+  "gmail_read_message",
+  "gmail_list_labels",
 ]);
 
 /**

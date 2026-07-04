@@ -29,7 +29,7 @@ import { isLookCommand, isUndoCommand, isJobExtractionCommand, isJobStatusComman
 import { triggerJobExtractionWorkflow, getJobExtractionStatus } from "@/lib/integrations/github-workflow";
 import { createAuditEntry, getLastReversible, logCommand, insertPendingCommand, updateCommandOutcome, updateCommandTiming, logSpeech } from "@/lib/database";
 import type { CommandOutcome, FailureReason, SpeechSource } from "@/lib/database";
-import { setConfirmAction } from "@krishna/core/tools/mcp-bridge";
+import { setConfirmAction, setVerbatimConfirm } from "@krishna/core/tools/mcp-bridge";
 import type { AssistantStatus, StepAction } from "@/types/assistant";
 import type { Skill } from "@/types/skill";
 import type { Message, AttachedFile } from "@/types";
@@ -134,6 +134,28 @@ export const BASE_SYSTEM_PROMPT = [
   '- `from` defaults to "home" when omitted; `mode` defaults to "car".',
   '- "how long to the airport by bike?" → mode "two_wheeler". "by train" → mode "transit".',
   '- If the place address is NOT known from memories, ask ONCE: "I don\'t have your {place} address — tell me and I\'ll remember it." Then use the existing remember action to store it. Do NOT retry the travel_time call with an unknown place.',
+  '',
+  'GMAIL:',
+  '- You can search, read, list labels, and send emails through Gmail. All Gmail actions are client-side (no brain required).',
+  '- "do I have any mail from HDFC?" →',
+  '```action',
+  '{"action":"gmail_search","query":"from:hdfc","maxResults":5}',
+  '```',
+  '- "read the latest email" → use the message id from a prior search result:',
+  '```action',
+  '{"action":"gmail_read","id":"<message_id>"}',
+  '```',
+  '- "send an email to vikram@example.com saying Hello from Krishna" with subject "Greetings":',
+  '```action',
+  '{"action":"gmail_send","to":"vikram@example.com","subject":"Greetings","body":"Hello from Krishna"}',
+  '```',
+  '- "list my labels" →',
+  '```action',
+  '{"action":"gmail_list_labels"}',
+  '```',
+  '- gmail_send requires explicit user confirmation before sending (recipient + subject are spoken back).',
+  '- Read tools (search, read, list labels) are safe and execute without confirmation.',
+  '- Results are spoken concisely: search shows count + newest subject, read shows sender/subject/gist.',
   '',
   'MULTI-STEP TASK PLANNING (Phase 4):',
   'For complex requests like "play this song on YouTube" or "type opencode in command prompt", you can output a multi-step plan instead of a single action.',
@@ -690,13 +712,39 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
         speakLogged(msg, "confirm_prompt").finally(() => setKrishnaSpeaking(false));
       });
     });
-    return () => setConfirmAction(null);
+
+    setVerbatimConfirm((question: string) => {
+      return new Promise<boolean>((resolve) => {
+        pendingConfirmationRef.current = {
+          type: "mcp_tool",
+          spokenResponse: question,
+          resolve,
+          captureId: currentCaptureIdRef.current ?? undefined,
+        };
+        reAskRef.current = false;
+        clearConfirmTimeout();
+        confirmTimeoutRef.current = setTimeout(() => {
+          if (pendingConfirmationRef.current?.type === "mcp_tool") {
+            void handleConfirmDecline(pendingConfirmationRef.current, "I'll take that as a no.", "Gmail confirmation timed out (15s)");
+          }
+        }, 15000);
+        setKrishnaSpeaking(true);
+        setStatus("confirming");
+        setLastSpoken(question);
+        speakLogged(question, "confirm_prompt").finally(() => setKrishnaSpeaking(false));
+      });
+    });
+
+    return () => {
+      setConfirmAction(null);
+      setVerbatimConfirm(null);
+    };
   }, []);
 
   const pendingConfirmationRef = useRef<{
     type: "action" | "plan" | "memory" | "reminder" | "job_extraction" | "mcp_tool";
     spokenResponse: string;
-    pendingResult?: { found: boolean; target?: string; displayName?: string; [key: string]: any };
+    pendingResult?: { found: boolean; target?: string; displayName?: string; actionToResume?: string; [key: string]: any };
     input?: string;
     steps?: StepAction[];
     memoryData?: { key: string | null; value: string };
@@ -1063,6 +1111,50 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
             pending.resolve(true);
             setStatus("thinking");
             return;
+          } else if (pending.type === "action" && pending.pendingResult?.actionToResume) {
+            setStatus("thinking");
+            try {
+              const action = JSON.parse(pending.pendingResult.actionToResume);
+              const result = await executeAction(action, llmFallback);
+              if (result.spokenResponse) {
+                const plan = decideActionResponse(result, false);
+                if (plan?.shouldSpeak) {
+                  if (plan.recordTurn) {
+                    await recordTurn(pending.input || "", result.spokenResponse);
+                  }
+                  logOutcome(
+                    pending.input ?? "",
+                    plan.outcome,
+                    plan.failureReason,
+                    plan.detail,
+                    result.spokenResponse,
+                    "voice",
+                    pending.captureId,
+                  );
+                  setLastSpoken(result.spokenResponse);
+                  setKrishnaSpeaking(true);
+                  setStatus("speaking");
+                  try {
+                    await speakLogged(result.spokenResponse, plan.outcome === "answered" ? "answer" : "error", pending.captureId);
+                  } finally {
+                    setKrishnaSpeaking(false);
+                  }
+                }
+              }
+            } catch (err) {
+              const msg = err instanceof Error ? err.message : "Failed to execute action";
+              logOutcome(pending.input ?? "", "failed", "tool_failed", msg, undefined, "voice", pending.captureId);
+              await recordTurn(pending.input || "", "I had trouble: " + msg);
+              setStatus("speaking");
+              setKrishnaSpeaking(true);
+              try {
+                await speakLogged("I had trouble: " + msg, "error", pending.captureId);
+              } finally {
+                setKrishnaSpeaking(false);
+              }
+            } finally {
+              setStatus("idle");
+            }
           } else if (pending.type === "job_extraction") {
             setStatus("thinking");
             try {

@@ -2,6 +2,7 @@ import { openTargetTool } from "./open-target";
 import { youtubeSearchTool } from "./youtube-search";
 import { webSearchTool } from "./web-search";
 import { getTravelTimeTool } from "./get-travel-time";
+import { gmailSearchMessagesTool, gmailReadMessageTool, gmailListLabelsTool, gmailSendEmailTool } from "./gmail";
 import {
   computerTypeTool,
   computerKeyTool,
@@ -50,6 +51,10 @@ register(openTargetTool);
 register(youtubeSearchTool);
 register(webSearchTool);
 register(getTravelTimeTool);
+register(gmailSearchMessagesTool);
+register(gmailReadMessageTool);
+register(gmailListLabelsTool);
+register(gmailSendEmailTool);
 
 export function getTool(name: string): Tool | undefined {
   return tools.get(name);

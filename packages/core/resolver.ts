@@ -9,6 +9,7 @@ export interface ResolveResult {
   resolvedVia?: string;
   confidence?: number;
   learnedActionId?: string;
+  actionToResume?: string;
 }
 
 type LlmFallbackFn = (input: string) => Promise<string | null>;

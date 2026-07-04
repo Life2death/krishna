@@ -1,15 +1,26 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { parseActions, executeAction, decideActionResponse, detectPhantomSave } from "@/lib/actions";
+import { parseActions, executeAction, resolveActionForConfirm, decideActionResponse, detectPhantomSave } from "@/lib/actions";
 import { invoke } from "@tauri-apps/api/core";
 import type { ExecuteActionResult } from "@/lib/actions";
 
 const mockTravelToolRun = vi.hoisted(() => vi.fn());
+const mockGmailSearchRun = vi.hoisted(() => vi.fn());
+const mockGmailReadRun = vi.hoisted(() => vi.fn());
+const mockGmailListLabelsRun = vi.hoisted(() => vi.fn());
+const mockGmailSendRun = vi.hoisted(() => vi.fn());
 const mockResolveTarget = vi.hoisted(() => vi.fn());
 
 vi.mock("@krishna/core/tools/get-travel-time", () => ({
   getTravelTimeTool: {
     run: mockTravelToolRun,
   },
+}));
+
+vi.mock("@krishna/core/tools/gmail", () => ({
+  gmailSearchMessagesTool: { run: mockGmailSearchRun },
+  gmailReadMessageTool: { run: mockGmailReadRun },
+  gmailListLabelsTool: { run: mockGmailListLabelsRun },
+  gmailSendEmailTool: { run: mockGmailSendRun },
 }));
 
 vi.mock("@/lib/resolver", () => ({
@@ -337,6 +348,131 @@ describe("executeAction — open", () => {
 // ── detectPhantomSave (T4-F1 grounding) ──────────────────────────────────
 // Tests the REAL exported helper (userCommand + spokenText + actions → boolean),
 // not a re-declared regex — this is the layer the grounding logic actually runs at.
+
+describe("executeAction — gmail (error propagation G-2)", () => {
+  beforeEach(() => {
+    mockGmailSearchRun.mockReset();
+    mockGmailReadRun.mockReset();
+    mockGmailListLabelsRun.mockReset();
+    mockGmailSendRun.mockReset();
+  });
+
+  it("gmail_search surfaces real error on failure (not generic fallback)", async () => {
+    mockGmailSearchRun.mockResolvedValue({
+      success: false,
+      error: "Gmail connection expired — reconnect in Settings, sir.",
+    });
+
+    const result = await executeAction({ action: "gmail_search", query: "meeting" });
+
+    expect(result.ok).toBe(false);
+    expect(result.spokenResponse).toContain("Gmail connection expired");
+    expect(result.spokenResponse).not.toBe("I couldn't search Gmail.");
+  });
+
+  it("gmail_search shows tool error message", async () => {
+    mockGmailSearchRun.mockResolvedValue({
+      success: false,
+      error: "Gmail API error (403): Access denied",
+    });
+
+    const result = await executeAction({ action: "gmail_search", query: "test" });
+
+    expect(result.ok).toBe(false);
+    expect(result.spokenResponse).toContain("Access denied");
+  });
+
+  it("gmail_read surfaces real error on failure", async () => {
+    mockGmailReadRun.mockResolvedValue({
+      success: false,
+      error: "Gmail is not connected, sir — check Settings.",
+    });
+
+    const result = await executeAction({ action: "gmail_read", id: "123" });
+
+    expect(result.ok).toBe(false);
+    expect(result.spokenResponse).toContain("not connected");
+  });
+
+  it("gmail_list_labels surfaces real error on failure", async () => {
+    mockGmailListLabelsRun.mockResolvedValue({
+      success: false,
+      error: "Gmail API error (500): Internal error",
+    });
+
+    const result = await executeAction({ action: "gmail_list_labels" });
+
+    expect(result.ok).toBe(false);
+    expect(result.spokenResponse).toContain("Internal error");
+  });
+
+  it("gmail_send surfaces real error on failure", async () => {
+    mockGmailSendRun.mockResolvedValue({
+      success: false,
+      error: "Invalid recipient email: \"bad\"",
+    });
+
+    const result = await executeAction({
+      action: "gmail_send", to: "bad", subject: "test", body: "hello",
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.spokenResponse).toContain("Invalid recipient email");
+  });
+
+  it("gmail_send returns status kind on success", async () => {
+    mockGmailSendRun.mockResolvedValue({
+      success: true,
+      output: "Email sent to a@b.com with subject \"Hello\".",
+    });
+
+    const result = await executeAction({
+      action: "gmail_send", to: "a@b.com", subject: "Hello", body: "World",
+    });
+
+    expect(result.kind).toBe("status");
+    expect(result.ok).toBe(true);
+    expect(result.spokenResponse).toContain("Email sent");
+  });
+});
+
+describe("resolveActionForConfirm — gmail_send and travel_time (G-4)", () => {
+  it("gmail_send returns needsConfirmation with pendingResult", async () => {
+    const result = await resolveActionForConfirm({
+      action: "gmail_send", to: "a@b.com", subject: "Hello", body: "World",
+    });
+
+    expect(result.needsConfirmation).toBe(true);
+    expect(result.pendingResult).toBeDefined();
+    expect(result.pendingResult?.actionToResume).toBeDefined();
+    const action = JSON.parse(result.pendingResult!.actionToResume!);
+    expect(action.action).toBe("gmail_send");
+    expect(action.to).toBe("a@b.com");
+  });
+
+  it("travel_time returns needsConfirmation with pendingResult", async () => {
+    const result = await resolveActionForConfirm({
+      action: "travel_time", from: "home", to: "work", mode: "car",
+    });
+
+    expect(result.needsConfirmation).toBe(true);
+    expect(result.pendingResult).toBeDefined();
+    expect(result.pendingResult?.actionToResume).toBeDefined();
+    const action = JSON.parse(result.pendingResult!.actionToResume!);
+    expect(action.action).toBe("travel_time");
+    expect(action.to).toBe("work");
+  });
+
+  it("open action still works without actionToResume", async () => {
+    const result = await resolveActionForConfirm({
+      action: "open", target: "https://example.com",
+    });
+
+    expect(result.needsConfirmation).toBe(true);
+    expect(result.pendingResult?.target).toBe("https://example.com");
+    expect(result.pendingResult?.actionToResume).toBeUndefined();
+  });
+});
 
 describe("detectPhantomSave", () => {
   const REMEMBER_CMD = "can you remember my home address is in Kanda colony sector 6";

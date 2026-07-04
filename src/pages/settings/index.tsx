@@ -11,6 +11,7 @@ import {
   BrainConnection,
   VoiceIdSettings,
   MapsSettings,
+  GmailSettings,
 } from "./components";
 import {
   ResponseLength,
@@ -100,6 +101,9 @@ const Settings = () => {
 
       {/* Maps */}
       <MapsSettings />
+
+      {/* Gmail */}
+      <GmailSettings />
 
       {/* Integrations (GitHub, etc.) */}
       <Integrations />

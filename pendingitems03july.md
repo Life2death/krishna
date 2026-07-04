@@ -149,36 +149,39 @@ he reports something new mid-way through items 1–2.
 
 ---
 
-### 5. Phase 4a — Gmail client-side (queued after items 1–2 are closed)
+### 5. Phase 4a — Gmail client-side — **DONE, reviewed, fixed, merged into `main`**
 
-**Plan:** `GMAIL_MCP_LOCAL_PHASE4_PLAN.md` (also read the "§Gmail & MCP" section of
-`LOCAL_FIRST_ARCHITECTURE_PLAN.md` it references, and `apps/brain/src/gmail/tools.ts` — you're
-porting its arg/return shapes, not redesigning them). **Branch:** `feat/local-p4-gmail` off
-`main`.
+**Built 2026-07-04** by the coding agent as commit `8040301`, spanning 10 files across 3 layers:
 
-Goal: move Gmail's 4 tools (search/read/list-labels/send) from the Node "brain" to fully
-client-side (Tauri OAuth loopback + direct Gmail REST calls, no `googleapis` dependency in the
-app). Read tools → `KNOWN_SAFE`; `gmail_send_email` stays sensitive with a real spoken
-confirmation (recipient + subject). **Depends on the T4-F4 speech-filter fix already being in
-`main`** (it is — merged; Gmail results are `kind:"answer"` speech, which only gets spoken
-because of that fix — see item 3).
+**New files:**
+- `packages/core/tools/gmail.ts` — 4 tool impls (search/read/list-labels/send), direct Gmail REST API, token refresh on 401, `confirmOrAbort` for send, in-code spoken formatting
+- `src/lib/gmail-oauth.ts` — frontend OAuth helpers wrapping Tauri commands
+- `src-tauri/src/gmail_oauth.rs` — Rust TCP listener for PKCE loopback, token exchange & refresh
+- `src/pages/settings/components/GmailSettings.tsx` — Settings UI (client_id/secret inputs, Connect/Disconnect, status)
 
-**Owner prerequisite (not yours):** Vikram needs to paste a Google OAuth client_id/secret
-(from the brain's existing keys) into a new Gmail Settings section once you build it.
+**Modified files:** `src-tauri/src/lib.rs`, `packages/core/tools/index.ts`,
+`packages/core/action-policy.ts`, `src/lib/actions.ts`, `src/contexts/krishna.context.tsx`
+(GMAIL section in `BASE_SYSTEM_PROMPT`), settings wiring, `vite.config.ts`.
 
-Commit prefix: `feat(local-p4a-N)`.
+**Owner prerequisite:** Vikram still needs to paste the brain's Google OAuth client_id/secret
+into Settings → Gmail, then click "Connect Gmail" for one-time authorization.
 
-**Status (2026-07-04): code landed as commit `8040301`, reviewed, NOT approved.** It was built
-out of priority order (before items 1–2) and committed directly on `fix/travel-t4` instead of a
-fresh `feat/local-p4-gmail` branch off `main` — both process deviations from this file's own
-instructions. Code review found 2 blockers (email header/CRLF injection via unsanitized
-to/subject/cc/bcc; real Gmail errors discarded at the actions.ts dispatch layer — the same
-swallow-the-error pattern item 1 above flags as top priority, reintroduced fresh) plus 4 more
-bugs (unverified-speaker confirm flow for `gmail_send` is a silent no-op dead end; the send
-confirmation prompt is garbled; "read a specific email from search results" can't work because no
-message ID ever reaches the model in either the conversation-history or plan-chaining path; zero
-new tests). Full detail + fixes: `GMAIL_REVIEW_FINDINGS.md` (new file, findings G-1 through G-10).
-**Do not live-test with a real Gmail account until G-1 through G-6 are fixed.**
+**Review history:** first pass on `8040301` found 2 blockers (email header/CRLF injection via
+unsanitized to/subject/cc/bcc; real Gmail errors discarded at the actions.ts dispatch layer — the
+same swallow-the-error pattern item 1 above flags as top priority) plus 4 more bugs — **NOT
+approved**. Fix pass landed as `7f39732` (`fix/gmail-review-G1-G6`) and was retested against the
+real diff: **G-1, G-2, G-3, G-5, G-6 confirmed fixed.** G-4 (unverified-speaker confirm dead end)
+is fixed but the retest found a new bug, **G-11: gmail_send now asks for confirmation twice** when
+going through the unverified-speaker gate (not a security hole — fails closed — just an extra
+"yes"). G-11 doesn't block today because Voice-ID gating isn't the active path yet, but must be
+fixed before pending item 7 (Voice-ID Phase 3) ships. Merged into `main` as of this review.
+Also still open, still low priority: G-8 (unused OAuth `state` param), G-9 (no cancel button for
+a stuck OAuth connect), G-10 (duplicated token-refresh logic). Full detail:
+`GMAIL_REVIEW_FINDINGS.md`.
+
+**Process note for future items:** this work was built out of priority order (before items 1–2,
+both marked "NEW — top priority") and the first commit landed directly on `fix/travel-t4` instead
+of a fresh branch off `main`. Follow the stated order and branch model on the next item.
 
 ---
 
