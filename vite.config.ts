@@ -28,6 +28,7 @@ export default defineConfig(async () => ({
       "@krishna/core/tools/gmail": path.resolve(__dirname, "packages/core/tools/gmail.ts"),
       "@krishna/core/tools/place-resolver": path.resolve(__dirname, "packages/core/tools/place-resolver.ts"),
       "@krishna/core/tools/recruiter-radar": path.resolve(__dirname, "packages/core/tools/recruiter-radar.ts"),
+      "@krishna/core/tools/recruiter-radar-state": path.resolve(__dirname, "packages/core/tools/recruiter-radar-state.ts"),
       "@krishna/core/tools": path.resolve(__dirname, "packages/core/tools/index.ts"),
       "@krishna/core/functions": path.resolve(__dirname, "packages/core/functions/index.ts"),
       "@krishna/core/executor": path.resolve(__dirname, "packages/core/executor.ts"),
