@@ -162,10 +162,9 @@ truthy in practice — the `||` fallback string is unreachable. Harmless, just d
 into a cleanup pass.
 
 ### T2-N2 · NIT · FIXED (commit 4d2b08e) — "home" default duplicated in two places
-`actions.ts`'s `executeAction` does `const from = action.from || "home";`, and
-`get-travel-time.ts`'s `run()` independently does `args.from || args.origin || "home"`. Both
-correct individually, but the default now lives in two places that could drift. Not urgent —
-note for whenever this file is touched next.
+`executeAction` in `actions.ts` no longer applies the "home" default — `action.from` is
+passed as-is to the tool (as `action.from ?? "home"` after the tsc fix), which already applies
+`args.from || args.origin || "home"`. Single source of truth in the tool.
 
 ## T3 — commit 1922f38 (reviewed 2026-07-03)
 
@@ -268,7 +267,7 @@ instead of yielding raw strings into the response stream. The context maps each 
 sentence: network → "I'm having network trouble, {honorific} — give me a moment and try
 again."; API → "The AI service had a problem, {honorific}."; parse/stream → "I had trouble
 processing the response, {honorific}." Technical detail goes to logOutcome as ai_error.
-Raw errors NEVER enter fullResponse or parseActions.
+Raw errors NEVER enter fullResponse or parseActions. 3 new tests, full suite 421 green.
 
 ### T4-F4 · BLOCKER · FIXED (commit 40c3a55) — travel answers are never spoken: the action-result speech filter drops them
 Owner report: "how much time to travel to work?" → Krishna spoke only the ack, then silently

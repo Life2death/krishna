@@ -239,12 +239,39 @@ describe("fetchAIResponse", () => {
     ).rejects.toThrow(/Failed to parse curl/i);
   });
 
-  it("yields error string on HTTP error (non-streaming path)", async () => {
+  it("throws classified error on HTTP error (non-streaming path)", async () => {
     mockErrorResponse(401, "Unauthorized");
-    const chunks = await collectChunks(
-      fetchAIResponse({ provider: openAiProvider, selectedProvider, userMessage: "test" })
-    );
-    expect(chunks.join("")).toMatch(/API request failed.*401/i);
+    await expect(
+      collectChunks(
+        fetchAIResponse({ provider: openAiProvider, selectedProvider, userMessage: "test" })
+      )
+    ).rejects.toThrow(/__KRAPI__:401/);
+  });
+
+  it("throws classified error on network failure", async () => {
+    mockTauriFetch.mockRejectedValueOnce(new Error("Failed to fetch"));
+    await expect(
+      collectChunks(
+        fetchAIResponse({ provider: openAiProvider, selectedProvider, userMessage: "test" })
+      )
+    ).rejects.toThrow(/__KRNET__:Failed to fetch/);
+  });
+
+  it("throws classified error on stream read failure", async () => {
+    const badBody = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.error(new Error("stream broken"));
+      },
+    });
+    mockTauriFetch.mockResolvedValueOnce({
+      ok: true,
+      body: badBody,
+    } as unknown as Response);
+    await expect(
+      collectChunks(
+        fetchAIResponse({ provider: openAiProvider, selectedProvider, userMessage: "test" })
+      )
+    ).rejects.toThrow(/__KRSTREAM__:stream broken/);
   });
 
   // ── Abort signal ────────────────────────────────────────────────────────

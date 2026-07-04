@@ -27,8 +27,8 @@ import { createReminder, getDueReminders, updateReminder, cancelReminder } from 
 import { createConversation, appendMessages, generateConversationTitle, getMostRecentConversation, deleteConversation } from "@/lib/repo-bound";
 import { isLookCommand, isUndoCommand, isJobExtractionCommand, isJobStatusCommand } from "@/lib/perception";
 import { triggerJobExtractionWorkflow, getJobExtractionStatus } from "@/lib/integrations/github-workflow";
-import { createAuditEntry, getLastReversible, logCommand, insertPendingCommand, updateCommandOutcome, updateCommandTiming } from "@/lib/database";
-import type { CommandOutcome, FailureReason } from "@/lib/database";
+import { createAuditEntry, getLastReversible, logCommand, insertPendingCommand, updateCommandOutcome, updateCommandTiming, logSpeech } from "@/lib/database";
+import type { CommandOutcome, FailureReason, SpeechSource } from "@/lib/database";
 import { setConfirmAction } from "@krishna/core/tools/mcp-bridge";
 import type { AssistantStatus, StepAction } from "@/types/assistant";
 import type { Skill } from "@/types/skill";
@@ -118,12 +118,13 @@ export const BASE_SYSTEM_PROMPT = [
   '- The block will NOT be read aloud -- it is only used to trigger the save.',
   '- NEVER claim you cannot remember or that memory only lasts this session. The save is confirmed with the user before storing.',
   '- Already-known facts are listed under "Things I know about the user" in each prompt — do not re-save them.',
-  '- Example — user says "remember my home address is 123 Main St" → reply with the action block and then "Saving that now, {honorific}." in the spoken part:',
+  '- Example — user says "remember my home address is 123 Main St" → emit the action block, and in the SPOKEN part say ONLY that you will confirm — e.g. "Let me confirm that with you, {honorific}." — because Krishna asks the user to confirm before anything is actually stored:',
   '```action',
   '{"action":"remember","key":"home address","value":"123 Main St"}',
   '```',
-  'Saving that now, {honorific}.',
-  '- CRITICAL: NEVER say "saved", "remembered", "save", "I\'ll remember", "I\'ll save", or "noted" in your spoken reply UNLESS the same reply also contains the ````action...```` remember block above. If you say the word "saved" without the action block, the system cannot store anything and the user will see a lie.',
+  'Let me confirm that with you, {honorific}.',
+  '- CRITICAL — never announce an action as already done or in progress. Do NOT say "saved", "remembered", "noted", "I\'ll save", "I\'ll remember", or "Saving that now": a remember action triggers a confirmation you cannot foresee, so ANY past- or present-tense save claim is a lie. Say only that you will confirm, or say nothing and let Krishna\'s confirmation prompt speak.',
+  '- This applies to EVERY action, not just saving: NEVER narrate an action you are not emitting in the same reply. If you say "Now let me check the travel time", the travel_time action block MUST be in that same reply — otherwise you are describing something that will never happen.',
   '',
   'TRAVEL TIME:',
   '- "how long to work?" → Check the user\'s confirmed memories for a known "work" / "work address". If known, emit:',
@@ -485,6 +486,23 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  // T4-F7: single choke point for every spoken utterance. Persists to speech_log
+  // (fire-and-forget) alongside the actual TTS call, so success AND failure/timeout/decline
+  // lines are all visible on the dashboard — not just the ones that already had a
+  // command_log row. Returns the same promise ttsRef.current.speak() would, so existing
+  // `await speakLogged(...)` / `.finally()` call sites behave identically to before.
+  const speakLogged = (text: string, source: SpeechSource, relatedCommandId?: string | null) => {
+    const id = crypto.randomUUID();
+    logSpeech({
+      id,
+      text,
+      source,
+      relatedCommandId: relatedCommandId ?? currentCaptureIdRef.current ?? null,
+      createdAt: Date.now(),
+    }).catch((err) => console.error("Failed to log speech:", err));
+    return ttsRef.current.speak(text);
+  };
+
   const addFile = useCallback(async (file: File) => {
     if (attachedFiles.length >= MAX_FILES) return;
     try {
@@ -612,7 +630,7 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
           setLastSpoken(speak);
           setKrishnaSpeaking(true);
           try {
-            await ttsRef.current.speak(speak);
+            await speakLogged(speak, "answer");
           } finally {
             setKrishnaSpeaking(false);
           }
@@ -663,16 +681,13 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
         clearConfirmTimeout();
         confirmTimeoutRef.current = setTimeout(() => {
           if (pendingConfirmationRef.current?.type === "mcp_tool") {
-            pendingConfirmationRef.current.resolve?.(false);
-            pendingConfirmationRef.current = null;
-            setStatus("idle");
-            ttsRef.current.speak("I'll take that as a no.");
+            void handleConfirmDecline(pendingConfirmationRef.current, "I'll take that as a no.", "MCP tool confirmation timed out (15s)");
           }
         }, 15000);
         setKrishnaSpeaking(true);
         setStatus("confirming");
         setLastSpoken(msg);
-        ttsRef.current.speak(msg).finally(() => setKrishnaSpeaking(false));
+        speakLogged(msg, "confirm_prompt").finally(() => setKrishnaSpeaking(false));
       });
     });
     return () => setConfirmAction(null);
@@ -698,6 +713,37 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
       confirmTimeoutRef.current = null;
     }
   }, []);
+
+  // T4-F6: single choke point for every way a pending confirmation can end WITHOUT being
+  // accepted — timeout, explicit "no", or giving up after a garbled re-ask. Before this,
+  // each of the 7+ call sites independently nulled the ref and fired an un-awaited,
+  // un-logged `ttsRef.current.speak(...)` — so the spoken line never appeared in chat/
+  // dashboard, the originating command_log row was NEVER updated (staying `pending` forever
+  // or, worse, having already been marked `answered` by an earlier optimistic model reply),
+  // and — for the mcp_tool case specifically — `pending.resolve` was never called on
+  // timeout, leaving the awaiting caller hung indefinitely. This fixes all of that in one
+  // place: the row is truthfully marked `declined`, the spoken line is recorded via
+  // `recordTurn` so it shows in chat, and it goes through `speakLogged` so it shows on the
+  // speech-log dashboard too.
+  const handleConfirmDecline = async (
+    pending: NonNullable<typeof pendingConfirmationRef.current> | null,
+    spokenMsg: string,
+    detail: string,
+    source: SpeechSource = "timeout",
+  ) => {
+    pendingConfirmationRef.current = null;
+    reAskRef.current = false;
+    clearConfirmTimeout();
+    setStatus("idle");
+    if (pending?.type === "mcp_tool" && pending.resolve) {
+      pending.resolve(false);
+    }
+    if (pending) {
+      logOutcome(pending.input ?? "", "declined", "user_declined", detail, spokenMsg, "voice", pending.captureId);
+      await recordTurn(pending.input ?? "", spokenMsg);
+    }
+    await speakLogged(spokenMsg, source, pending?.captureId);
+  };
 
   // Barge-in: stop TTS when user starts speaking
   useEffect(() => {
@@ -744,26 +790,30 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const promptMemoryConfirmation = useCallback(async (key: string | null, value: string, inputText: string) => {
+    // T4-F6(c): keep the read-back SHORT so it doesn't consume the 15s confirm window when the
+    // value is long (e.g. a full address). Ask by key when we have one; only read a short value
+    // back when there's no label to refer to.
+    const spokenResponse = key
+      ? "Should I remember your " + key + "?"
+      : "Should I remember that" + (value.length <= 40 ? ' — "' + value + '"' : "") + "?";
     pendingConfirmationRef.current = {
       type: "memory",
-      spokenResponse: "Should I remember that " + (key ? key + " is " : "") + value + "?",
+      spokenResponse,
       memoryData: { key, value },
       input: inputText,
       captureId: currentCaptureIdRef.current ?? undefined,
     };
+    const thisPending = pendingConfirmationRef.current;
     reAskRef.current = false;
     clearConfirmTimeout();
     confirmTimeoutRef.current = setTimeout(() => {
-      pendingConfirmationRef.current = null;
-      reAskRef.current = false;
-      setStatus("idle");
-      ttsRef.current.speak("I'll forget about it.");
+      void handleConfirmDecline(thisPending, "I'll forget about it.", "Memory confirmation timed out (15s)");
     }, 15000);
     setStatus("confirming");
-    setLastSpoken(pendingConfirmationRef.current.spokenResponse);
+    setLastSpoken(spokenResponse);
     setKrishnaSpeaking(true);
     try {
-      await ttsRef.current.speak(pendingConfirmationRef.current.spokenResponse);
+      await speakLogged(spokenResponse, "confirm_prompt", thisPending.captureId);
     } finally {
       setKrishnaSpeaking(false);
     }
@@ -897,7 +947,7 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
                 setKrishnaSpeaking(true);
                 setStatus("speaking");
                 try {
-                  await ttsRef.current.speak(successMsg);
+                  await speakLogged(successMsg, "answer", pending.captureId);
                 } finally {
                   setKrishnaSpeaking(false);
                 }
@@ -909,7 +959,7 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
                 setKrishnaSpeaking(true);
                 setStatus("speaking");
                 try {
-                  await ttsRef.current.speak(errorMsg);
+                  await speakLogged(errorMsg, "error", pending.captureId);
                 } finally {
                   setKrishnaSpeaking(false);
                 }
@@ -921,7 +971,7 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
               setStatus("speaking");
               setKrishnaSpeaking(true);
               try {
-                await ttsRef.current.speak("I had trouble: " + msg);
+                await speakLogged("I had trouble: " + msg, "error", pending.captureId);
               } finally {
                 setKrishnaSpeaking(false);
               }
@@ -960,7 +1010,7 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
               setKrishnaSpeaking(true);
               setStatus("speaking");
               try {
-                await ttsRef.current.speak(speak);
+                await speakLogged(speak, "answer", pending.captureId);
               } finally {
                 setKrishnaSpeaking(false);
               }
@@ -971,7 +1021,7 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
               setStatus("speaking");
               setKrishnaSpeaking(true);
               try {
-                await ttsRef.current.speak("I had trouble: " + msg);
+                await speakLogged("I had trouble: " + msg, "error", pending.captureId);
               } finally {
                 setKrishnaSpeaking(false);
               }
@@ -1014,7 +1064,7 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
               setKrishnaSpeaking(true);
               setStatus("speaking");
               try {
-                await ttsRef.current.speak(speak);
+                await speakLogged(speak, "answer", pending.captureId);
               } finally {
                 setKrishnaSpeaking(false);
               }
@@ -1025,7 +1075,7 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
               setStatus("speaking");
               setKrishnaSpeaking(true);
               try {
-                await ttsRef.current.speak("I had trouble: " + msg);
+                await speakLogged("I had trouble: " + msg, "error", pending.captureId);
               } finally {
                 setKrishnaSpeaking(false);
               }
@@ -1063,7 +1113,7 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
               setKrishnaSpeaking(true);
               setStatus("speaking");
               try {
-                await ttsRef.current.speak(speak);
+                await speakLogged(speak, "answer", pending.captureId);
               } finally {
                 setKrishnaSpeaking(false);
               }
@@ -1074,7 +1124,7 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
               setStatus("speaking");
               setKrishnaSpeaking(true);
               try {
-                await ttsRef.current.speak("I had trouble: " + msg);
+                await speakLogged("I had trouble: " + msg, "error", pending.captureId);
               } finally {
                 setKrishnaSpeaking(false);
               }
@@ -1104,7 +1154,7 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
               await recordTurn(pending.input || "", speak);
               setLastSpoken(speak);
               setKrishnaSpeaking(true);
-              await ttsRef.current.speak(speak);
+              await speakLogged(speak, "status", pending.captureId);
             } finally {
               setKrishnaSpeaking(false);
               setStatus("idle");
@@ -1113,21 +1163,14 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
           return;
         }
         if (answer === "no") {
-          if (pending.type === "mcp_tool" && pending.resolve) {
-            pending.resolve(false);
-          }
-          logOutcome(pending.input ?? "", "declined", "user_declined", undefined, undefined, "voice", pending.captureId);
-          pendingConfirmationRef.current = null;
-          reAskRef.current = false;
+          const speak = "Okay, I won't do that.";
+          setLastSpoken(speak);
           setStatus("speaking");
+          setKrishnaSpeaking(true);
           try {
-            const speak = "Okay, I won't do that.";
-            setLastSpoken(speak);
-            setKrishnaSpeaking(true);
-            await ttsRef.current.speak(speak);
+            await handleConfirmDecline(pending, speak, "User said no", "decline");
           } finally {
             setKrishnaSpeaking(false);
-            setStatus("idle");
           }
           return;
         }
@@ -1138,15 +1181,23 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
             const speak = "Sorry, I didn't catch that. Should I go ahead? Say yes or no.";
             setLastSpoken(speak);
             setKrishnaSpeaking(true);
-            await ttsRef.current.speak(speak);
+            await speakLogged(speak, "reask", pending.captureId);
           } finally {
             setKrishnaSpeaking(false);
           }
           return;
         }
-        pendingConfirmationRef.current = null;
-        reAskRef.current = false;
-        setStatus("idle");
+        {
+          const speak = "I didn't catch a clear answer, so I'll skip that for now.";
+          setLastSpoken(speak);
+          setStatus("speaking");
+          setKrishnaSpeaking(true);
+          try {
+            await handleConfirmDecline(pending, speak, "No clear yes/no after re-ask", "decline");
+          } finally {
+            setKrishnaSpeaking(false);
+          }
+        }
         return;
       }
 
@@ -1195,7 +1246,7 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
         setStatus("speaking");
         try {
           turnTiming.mark("first_audio");
-          await ttsRef.current.speak(speak);
+          await speakLogged(speak, "canned", captureId);
         } finally {
           turnTiming.mark("last_audio");
           setKrishnaSpeaking(false);
@@ -1252,26 +1303,25 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
             );
             // Unverified speaker: always force confirmation (soft mode)
             if (isUnverified || hasSensitiveStep) {
+              const skillPrompt = "Should I run the skill \"" + skill.name + "\"?";
               pendingConfirmationRef.current = {
                 type: "plan",
-                spokenResponse: "Should I run the skill \"" + skill.name + "\"?",
+                spokenResponse: skillPrompt,
                 steps,
                 input: command,
                 captureId: currentCaptureIdRef.current ?? undefined,
               };
+              const thisPending = pendingConfirmationRef.current;
               reAskRef.current = false;
               clearConfirmTimeout();
               confirmTimeoutRef.current = setTimeout(() => {
-                pendingConfirmationRef.current = null;
-                reAskRef.current = false;
-                setStatus("idle");
-                ttsRef.current.speak("I'll take that as a no.");
+                void handleConfirmDecline(thisPending, "I'll take that as a no.", "Skill confirmation timed out (15s)");
               }, 15000);
               setStatus("confirming");
-              setLastSpoken("Should I run the skill \"" + skill.name + "\"?");
+              setLastSpoken(skillPrompt);
               setKrishnaSpeaking(true);
               try {
-                await ttsRef.current.speak("Should I run the skill \"" + skill.name + "\"?");
+                await speakLogged(skillPrompt, "confirm_prompt", thisPending.captureId);
               } finally {
                 setKrishnaSpeaking(false);
               }
@@ -1293,7 +1343,7 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
                 setKrishnaSpeaking(true);
                 setStatus("speaking");
                 try {
-                  await ttsRef.current.speak(msg);
+                  await speakLogged(msg, "answer");
                 } finally {
                   setKrishnaSpeaking(false);
                 }
@@ -1305,7 +1355,7 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
                 setKrishnaSpeaking(true);
                 setStatus("speaking");
                 try {
-                  await ttsRef.current.speak(msg);
+                  await speakLogged(msg, "error");
                 } finally {
                   setKrishnaSpeaking(false);
                 }
@@ -1357,7 +1407,7 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
         setKrishnaSpeaking(true);
         setStatus("speaking");
         try {
-          await ttsRef.current.speak(msg);
+          await speakLogged(msg, "answer");
         } finally {
           setKrishnaSpeaking(false);
           setStatus("idle");
@@ -1367,25 +1417,24 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
 
       // Job extraction: "run my daily job extraction"
       if (isJobExtractionCommand(command)) {
+        const jobPrompt = "Should I run your daily job extraction now?";
         pendingConfirmationRef.current = {
           type: "job_extraction",
-          spokenResponse: "Should I run your daily job extraction now?",
+          spokenResponse: jobPrompt,
           input: command,
           captureId: currentCaptureIdRef.current ?? undefined,
         };
+        const thisPending = pendingConfirmationRef.current;
         reAskRef.current = false;
         clearConfirmTimeout();
         confirmTimeoutRef.current = setTimeout(() => {
-          pendingConfirmationRef.current = null;
-          reAskRef.current = false;
-          setStatus("idle");
-          ttsRef.current.speak("Okay, I won't run it.");
+          void handleConfirmDecline(thisPending, "Okay, I won't run it.", "Job extraction confirmation timed out (15s)");
         }, 15000);
         setStatus("confirming");
-        setLastSpoken(pendingConfirmationRef.current.spokenResponse);
+        setLastSpoken(jobPrompt);
         setKrishnaSpeaking(true);
         try {
-          await ttsRef.current.speak(pendingConfirmationRef.current.spokenResponse);
+          await speakLogged(jobPrompt, "confirm_prompt", thisPending.captureId);
         } finally {
           setKrishnaSpeaking(false);
         }
@@ -1395,26 +1444,25 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
       // Reminder: "remind me..."
       const reminderResult = parseReminderCommand(command);
       if (reminderResult) {
+        const reminderPrompt = "Should I remind you to " + reminderResult.text + "?";
         pendingConfirmationRef.current = {
           type: "reminder",
-          spokenResponse: "Should I remind you to " + reminderResult.text + "?",
+          spokenResponse: reminderPrompt,
           reminderData: reminderResult,
           input: command,
           captureId: currentCaptureIdRef.current ?? undefined,
         };
+        const thisPending = pendingConfirmationRef.current;
         reAskRef.current = false;
         clearConfirmTimeout();
         confirmTimeoutRef.current = setTimeout(() => {
-          pendingConfirmationRef.current = null;
-          reAskRef.current = false;
-          setStatus("idle");
-          ttsRef.current.speak("I'll forget about it.");
+          void handleConfirmDecline(thisPending, "I'll forget about it.", "Reminder confirmation timed out (15s)");
         }, 15000);
         setStatus("confirming");
-        setLastSpoken(pendingConfirmationRef.current.spokenResponse);
+        setLastSpoken(reminderPrompt);
         setKrishnaSpeaking(true);
         try {
-          await ttsRef.current.speak(pendingConfirmationRef.current.spokenResponse);
+          await speakLogged(reminderPrompt, "confirm_prompt", thisPending.captureId);
         } finally {
           setKrishnaSpeaking(false);
         }
@@ -1446,7 +1494,7 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
           setKrishnaSpeaking(true);
           setStatus("speaking");
           try {
-            await ttsRef.current.speak(speak);
+            await speakLogged(speak, "answer");
           } finally {
             setKrishnaSpeaking(false);
           }
@@ -1456,7 +1504,7 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
           setStatus("speaking");
           setKrishnaSpeaking(true);
           try {
-            await ttsRef.current.speak("I had trouble looking at your screen: " + msg);
+            await speakLogged("I had trouble looking at your screen: " + msg, "error");
           } finally {
             setKrishnaSpeaking(false);
           }
@@ -1475,7 +1523,7 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
               setStatus("speaking");
               setKrishnaSpeaking(true);
               try {
-                await ttsRef.current.speak("There's nothing to undo.");
+                await speakLogged("There's nothing to undo.", "answer");
               } finally {
                 setKrishnaSpeaking(false);
               }
@@ -1495,7 +1543,7 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
             setKrishnaSpeaking(true);
             setStatus("speaking");
             try {
-              await ttsRef.current.speak(speak);
+              await speakLogged(speak, "answer");
             } finally {
               setKrishnaSpeaking(false);
             }
@@ -1504,7 +1552,7 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
             setStatus("speaking");
             setKrishnaSpeaking(true);
             try {
-              await ttsRef.current.speak("I had trouble undoing that.");
+              await speakLogged("I had trouble undoing that.", "error");
             } finally {
               setKrishnaSpeaking(false);
             }
@@ -1546,7 +1594,7 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
         fillerTimerRef.current = setTimeout(() => {
           if (!fillerSpokenRef.current) {
             fillerSpokenRef.current = true;
-            fillerPromiseRef.current = ttsRef.current.speak("One moment, " + honorific).then(() => {
+            fillerPromiseRef.current = speakLogged("One moment, " + honorific, "filler").then(() => {
               fillerPromiseRef.current = null;
             }).catch(() => {
               fillerPromiseRef.current = null;
@@ -1621,7 +1669,7 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
             if (fillerPromiseRef.current) {
               await fillerPromiseRef.current;
             }
-            await ttsRef.current.speak(overrideText);
+            await speakLogged(overrideText, "status");
           } finally {
             setKrishnaSpeaking(false);
           }
@@ -1653,7 +1701,7 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
               await fillerPromiseRef.current;
             }
             turnTiming.mark("first_audio");
-            await ttsRef.current.speak(spokenText);
+            await speakLogged(spokenText, "answer");
           } finally {
             turnTiming.mark("last_audio");
             setKrishnaSpeaking(false);
@@ -1678,19 +1726,17 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
             input: command,
             captureId: currentCaptureIdRef.current ?? undefined,
           };
+          const thisPending = pendingConfirmationRef.current;
           reAskRef.current = false;
           clearConfirmTimeout();
           confirmTimeoutRef.current = setTimeout(() => {
-            pendingConfirmationRef.current = null;
-            reAskRef.current = false;
-            setStatus("idle");
-            ttsRef.current.speak("I'll take that as a no.");
+            void handleConfirmDecline(thisPending, "I'll take that as a no.", "Plan confirmation timed out (15s)");
           }, 15000);
           setStatus("confirming");
           setLastSpoken(plan.say);
           setKrishnaSpeaking(true);
           try {
-            await ttsRef.current.speak(plan.say);
+            await speakLogged(plan.say, "confirm_prompt", thisPending.captureId);
           } finally {
             setKrishnaSpeaking(false);
           }
@@ -1715,19 +1761,17 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
               input: result.input,
               captureId: currentCaptureIdRef.current ?? undefined,
             };
+            const thisPending = pendingConfirmationRef.current;
             reAskRef.current = false;
             clearConfirmTimeout();
             confirmTimeoutRef.current = setTimeout(() => {
-              pendingConfirmationRef.current = null;
-              reAskRef.current = false;
-              setStatus("idle");
-              ttsRef.current.speak("I'll take that as a no.");
+              void handleConfirmDecline(thisPending, "I'll take that as a no.", "Action confirmation timed out (15s)");
             }, 15000);
             setStatus("confirming");
             setLastSpoken(result.spokenResponse);
             setKrishnaSpeaking(true);
             try {
-              await ttsRef.current.speak(result.spokenResponse);
+              await speakLogged(result.spokenResponse, "confirm_prompt", thisPending.captureId);
             } finally {
               setKrishnaSpeaking(false);
             }
@@ -1750,7 +1794,7 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
                 setLastSpoken(result.spokenResponse);
                 setKrishnaSpeaking(true);
                 try {
-                  await ttsRef.current.speak(result.spokenResponse);
+                  await speakLogged(result.spokenResponse, result.kind === "status" ? "status" : "answer");
                 } finally {
                   setKrishnaSpeaking(false);
                 }
@@ -1768,15 +1812,34 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
           setStatus("idle");
           return;
         }
-        const msg = err instanceof Error ? err.message : "Something went wrong";
-        setLastError(msg);
+        const rawMsg = err instanceof Error ? err.message : "Something went wrong";
+        const hon = getResponseSettings().honorific || "sir";
+        let humanMsg: string;
+        let logDetail: string;
+        if (rawMsg.includes("__KRNET__:")) {
+          humanMsg = `I'm having network trouble, ${hon} — give me a moment and try again.`;
+          logDetail = rawMsg.slice(rawMsg.indexOf("__KRNET__:") + 10);
+        } else if (rawMsg.includes("__KRAPI__:")) {
+          humanMsg = `The AI service had a problem, ${hon}.`;
+          logDetail = rawMsg.slice(rawMsg.indexOf("__KRAPI__:") + 10);
+        } else if (rawMsg.includes("__KRPARSE__:")) {
+          humanMsg = `I had trouble processing the response, ${hon}.`;
+          logDetail = rawMsg.slice(rawMsg.indexOf("__KRPARSE__:") + 12);
+        } else if (rawMsg.includes("__KRSTREAM__:")) {
+          humanMsg = `I had trouble processing the response, ${hon}.`;
+          logDetail = rawMsg.slice(rawMsg.indexOf("__KRSTREAM__:") + 13);
+        } else {
+          humanMsg = `Something unexpected went wrong, ${hon}.`;
+          logDetail = rawMsg;
+        }
+        setLastError(logDetail);
         turnTiming.mark("last_token");
-        logOutcome(command, "failed", "ai_error", msg);
+        logOutcome(command, "failed", "ai_error", logDetail);
         setStatus("speaking");
         setKrishnaSpeaking(true);
         try {
           turnTiming.mark("first_audio");
-          await ttsRef.current.speak("I had trouble: " + msg);
+          await speakLogged(humanMsg, "error");
         } finally {
           turnTiming.mark("last_audio");
           setKrishnaSpeaking(false);

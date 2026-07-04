@@ -117,5 +117,12 @@ pub fn migrations() -> Vec<Migration> {
             sql: include_str!("migrations/add-timing-to-command-log.sql"),
             kind: MigrationKind::Up,
         },
+        // Migration 18: speech_log table — every spoken utterance for observability (T4-F7)
+        Migration {
+            version: 18,
+            description: "create_speech_log_table",
+            sql: include_str!("migrations/speech-log.sql"),
+            kind: MigrationKind::Up,
+        },
     ]
 }

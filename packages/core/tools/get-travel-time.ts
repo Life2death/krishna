@@ -2,6 +2,7 @@ import type { Tool } from "./index";
 import { getSecret } from "../secrets";
 import { getResponseSettings } from "../settings";
 import { resolvePlace } from "./place-resolver";
+import { getHttpFetch } from "../http";
 
 // ── Types ────────────────────────────────────────────────────────────────
 
@@ -116,7 +117,8 @@ export async function callGoogleRoutes(params: {
     "routes.legs.steps.transitDetails.transitLine.name",
   ].join(",");
 
-  const response = await fetch(GOOGLE_ROUTES_BASE, {
+  const httpFetch = getHttpFetch();
+  const response = await httpFetch(GOOGLE_ROUTES_BASE, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",

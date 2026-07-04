@@ -213,10 +213,9 @@ export async function* fetchAIResponse(params: {
       ) {
         return; // Silently return on abort
       }
-      yield `Network error during API request: ${
+      throw new Error(`__KRNET__:${
         fetchError instanceof Error ? fetchError.message : "Unknown error"
-      }`;
-      return;
+      }`);
     }
 
     if (!response.ok) {
@@ -224,10 +223,7 @@ export async function* fetchAIResponse(params: {
       try {
         errorText = await response.text();
       } catch {}
-      yield `API request failed: ${response.status} ${response.statusText}${
-        errorText ? ` - ${errorText}` : ""
-      }`;
-      return;
+      throw new Error(`__KRAPI__:${response.status}:${errorText || response.statusText}`);
     }
 
     if (!provider?.streaming) {
@@ -235,10 +231,9 @@ export async function* fetchAIResponse(params: {
       try {
         json = await response.json();
       } catch (parseError) {
-        yield `Failed to parse non-streaming response: ${
+        throw new Error(`__KRPARSE__:${
           parseError instanceof Error ? parseError.message : "Unknown error"
-        }`;
-        return;
+        }`);
       }
       const content =
         getByPath(json, provider?.responseContentPath || "") || "";
@@ -247,8 +242,7 @@ export async function* fetchAIResponse(params: {
     }
 
     if (!response.body) {
-      yield "Streaming not supported or response body missing";
-      return;
+      throw new Error("__KRAPI__:streaming_not_supported");
     }
 
     const reader = response.body.getReader();
@@ -273,10 +267,9 @@ export async function* fetchAIResponse(params: {
         ) {
           return; // Silently return on abort
         }
-        yield `Error reading stream: ${
+        throw new Error(`__KRSTREAM__:${
           readError instanceof Error ? readError.message : "Unknown error"
-        }`;
-        return;
+        }`);
       }
       const { done, value } = readResult;
       if (done) break;

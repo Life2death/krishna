@@ -1,4 +1,4 @@
-import { AIProviders, STTProviders, LatencyPanel } from "./components";
+import { AIProviders, STTProviders, LatencyPanel, SpeechLogPanel } from "./components";
 import Contribute from "@/components/Contribute";
 import { useSettings } from "@/hooks";
 import { PageLayout } from "@/layouts";
@@ -18,6 +18,11 @@ const DevSpace = () => {
       {/* Latency Instrumentation (Phase 0) */}
       <div className="mt-6">
         <LatencyPanel />
+      </div>
+
+      {/* Speech log — every spoken utterance (T4-F7) */}
+      <div className="mt-6">
+        <SpeechLogPanel />
       </div>
     </PageLayout>
   );
