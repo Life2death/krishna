@@ -422,7 +422,7 @@ owner's two remember turns; `command_log` shows both turns logged `answered` wit
 (he repeatedly heard "I'll forget about it." — the literal string at the memory-confirm
 timeout, `krishna.context.tsx` ~731/~1353):
 
-### T4-F6 · BLOCKER · OPEN — memory confirmation flow: silent 15s timeout + model narrates success before the save is confirmed → "saved" in chat, 0 rows in DB, `answered` in the log
+### T4-F6 · BLOCKER · FIXED (commit 38afa73) — memory confirmation flow: silent 15s timeout + model narrates success before the save is confirmed → "saved" in chat, 0 rows in DB, `answered` in the log
 The remember action WAS emitted this time (so `detectPhantomSave` correctly did not fire —
 this is a NEW failure mode, not a T4-F1 regression). The flow that actually happened:
 1. Model reply: "Saving that now, sir…" (+ remember action block) — spoken AND logged.
@@ -455,7 +455,7 @@ this is a NEW failure mode, not a T4-F1 regression). The flow that actually happ
 (d) Also verify WHY the owner's follow-up speech didn't resolve the confirm — if he spoke
     during Krishna's TTS, the mic may have been closed (no barge-in on confirm prompts?).
 
-### T4-F7 · FEATURE (owner-requested 2026-07-04) · OPEN — log EVERY spoken utterance to the dashboard, success or failure
+### T4-F7 · FEATURE (owner-requested 2026-07-04) · FIXED (commit 38afa73) — log EVERY spoken utterance to the dashboard, success or failure
 Owner: "I want each thing logged in dashboard whether success or failure … what he is reading
 there — not only success messages — so I can understand what's wrong and fine-tune it."
 Today at least these utterances are TTS-only ghosts (no chat entry, no command_log row):
@@ -473,6 +473,27 @@ dashboard panel (pattern: LatencyPanel) listing recent utterances with source + 
 command outcome. Direct `ttsRef.current.speak` becomes lint-forbidden by convention (add a
 code comment at the wrapper). This makes every future voice bug self-evident from the
 dashboard, which is exactly the owner's ask.
+
+## T4-F7 + T4-F6 completion note (reviewer finished the stalled session's WIP — commit 38afa73, 2026-07-03 night)
+A prior Claude Code session started both findings, intertwined them in `krishna.context.tsx`,
+and ran out of context ~60% through. Reviewer completed both (owner asked). Landed as ONE
+commit (not the instructed one-per-finding) because the F6 decline handler calls the F7
+`speakLogged` choke point — they share a file and can't be hunk-split non-interactively.
+- **T4-F7 done:** `speech_log` table via NEW migration **v18** (heeds T4-F5 — no shipped
+  migration edited); `speech-log.action.ts` (logSpeech/getRecentSpeech/deleteAll + redaction);
+  `speakLogged()` choke point with ALL ~35 speak sites routed (only the wrapper's own call
+  stays raw); `SpeechLogPanel` in Dev Space (LatencyPanel pattern, colored source tag + linked
+  command id).
+- **T4-F6 done:** (a) `handleConfirmDecline` choke point across all 9 timeout/decline sites —
+  marks `command_log` `declined`, records the line, fixes the mcp_tool hung-promise; (b) prompt
+  no longer says "Saving that now" (says "Let me confirm that with you") and forbids narrating
+  any un-emitted action; (c) shortened memory read-back so a long address doesn't eat the 15s
+  window (re-ask-once + typed-yes already worked).
+- Also fixed a **pre-existing** `tsc` error (`actions.ts:170`, from the earlier T2-N2 dedup)
+  that meant `bd644cf` didn't compile. Root tsc clean, 421/421 green.
+- **Owner still to verify live** (payoff test): save home/work → confirm prompt is SHORT → yes
+  → row in DB; then every spoken line (confirm prompts, timeouts, fillers, errors) shows in
+  Dev Space → Speech Log. Only `T4-F2` (the crash) remains, still NEEDS-REPRO.
 
 ---
 *Log format for the agent: change `OPEN` → `FIXED (p<N> commit <sha>)` with a one-line note.*
