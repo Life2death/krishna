@@ -50,6 +50,11 @@ fn get_app_version() -> String {
 }
 
 #[tauri::command]
+fn file_exists(path: String) -> bool {
+    std::path::Path::new(&path).exists()
+}
+
+#[tauri::command]
 fn show_presence(app: tauri::AppHandle) {
     if let Some(w) = app.get_webview_window("presence") {
         #[cfg(desktop)]
@@ -114,6 +119,7 @@ pub fn run() {
         .manage(shortcuts::MoveWindowState::default())
         .manage(OAuthState::new())
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_http::init())
         .plugin(tauri_plugin_keychain::init())
         .plugin(tauri_plugin_shell::init());
@@ -145,6 +151,7 @@ pub fn run() {
     let builder = builder
         .invoke_handler(tauri::generate_handler![
             get_app_version,
+            file_exists,
             show_presence,
             hide_presence,
             window::set_window_height,

@@ -3,18 +3,28 @@ import { Label, Header, Button } from "@/components";
 import { getMemoryByKey, createMemory } from "@/lib/repo-bound";
 import type { ApplicationProfile } from "@/types";
 import { defaultProfile, PROFILE_STORAGE_KEY } from "@/types";
+import { open } from "@tauri-apps/plugin-dialog";
+import { invoke } from "@tauri-apps/api/core";
 
 export const ApplicationProfileSettings = () => {
   const [profile, setProfile] = useState<ApplicationProfile>(defaultProfile);
   const [loaded, setLoaded] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [fileWarning, setFileWarning] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     getMemoryByKey(PROFILE_STORAGE_KEY).then((mem) => {
       if (mem) {
         try {
-          setProfile(JSON.parse(mem.value));
+          const p = JSON.parse(mem.value) as ApplicationProfile;
+          setProfile(p);
+          if (p.resumePath) {
+            invoke<boolean>("file_exists", { path: p.resumePath }).then((exists) => {
+              if (!exists) setFileWarning("Resume file not found at the saved path.");
+              else setFileWarning(null);
+            });
+          }
         } catch {
           // corrupted — start fresh
         }
@@ -22,6 +32,21 @@ export const ApplicationProfileSettings = () => {
       setLoaded(true);
     });
   }, []);
+
+  const handleBrowseResume = async () => {
+    try {
+      const selected = await open({
+        multiple: false,
+        filters: [{ name: "PDF", extensions: ["pdf"] }],
+      });
+      if (selected) {
+        setProfile((prev) => ({ ...prev, resumePath: selected }));
+        setFileWarning(null);
+      }
+    } catch {
+      // User cancelled or dialog failed — no-op
+    }
+  };
 
   const handleSave = async () => {
     setError(null);
@@ -138,12 +163,16 @@ export const ApplicationProfileSettings = () => {
 
         <div>
           <Label className="text-sm font-medium">Resume Path (local PDF)</Label>
-          <input
-            className="mt-1 w-full rounded-md border bg-background px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-            placeholder="C:\Users\vikra\Documents\resume.pdf"
-            value={profile.resumePath}
-            onChange={(e) => update("resumePath", e.target.value)}
-          />
+          <div className="mt-1 flex gap-2">
+            <input
+              className="flex-1 rounded-md border bg-background px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+              placeholder="C:\Users\vikra\Documents\resume.pdf"
+              value={profile.resumePath}
+              onChange={(e) => { update("resumePath", e.target.value); setFileWarning(null); }}
+            />
+            <Button size="sm" onClick={handleBrowseResume} type="button">Browse...</Button>
+          </div>
+          {fileWarning && <p className="mt-1 text-xs text-amber-500">{fileWarning}</p>}
         </div>
 
         <div>
