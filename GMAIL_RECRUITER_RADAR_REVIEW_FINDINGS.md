@@ -57,7 +57,7 @@ triggers, `KNOWN_SAFE`. G-2 verified end-to-end: `errorDetail` is logged to `spe
 threaded correctly. Graceful degrade to heuristic when no `llmFallback`. +76 lines of handler
 tests (mocked fetch+classify: happy path, fetch-failure, window_days). tsc clean, 496 green.
 
-**RR-2 · READY TO CODE (probe done 2026-07-05).** Live probe "search my Gmail for category:primary"
+**RR-2 · FIXED + MERGED (`8de2db4`, merge `99e1d1c`).** category:primary honored → 0 results now returns a valid empty answer (inboxFallback:false, no prefix); in:inbox fallback fires only on error/throw. Tests: 0-results→empty+no-prefix; throws→in:inbox. 25 gmail tests green, tsc clean. Reviewer-verified. Original spec: Live probe "search my Gmail for category:primary"
 returned **10 real Primary messages → the operator IS honored** on the owner's account. **LOCKED
 FIX:** in `gmailFetchRecruiterCandidates`, fall back to `in:inbox` **ONLY on an actual error/throw**,
 NOT on 0 results. Treat 0 primary results as a valid empty answer (`{candidates:[], inboxFallback:false}`)

@@ -62,6 +62,8 @@ after J2); then settings reorg / item 9 / item 11.
 | **7 · Voice-ID enrollment** | 3 live bugs fixed: ONNX single-thread (Tauri no SharedArrayBuffer), `addSample` missing `created_at`, real-error surfacing; enable gate → ≥3 samples. Owner enrolled + enabled live. | `04905c4`, `fa83f69`, `540213c` |
 | **7 · Voice-ID passive-fill bootstrap** | Meter stuck at enrolled count — add-gate (0.88) was stricter than match threshold (~0.85), so conversation could never grow the gallery. Now bootstrap-aware: while not mature, add-gate = match threshold; once mature, 0.88. Debug logs added. | `59e8d6d` |
 | **9 · Travel insights P3** | `route_watches` migration (v20, LF-normalized), repo fns, `route_watch`/`route_watch_cancel` arm+cancel, single-active-watch replace-on-rearm, unresolved-address refusal. No findings. | `e6589b7` |
+| **9 · Travel insights P4 (+fixes)** | Route-watch poller in 30s scheduler; trigger fires when duration ≤ threshold (cleared), interval-gated (15min default), expiry speaks close-out. Fixed 3 review findings TI-1/2/3. | `f7332a5` + `aced906` |
+| **13 · Recruiter RR-2** | `category:primary` 0-results → valid empty answer (no inbox sweep, no prefix); in:inbox fallback on error/throw only. Probe-confirmed operator honored. | `8de2db4` |
 
 Earlier (pre-session, already merged): item 1 (travel error visibility, `4b9c997`), item 2
 (no-narrated-actions, `3b85777`), item 10-H1 (job-hunter token — deployed + live-verified 2026-07-05).
@@ -92,18 +94,13 @@ trigger direction correct, interval gate in place (no more 30s Google-API spam),
 a close-out line. Nothing further scheduled unless the owner wants a P5.
 
 ### 🟢 Unblocked — agent queue, IN THIS EXACT ORDER (single worktree, one branch at a time)
-1. **[CURRENT] RR-2 · Recruiter fetch-fallback tuning** — Gmail now live (G-15), probe DONE
-   (`category:primary` IS honored, decision locked). Branch `fix/recradar-rr2` off `main`. See §5
-   + `GMAIL_RECRUITER_RADAR_REVIEW_FINDINGS.md`. Small.
-2. **G-16 + G-17 · Gmail spoken-output hygiene** — fixes the live TTS garble (raw email/id/ISO
-   date/em-dash reaching speech). Branch `fix/gmail-spoken-hygiene` off `main`. See
-   `GMAIL_REVIEW_FINDINGS.md` G-16/G-17. Small. **Note: touches the same file as RR-2
-   (`packages/core/tools/gmail.ts`, different functions) — do RR-2 first, merge, THEN branch this
-   off the updated main to avoid conflicts.**
-3. **Settings menu reorg** — spec approved (`SETTINGS_REORG_PLAN.md`), P1-P3 ready.
-4. **Item 11 · Natural speech V1** — `NATURAL_SPEECH_PLAN.md`, branch `feat/natural-speech`.
-5. **Item 6 · Network resilience P1** — `NETWORK_RESILIENCE_PLAN.md`.
-6. **Item 10-J4 · Assisted apply** — J2 landed; needs live CDP; sequence later. LinkedIn Easy
+1. **[CURRENT] G-16 + G-17 · Gmail spoken-output hygiene** — fixes the live TTS garble (raw
+   email/id/ISO date/em-dash reaching speech). Branch `fix/gmail-spoken-hygiene` off latest `main`
+   (RR-2 already merged, so no conflict). See `GMAIL_REVIEW_FINDINGS.md` G-16/G-17. Small.
+2. **Settings menu reorg** — spec approved (`SETTINGS_REORG_PLAN.md`), P1-P3 ready.
+3. **Item 11 · Natural speech V1** — `NATURAL_SPEECH_PLAN.md`, branch `feat/natural-speech`.
+4. **Item 6 · Network resilience P1** — `NETWORK_RESILIENCE_PLAN.md`.
+5. **Item 10-J4 · Assisted apply** — J2 landed; needs live CDP; sequence later. LinkedIn Easy
    Apply first, confirm-gated Submit.
 
 ### 🎨 Design-first (reviewer+owner specs in progress, 2026-07-05 — agent codes only after spec)
