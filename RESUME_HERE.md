@@ -85,6 +85,7 @@ add the auto-fill and the confirm-gated submit.
 | **G-16 + G-17 · Gmail spoken hygiene** | Speak sender name not raw email; drop raw msg-id ("Say 'read it'"); em-dash→comma, ISO date→natural. Fixes live TTS garble. 18 tests. | `40df3e7` |
 | **10 · Job autopilot J4-a** | In-app CDP client (getHttpFetch /json + WebSocket, localhost:9222 allowlist+CSP); `job_apply` opens next queued job + clicks Easy Apply (external Apply reported not clicked). JA-1 CDP-unwrap + JA-2 heuristic fixed. 20 tests. | `2ea06b5` |
 | **10 · Job autopilot J4-b** | Field-fill engine: enumerate form fields → map to J3 profile (label patterns) → fill via CDP → spoken summary; profile from memory DB store (JB-1 fix). No submit. 35 tests. | `b579f43` |
+| **10 · Job autopilot J4-c** | `job_apply_submit` (sensitive, verbatim-confirm gate G-5); submit-button detect + submission verify via fixed CDP evaluate; honest ambiguous path; applied-status POST. Follow-up JC-1 (gate POST on verification). 59 tests. | `ed1fd08` |
 
 Earlier (pre-session, already merged): item 1 (travel error visibility, `4b9c997`), item 2
 (no-narrated-actions, `3b85777`), item 10-H1 (job-hunter token — deployed + live-verified 2026-07-05).
@@ -129,16 +130,18 @@ a close-out line. Nothing further scheduled unless the owner wants a P5.
      (enumerate → map to J3 profile by label patterns → fill via CDP → collect unmapped → spoken
      summary). JB-1 fixed: profile loaded from the memory DB store (`getMemoryByKey`), not empty
      localStorage. No submit. **Live-verify owner-side:** open a real Easy Apply → fields fill.
-   - **J4-c [NEXT]** `feat(jobap-j4c)`: `job_apply_submit` = **sensitive, NOT KNOWN_SAFE**, confirm-gated
-     via verbatim-confirm (G-5); truth-check success (URL change / confirmation el / 2xx) before
-     claiming applied (gotcha #3); POST applied-status back to job-hunter + audit; stop on
-     CAPTCHA/login wall (never bypass). Tests: submit refuses w/o confirm, success-verify,
-     stop-conditions.
-   One sub-phase per commit, STOP+report after each. (Plan calls Naukri "J4b" — that's AFTER the
-   LinkedIn J4-a/b/c land.)
-2. **J3-A · Resume path file picker** (owner-reported 2026-07-05, non-blocking) — Application
-   Profile's "Resume Path" is a manually-typed text field, no browse button. Add
-   `@tauri-apps/plugin-dialog` (+ Rust crate + capability grant, doesn't exist in the project yet)
+   - **J4-c** ✅ DONE + MERGED (`ed1fd08`; `52e141a`): `job_apply_submit` — sensitive (NOT
+     KNOWN_SAFE), verbatim-confirm gate (G-5), submit-button detection + submission verification via
+     the fixed CDP evaluate, honest ambiguous path, POST applied-status. **Follow-up JC-1** (medium):
+     applied-POST is unconditional — should gate on `verification.success` (gotcha #3). 59 tests.
+   **LinkedIn J4-a/b/c all merged — assisted-apply pipeline is code-complete.** Remaining: J4b
+   (Naukri) later; **live-verify the full flow** ("apply to the next job" → fills → confirm →
+   submit) against real LinkedIn in the debug Chrome. One sub-phase per commit going forward.
+2. **J3-A · Resume path file picker** — ⚠️ **UNCOMMITTED in `krishna-m15`** (never committed; its
+   `npm install` for plugin-dialog is what corrupted node_modules — see incident note above). Before
+   it can merge: agent must COMMIT it **including `package.json` + `package-lock.json`** (else it
+   breaks on `npm ci`), then reviewer reinstalls + reviews. Adds `@tauri-apps/plugin-dialog` (+ Rust
+   crate + capability grant)
    and a "Browse..." button that opens a native PDF picker. See `JOB_AUTOPILOT_REVIEW_FINDINGS.md`
    J3-A for the full spec. Small, self-contained — good filler between bigger phases.
 3. **Settings menu reorg** — spec approved (`SETTINGS_REORG_PLAN.md`), P1-P3 ready.
