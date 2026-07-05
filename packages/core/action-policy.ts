@@ -6,6 +6,7 @@ const KNOWN_SAFE: ReadonlySet<string> = new Set([
   "youtube_search",
   "web_search",
   "get_travel_time",
+  "suggest_departure_time",
   "memory_write",
   "open_target",
   "gmail_search_messages",

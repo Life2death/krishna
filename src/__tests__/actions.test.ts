@@ -6,6 +6,7 @@ import { invoke } from "@tauri-apps/api/core";
 import type { ExecuteActionResult } from "@/lib/actions";
 
 const mockTravelToolRun = vi.hoisted(() => vi.fn());
+const mockSuggestDepartureRun = vi.hoisted(() => vi.fn());
 const mockJobQueueRun = vi.hoisted(() => vi.fn());
 const mockGmailSearchRun = vi.hoisted(() => vi.fn());
 const mockGmailReadRun = vi.hoisted(() => vi.fn());
@@ -20,6 +21,9 @@ const mockResolveTarget = vi.hoisted(() => vi.fn());
 vi.mock("@krishna/core/tools/get-travel-time", () => ({
   getTravelTimeTool: {
     run: mockTravelToolRun,
+  },
+  suggestDepartureTimeTool: {
+    run: mockSuggestDepartureRun,
   },
 }));
 
@@ -133,6 +137,24 @@ describe("parseActions", () => {
     const result = parseActions('```json\n{"action":"travel_time","from":"home","to":"work"}\n```');
     expect(result.actions).toHaveLength(1);
     expect(result.actions[0]).toEqual({ action: "travel_time", from: "home", to: "work" });
+  });
+
+  it("parses travel_best action from action block", () => {
+    const result = parseActions('Best time to leave.\n```action\n{"action":"travel_best","from":"home","to":"work","mode":"car"}\n```');
+    expect(result.spokenText).toBe("Best time to leave.");
+    expect(result.actions).toHaveLength(1);
+    expect(result.actions[0]).toEqual({ action: "travel_best", from: "home", to: "work", mode: "car" });
+  });
+
+  it("parses travel_best with window_hours", () => {
+    const result = parseActions('```action\n{"action":"travel_best","from":"home","to":"work","window_hours":2}\n```');
+    expect(result.actions[0]).toEqual({ action: "travel_best", from: "home", to: "work", window_hours: 2 });
+  });
+
+  it("parses travel_best from json block", () => {
+    const result = parseActions('```json\n{"action":"travel_best","from":"home","to":"gym","mode":"bicycle"}\n```');
+    expect(result.actions).toHaveLength(1);
+    expect(result.actions[0]).toEqual({ action: "travel_best", from: "home", to: "gym", mode: "bicycle" });
   });
 
   it("parses gmail_recruiters action from action block", () => {
@@ -345,6 +367,94 @@ describe("executeAction — travel_time", () => {
 
     expect(result.kind).toBe("answer");
     expect(result.ok).toBe(true);
+  });
+});
+
+describe("executeAction — travel_best", () => {
+  beforeEach(() => {
+    mockSuggestDepartureRun.mockReset();
+    vi.mocked(invoke).mockReset();
+  });
+
+  it("returns kind:answer with ok:true on tool success", async () => {
+    mockSuggestDepartureRun.mockResolvedValue({
+      success: true,
+      output: "Leaving now is 58 minutes, sir. If you wait until 9:30 it drops to 41 — that's your best window in the next 3 hours.",
+      data: { bestDepartureTime: "2026-07-05T09:30:00.000Z", bestDuration: "2460" },
+    });
+
+    const result = await executeAction({
+      action: "travel_best",
+      from: "home",
+      to: "work",
+      mode: "car",
+    });
+
+    expect(result.kind).toBe("answer");
+    expect(result.ok).toBe(true);
+    expect(result.spokenResponse).toContain("best window");
+    expect(result.spokenResponse).toContain("58 minutes");
+  });
+
+  it("returns kind:answer with ok:false on tool failure", async () => {
+    mockSuggestDepartureRun.mockResolvedValue({
+      success: false,
+      error: "Google Maps API key is not configured. Add one in Settings.",
+    });
+
+    const result = await executeAction({
+      action: "travel_best",
+      from: "home",
+      to: "work",
+    });
+
+    expect(result.kind).toBe("answer");
+    expect(result.ok).toBe(false);
+    expect(result.spokenResponse).toContain("API key is not configured");
+  });
+
+  it("propagates errorDetail on tool failure", async () => {
+    mockSuggestDepartureRun.mockResolvedValue({
+      success: false,
+      error: "All departure samples failed",
+      data: { errorDetail: "Google Routes API error (403): quota exceeded" },
+    });
+
+    const result = await executeAction({
+      action: "travel_best",
+      from: "home",
+      to: "work",
+    });
+
+    expect(result.errorDetail).toBe("Google Routes API error (403): quota exceeded");
+    expect(result.ok).toBe(false);
+  });
+
+  it("returns kind:answer with clarification on missing destination", async () => {
+    const result = await executeAction({
+      action: "travel_best",
+      from: "home",
+      to: "",
+    });
+
+    expect(result.kind).toBe("answer");
+    expect(result.ok).toBeUndefined();
+    expect(result.spokenResponse).toBe("Where would you like to go?");
+  });
+
+  it("catches thrown errors and surfaces them", async () => {
+    mockSuggestDepartureRun.mockRejectedValue(new Error("Network error"));
+
+    const result = await executeAction({
+      action: "travel_best",
+      from: "home",
+      to: "work",
+    });
+
+    expect(result.kind).toBe("answer");
+    expect(result.ok).toBe(false);
+    expect(result.spokenResponse).toBe("I couldn't check departure times, sir.");
+    expect(result.errorDetail).toBe("Network error");
   });
 });
 
