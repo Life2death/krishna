@@ -137,9 +137,14 @@ a close-out line. Nothing further scheduled unless the owner wants a P5.
    LinkedIn J4-a/b/c land.)
 2. **G-16 + G-17 · Gmail spoken-output hygiene** — live TTS garble fix (raw email/id/ISO date/
    em-dash reaching speech). Branch `fix/gmail-spoken-hygiene` off `main`. Small. Slotted after J4.
-3. **Settings menu reorg** — spec approved (`SETTINGS_REORG_PLAN.md`), P1-P3 ready.
-4. **Item 11 · Natural speech V1** — `NATURAL_SPEECH_PLAN.md`, branch `feat/natural-speech`.
-5. **Item 6 · Network resilience P1** — `NETWORK_RESILIENCE_PLAN.md`.
+3. **J3-A · Resume path file picker** (owner-reported 2026-07-05, non-blocking) — Application
+   Profile's "Resume Path" is a manually-typed text field, no browse button. Add
+   `@tauri-apps/plugin-dialog` (+ Rust crate + capability grant, doesn't exist in the project yet)
+   and a "Browse..." button that opens a native PDF picker. See `JOB_AUTOPILOT_REVIEW_FINDINGS.md`
+   J3-A for the full spec. Small, self-contained — good filler between bigger phases.
+4. **Settings menu reorg** — spec approved (`SETTINGS_REORG_PLAN.md`), P1-P3 ready.
+5. **Item 11 · Natural speech V1** — `NATURAL_SPEECH_PLAN.md`, branch `feat/natural-speech`.
+6. **Item 6 · Network resilience P1** — `NETWORK_RESILIENCE_PLAN.md`.
 
 ### 🎨 Design-first (reviewer+owner specs in progress, 2026-07-05 — agent codes only after spec)
 - **Settings menu reorg** (see 🟢 #3).
