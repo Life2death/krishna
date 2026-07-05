@@ -38,3 +38,26 @@ committed directly from the main checkout `D:\Learning\krishna` — should not h
 Content is identical on both; nothing lost. Left `feature/local-first-p1`'s history as-is (no
 rebase) rather than rewrite shared history unilaterally. Going forward: agent work must stay in
 `krishna-m15` on `feature/m1-5-voice` only.
+
+---
+
+## P3-FOLLOWUP (owner request 2026-07-05): relax the enable gate — too strict at 100%
+
+Owner hit the P3 strict gate live: can't enable Voice ID until the meter is 100% (~24 samples).
+**Owner decision: enable once there are ~3 enrolled samples** (not 100%). Change:
+- `useVoiceStatus.ts`: `canEnable` from `confidence >= 1` → `(status?.sampleCount ?? 0) >= 3`.
+  Keep `percent`/`state` for display; the meter stays informational, it just no longer BLOCKS
+  enabling. `setEnabled`'s gate already reads `canEnable`, so only the definition changes.
+- Update the "reach 100% to enable" copy in VoiceIdCard/VoiceIdSettings → "record 3 samples to enable".
+- Update the strict-gate test in `voiceid-hooks.test.ts` (was confidence-based → sampleCount>=3).
+**BLOCKED behind the enrollment fix** — at 0 samples the gate is moot; enrollment must work first
+(see the enrollment-failure debug below / GMAIL is unrelated). Bundle this with the enrollment fix
+for the agent.
+
+## ENROLLMENT FAILURE (live, 2026-07-05) — under debug
+"Record First Sample" → "Enrollment failed" (generic fallback in `useVoiceEnroll`). Real cause not
+yet captured. Prime suspect: WavLM model download/init (`@xenova/transformers`,
+`Xenova/wavlm-base-plus-sv` from Hugging Face) in `src/lib/voice-id/embedding.ts`. Need the
+Settings→VoiceID model-status line or the in-app console error to root-cause. Also a diagnostics
+gap: the Status card shows only "Enrollment failed" — should surface the real error (item-1/EV-1
+discipline).

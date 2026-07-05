@@ -326,3 +326,16 @@ well-formed query, so it was the first to touch the (empty) token store.
 even be live-verified until this lands.
 
 </details>
+
+### G-15 · FIXED + LIVE-VERIFIED (`e525b60`) · gmail.googleapis.com missing from Tauri http scope + CSP
+Every in-app Gmail API call failed with "url not allowed on the configured scope" — `gmail.googleapis.com`
+(GMAIL_API_BASE) was never in the http:default allowlist or CSP connect-src (only www.googleapis.com).
+OAuth worked (Rust reqwest, no scope). Added the host to capabilities (default/cross-platform/mobile)
++ CSP csp/devCsp. **Live-verified 2026-07-05:** "search my Gmail for mail from Archer" returned 5 real
+messages. Same class as the job-hunter host gap (J2-C, fixed same commit) and travel T1-F4.
+
+### G-16 · NIT · raw Gmail message id is spoken aloud
+The G-6 read-hint appends `…use gmail_read with id "19f2ccadeb6e1982".` to the SPOKEN output — TTS
+reads the hex id aloud (owner asked "what's this id about"). Keep the id as a handle for the read
+action, but drop it from the spoken text (or replace with "say 'read it' to open it"). Same
+"no raw data in speech" rule as item 14 (travel garble). Non-blocking.
