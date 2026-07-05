@@ -3,10 +3,27 @@ import { setHttpFetch } from "@krishna/core/http";
 import { setDriver } from "@krishna/core/database/driver";
 
 const mockGetSecret = vi.hoisted(() => vi.fn());
+const mockGetResponseSettings = vi.hoisted(() =>
+  vi.fn().mockReturnValue({
+    honorific: "sir",
+    responseLength: "auto",
+    language: "english",
+    autoScroll: true,
+    voiceMaxTokens: 100,
+    voiceModel: "",
+  }),
+);
 
 vi.mock("@krishna/core/secrets", () => ({
   getSecret: mockGetSecret,
   setSecretGetter: vi.fn(),
+}));
+
+vi.mock("@krishna/core/settings", () => ({
+  getResponseSettings: mockGetResponseSettings,
+  setSettingsGetter: vi.fn(),
+  RESPONSE_LENGTHS: {},
+  LANGUAGES: [],
 }));
 
 import { checkRouteWatches } from "@krishna/core/tools/check-route-watches";
@@ -44,6 +61,7 @@ function mockDbActiveWatch(overrides?: Record<string, unknown>) {
 describe("checkRouteWatches", () => {
   beforeEach(() => {
     mockGetSecret.mockReset().mockResolvedValue("test-key");
+    mockGetResponseSettings.mockReturnValue({ honorific: "sir" });
     mockSelect.mockReset();
     mockExecute.mockReset().mockResolvedValue({ rowsAffected: 1 });
     mockFetch.mockReset();
@@ -80,12 +98,14 @@ describe("checkRouteWatches", () => {
     expect(mockSelect).not.toHaveBeenCalled();
   });
 
-  it("marks expired watch and returns empty", async () => {
+  it("returns alert when watch expired — TI-3", async () => {
     mockSelect.mockResolvedValue(mockDbActiveWatch({ expires_at: Date.now() - 1000 }));
 
     const result = await checkRouteWatches();
 
-    expect(result).toEqual([]);
+    expect(result).toHaveLength(1);
+    expect(result[0].message).toContain("has ended");
+    expect(result[0].message).toContain("sir");
     expect(mockExecute).toHaveBeenCalledWith(
       expect.stringContaining("UPDATE route_watches SET"),
       expect.arrayContaining(["expired", "watch-1"]),
@@ -93,54 +113,68 @@ describe("checkRouteWatches", () => {
     expect(mockFetch).not.toHaveBeenCalled();
   });
 
-  it("updates watch with no alert when duration under threshold", async () => {
-    mockSelect.mockResolvedValue(mockDbActiveWatch());
-    mockRoutesResponse([{ duration: "1200s", staticDuration: "1200s", distanceMeters: 20000 }]);
+  it("skips API call when interval not yet elapsed — TI-2", async () => {
+    const now = Date.now();
+    mockSelect.mockResolvedValue(mockDbActiveWatch({ last_checked_at: now - 300000 })); // 5 min ago, < 15 min interval
 
     const result = await checkRouteWatches();
 
     expect(result).toEqual([]);
-    expect(mockExecute).toHaveBeenCalledWith(
-      expect.stringContaining("UPDATE route_watches SET"),
-      expect.arrayContaining([20, 0, "watch-1"]),
-    );
+    expect(mockFetch).not.toHaveBeenCalled();
   });
 
-  it("triggers alert when duration meets threshold", async () => {
-    mockSelect.mockResolvedValue(mockDbActiveWatch({ threshold_minutes: 20 }));
+  it("calls API when interval has elapsed — TI-2", async () => {
+    const now = Date.now();
+    mockSelect.mockResolvedValue(mockDbActiveWatch({ last_checked_at: now - 1200000 })); // 20 min ago, > 15 min interval
     mockRoutesResponse([{ duration: "1200s", staticDuration: "1200s", distanceMeters: 20000 }]);
 
     const result = await checkRouteWatches();
 
+    // duration 20 <= threshold 30 → alert
+    expect(result).toHaveLength(1);
+    expect(mockFetch).toHaveBeenCalled();
+  });
+
+  it("no alert when duration still above threshold — TI-1", async () => {
+    mockSelect.mockResolvedValue(mockDbActiveWatch({ threshold_minutes: 15 }));
+    mockRoutesResponse([{ duration: "1200s", staticDuration: "1200s", distanceMeters: 20000 }]); // 20 min
+
+    const result = await checkRouteWatches();
+
+    // 20 <= 15 is false → no alert
+    expect(result).toEqual([]);
+    expect(mockExecute).toHaveBeenCalledTimes(1);
+    expect(mockExecute.mock.calls[0][1]).not.toContain("triggered");
+  });
+
+  it("triggers alert when duration drops to threshold — TI-1", async () => {
+    mockSelect.mockResolvedValue(mockDbActiveWatch({ threshold_minutes: 20 }));
+    mockRoutesResponse([{ duration: "1200s", staticDuration: "1200s", distanceMeters: 20000 }]); // 20 min
+
+    const result = await checkRouteWatches();
+
+    // 20 <= 20 is true → alert
     expect(result).toHaveLength(1);
     expect(result[0].durationMinutes).toBe(20);
     expect(result[0].thresholdMinutes).toBe(20);
-    expect(result[0].message).toContain("20 minutes");
-    expect(result[0].message).toContain("20-minute threshold");
+    expect(result[0].message).toContain("just dropped to 20 minutes");
+    expect(result[0].message).toContain("good time to leave");
+    expect(result[0].message).toContain("sir");
     expect(mockExecute).toHaveBeenCalledWith(
       expect.stringContaining("UPDATE route_watches SET"),
       expect.arrayContaining(["triggered", "watch-1"]),
     );
   });
 
-  it("triggers alert when duration exceeds threshold", async () => {
-    mockSelect.mockResolvedValue(mockDbActiveWatch({ threshold_minutes: 15 }));
-    mockRoutesResponse([{ duration: "1500s", staticDuration: "1500s", distanceMeters: 20000 }]);
-
-    const result = await checkRouteWatches();
-
-    expect(result).toHaveLength(1);
-    expect(result[0].durationMinutes).toBe(25);
-    expect(result[0].message).toContain("25 minutes");
-  });
-
-  it("uses 'bike' label for two_wheeler mode alert", async () => {
+  it("uses 'bike' label for two_wheeler mode alert — TI-1", async () => {
     mockSelect.mockResolvedValue(mockDbActiveWatch({ mode: "two_wheeler", threshold_minutes: 20 }));
-    mockRoutesResponse([{ duration: "1500s", staticDuration: "1500s", distanceMeters: 20000 }]);
+    mockRoutesResponse([{ duration: "900s", staticDuration: "900s", distanceMeters: 20000 }]); // 15 min
 
     const result = await checkRouteWatches();
 
+    // 15 <= 20 is true → alert
     expect(result[0].message).toContain("bike route");
+    expect(result[0].message).toContain("good time to leave");
   });
 
   it("increments consecutive_failures on API error", async () => {
@@ -158,5 +192,16 @@ describe("checkRouteWatches", () => {
       expect.stringContaining("UPDATE route_watches SET"),
       expect.arrayContaining([1, "watch-1"]),
     );
+  });
+
+  it("uses configured honorific from settings", async () => {
+    mockGetResponseSettings.mockReturnValue({ honorific: "madam" });
+    mockSelect.mockResolvedValue(mockDbActiveWatch({ threshold_minutes: 20 }));
+    mockRoutesResponse([{ duration: "900s", staticDuration: "900s", distanceMeters: 20000 }]); // 15 min
+
+    const result = await checkRouteWatches();
+
+    expect(result[0].message).toContain("madam");
+    expect(result[0].message).not.toContain("sir");
   });
 });
