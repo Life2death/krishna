@@ -10,6 +10,8 @@ import { getResponseSettings } from "@krishna/core/settings";
 import { runRecruiterRadar, formatRecruiterOutput, COLD_START_DAYS } from "@krishna/core/tools/recruiter-radar";
 import type { Candidate, Classification } from "@krishna/core/tools/recruiter-radar";
 import { getLastCheckAt } from "@krishna/core/tools/recruiter-radar-state";
+import { createRouteWatch, getActiveRouteWatch, cancelRouteWatch } from "@krishna/core/database";
+import { resolvePlace } from "@krishna/core/tools/place-resolver";
 
 const ACTION_REGEX = /```action\n([\s\S]*?)```/g;
 const JSON_BLOCK_REGEX = /```json\n([\s\S]*?)```/g;
@@ -80,6 +82,20 @@ export function parseActions(reply: string): ParsedReply {
         }
         if (parsed && parsed.action === "job_queue") {
           actions.push({ action: "job_queue" });
+        }
+        if (parsed && parsed.action === "route_watch") {
+          actions.push({
+            action: "route_watch",
+            from: parsed.from,
+            to: parsed.to,
+            mode: parsed.mode,
+            threshold_minutes: parsed.threshold_minutes,
+            interval_minutes: parsed.interval_minutes,
+            window_hours: parsed.window_hours,
+          });
+        }
+        if (parsed && parsed.action === "route_watch_cancel") {
+          actions.push({ action: "route_watch_cancel" });
         }
       } catch {
         // Not valid JSON, ignore
@@ -392,6 +408,80 @@ export async function executeAction(
     }
   }
 
+  if (action.action === "route_watch") {
+    const rawOrigin = action.from || "home";
+    const rawDestination = action.to || "";
+    const mode = action.mode || "car";
+
+    if (!rawDestination) {
+      return { kind: "status", spokenResponse: "Where would you like me to watch?" };
+    }
+
+    const origin = await resolvePlace(rawOrigin);
+    const destination = await resolvePlace(rawDestination);
+
+    if (origin === rawOrigin && rawOrigin !== "home" && rawOrigin !== "work") {
+      return { kind: "status", spokenResponse: `I don't have your ${rawOrigin} address, sir. Tell me and I'll remember it.` };
+    }
+    if (destination === rawDestination && rawDestination !== "home" && rawDestination !== "work") {
+      return { kind: "status", spokenResponse: `I don't have your ${rawDestination} address, sir. Tell me and I'll remember it.` };
+    }
+
+    const now = Date.now();
+    const defaultThreshold = 40;
+    const defaultInterval = 15;
+    const windowHours = action.window_hours ?? 4;
+    const expiresAt = now + windowHours * 3600000;
+    const intervalMinutes = Math.max(10, action.interval_minutes ?? defaultInterval);
+
+    // Cancel any existing active watch (single-active-watch rule)
+    const existing = await getActiveRouteWatch();
+    if (existing) {
+      await cancelRouteWatch(existing.id);
+    }
+
+    const id = crypto.randomUUID();
+    const watch = await createRouteWatch({
+      id,
+      origin,
+      destination,
+      mode,
+      threshold_minutes: action.threshold_minutes ?? defaultThreshold,
+      interval_minutes: intervalMinutes,
+      expires_at: expiresAt,
+      last_checked_at: null,
+      last_duration_minutes: null,
+      consecutive_failures: 0,
+      status: "active",
+      created_at: now,
+    });
+
+    const expiryDate = new Date(expiresAt);
+    const expiryTime = expiryDate.toLocaleTimeString("en-US", {
+      hour: "numeric",
+      minute: "2-digit",
+      hour12: true,
+    });
+
+    const spokenResponse = `Watching ${origin} to ${destination}, sir — I'll speak up the moment it drops under ${watch.threshold_minutes} minutes. I'll keep watching until ${expiryTime}.`;
+
+    return {
+      kind: "status",
+      spokenResponse,
+      ok: true,
+    };
+  }
+
+  if (action.action === "route_watch_cancel") {
+    const active = await getActiveRouteWatch();
+    if (!active) {
+      return { kind: "status", spokenResponse: "There's no active route watch to cancel, sir." };
+    }
+
+    await cancelRouteWatch(active.id);
+    return { kind: "status", spokenResponse: `Cancelled the route watch from ${active.origin} to ${active.destination}, sir.`, ok: true };
+  }
+
   if (action.action === "gmail_send") {
     const result = await gmailSendEmailTool.run(
       { to: action.to, subject: action.subject, body: action.body, cc: action.cc ?? "", bcc: action.bcc ?? "" },
@@ -541,6 +631,22 @@ export async function resolveActionForConfirm(
     }
 
     return { spokenResponse: "I couldn't find an app named \"" + rawTarget + "\"" };
+  }
+
+  if (action.action === "route_watch") {
+    const from = action.from || "home";
+    const to = action.to || "";
+    const placeStr = [from, to].filter(Boolean).join(" to ");
+    return {
+      spokenResponse: `Watch route from ${placeStr}?`,
+      needsConfirmation: true,
+      pendingResult: {
+        found: true,
+        displayName: `route_watch: ${placeStr}`,
+        target: "",
+        actionToResume: JSON.stringify(action),
+      } as any,
+    };
   }
 
   return { spokenResponse: "Unknown action" };

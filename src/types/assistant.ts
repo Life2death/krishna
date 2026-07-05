@@ -16,7 +16,9 @@ export type Action =
   | { action: "gmail_list_labels" }
   | { action: "gmail_send"; to: string; subject: string; body: string; cc?: string; bcc?: string }
   | { action: "gmail_recruiters"; window_days?: number }
-  | { action: "job_queue" };
+  | { action: "job_queue" }
+  | { action: "route_watch"; from?: string; to?: string; mode?: string; threshold_minutes?: number; interval_minutes?: number; window_hours?: number }
+  | { action: "route_watch_cancel" };
 
 export interface StepAction {
   tool: string;
