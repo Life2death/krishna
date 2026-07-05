@@ -177,6 +177,17 @@ samples too narrow for natural speech). NEEDS the console `[voice-id] verify: sc
 confirm before fixing. Likely fix: broaden the gallery from near-miss speech while immature (add
 when score ≥ threshold − margin), but do NOT guess-fix a biometric gate without the score.
 
+**🔴 INCIDENT + NEW RULE (2026-07-05 evening): NO CONCURRENT `npm install`/builds.** The agent ran
+`npm install` (for J3-A's `@tauri-apps/plugin-dialog`) while the reviewer was building from the main
+checkout → node_modules corrupted (bin shims left temp-named, `tauri` CLI unresolvable, `@tauri-apps/
+cli` files missing) → builds failed with `'tauri' is not recognized`. Repaired via full
+`rm -rf node_modules && npm ci`. **RULE: exactly ONE party touches node_modules at a time. Any phase
+adding a dependency: agent installs → confirms complete → THEN reviewer builds. Never interleave.**
+
+**⏳ PENDING REVIEW (agent stopped, environment repaired first):** J4-c submit gate (`52e141a`) and
+J3-A resume file picker — both on `feat/job-autopilot`, delivered while the build was broken.
+Reviewer reviews both against a healthy toolchain before any merge.
+
 ### 🎨 Design-first (reviewer+owner specs in progress, 2026-07-05 — agent codes only after spec)
 - **Settings menu reorg** (see 🟢 #3).
 - **Orb (presence indicator)** — small orb + state animations; spec only for now.
