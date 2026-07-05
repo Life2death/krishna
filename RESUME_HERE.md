@@ -82,6 +82,7 @@ add the auto-fill and the confirm-gated submit.
 | **9 · Travel insights P3** | `route_watches` migration (v20, LF-normalized), repo fns, `route_watch`/`route_watch_cancel` arm+cancel, single-active-watch replace-on-rearm, unresolved-address refusal. No findings. | `e6589b7` |
 | **9 · Travel insights P4 (+fixes)** | Route-watch poller in 30s scheduler; trigger fires when duration ≤ threshold (cleared), interval-gated (15min default), expiry speaks close-out. Fixed 3 review findings TI-1/2/3. | `f7332a5` + `aced906` |
 | **13 · Recruiter RR-2** | `category:primary` 0-results → valid empty answer (no inbox sweep, no prefix); in:inbox fallback on error/throw only. Probe-confirmed operator honored. | `8de2db4` |
+| **G-16 + G-17 · Gmail spoken hygiene** | Speak sender name not raw email; drop raw msg-id ("Say 'read it'"); em-dash→comma, ISO date→natural. Fixes live TTS garble. 18 tests. | `40df3e7` |
 
 Earlier (pre-session, already merged): item 1 (travel error visibility, `4b9c997`), item 2
 (no-narrated-actions, `3b85777`), item 10-H1 (job-hunter token — deployed + live-verified 2026-07-05).
@@ -135,16 +136,23 @@ a close-out line. Nothing further scheduled unless the owner wants a P5.
      stop-conditions.
    One sub-phase per commit, STOP+report after each. (Plan calls Naukri "J4b" — that's AFTER the
    LinkedIn J4-a/b/c land.)
-2. **G-16 + G-17 · Gmail spoken-output hygiene** — live TTS garble fix (raw email/id/ISO date/
-   em-dash reaching speech). Branch `fix/gmail-spoken-hygiene` off `main`. Small. Slotted after J4.
-3. **J3-A · Resume path file picker** (owner-reported 2026-07-05, non-blocking) — Application
+2. **J3-A · Resume path file picker** (owner-reported 2026-07-05, non-blocking) — Application
    Profile's "Resume Path" is a manually-typed text field, no browse button. Add
    `@tauri-apps/plugin-dialog` (+ Rust crate + capability grant, doesn't exist in the project yet)
    and a "Browse..." button that opens a native PDF picker. See `JOB_AUTOPILOT_REVIEW_FINDINGS.md`
    J3-A for the full spec. Small, self-contained — good filler between bigger phases.
-4. **Settings menu reorg** — spec approved (`SETTINGS_REORG_PLAN.md`), P1-P3 ready.
-5. **Item 11 · Natural speech V1** — `NATURAL_SPEECH_PLAN.md`, branch `feat/natural-speech`.
-6. **Item 6 · Network resilience P1** — `NETWORK_RESILIENCE_PLAN.md`.
+3. **Settings menu reorg** — spec approved (`SETTINGS_REORG_PLAN.md`), P1-P3 ready.
+4. **Item 11 · Natural speech V1** — `NATURAL_SPEECH_PLAN.md`, branch `feat/natural-speech`.
+5. **Item 6 · Network resilience P1** — `NETWORK_RESILIENCE_PLAN.md`.
+
+**⚠️ OPEN LIVE ISSUE — Voice ID meter stuck at 5** (owner-reported, under diagnosis 2026-07-05):
+DB shows `voiceprint_state: count=5, mature=0, adaptive_threshold=0.85, confidence=17%`. Bootstrap
+add-gate fix (`59e8d6d`) IS in the build and mature=0 (gate=0.85), so it's NOT the add-gate.
+Remaining cause: conversational speech scoring **below the 0.85 match threshold** → `match=false`
+in KrishnaVAD → `considerAddSample` never called → gallery can't broaden (cold-start: 5 deliberate
+samples too narrow for natural speech). NEEDS the console `[voice-id] verify: score=…` line to
+confirm before fixing. Likely fix: broaden the gallery from near-miss speech while immature (add
+when score ≥ threshold − margin), but do NOT guess-fix a biometric gate without the score.
 
 ### 🎨 Design-first (reviewer+owner specs in progress, 2026-07-05 — agent codes only after spec)
 - **Settings menu reorg** (see 🟢 #3).
