@@ -14,10 +14,10 @@ compiled clean), and the owner smoke-tested **items 12/13/14 + J1 all good**, in
 **G-13 Gmail Connect — ✓ Connected live, real mail returned.** **Both owner gates are now
 CLEARED**: G-13 (Gmail) and H1 (job-hunter token, confirmed live — `GET /api/jobs` returns real
 queue data with the bearer token). **RR-2 and item 10-J2 are both now unblocked.** Design specs
-approved and written (settings reorg, mini orb, Android roadmap). **Item 7 voice-ID P3 is now
-DONE + merged** (`c38ecd1`) — fixes the "not training on my voice" complaint (see §3 live caveat:
-needs one initial enrollment to bootstrap). Next agent pick: **item 10-J2** (queue read tool,
-newly unblocked) or **RR-2** (small); then settings reorg / item 9 / item 11.
+approved and written (settings reorg, mini orb, Android roadmap). **Item 7 voice-ID P3** (`c38ecd1`,
+see §3 live caveat) **and item 10-J2 queue read** (`c2bbe5f`, live-verified against the real API)
+are both now DONE + merged. **Next agent pick: RR-2** (recruiter fetch tuning — owner said do it
+after J2); then settings reorg / item 9 / item 11.
 
 ---
 
@@ -44,6 +44,7 @@ newly unblocked) or **RR-2** (small); then settings reorg / item 9 / item 11.
 | **13 · Recruiter Radar** | `gmail_recruiters` action; two-stage (category:primary→in:inbox fetch + LLM classify w/ heuristic fallback); stateful seen/last-check (migration v19); bare-vs-explicit windowing; spoken briefs + G-6 read hint + G-2 errorDetail | R1–R3 + RR-1/RR-3/RR-4 (`f6f9719`, `63b9afb`, `0f2f342`) |
 | **10 · Job autopilot J1+J3** | J1 = Job Pipeline URL alias (voice-open); J3 = ApplicationProfile store (12 fields, Settings UI, keyed memory row → SQLCipher) | `3500695`, `e910938` |
 | **7 · Voice-ID P3** | Option-A passive background-fill (fixes "not training on my voice"): `verifyVoice` always runs, `considerAddSample` fills gallery from daily use even when Voice ID off, never acting on it; P2-N1 shared `enabled` via `useVoiceStatus`; strict 100% enable-gate in the hook. 15 tests, tsc clean. | `c38ecd1` |
+| **10 · Job autopilot J2** | `get_job_queue` tool (GET /api/jobs, token via secureStorage, getHttpFetch, error taxonomy, G-2); `job_queue` action + KNOWN_SAFE; JobHunterSettings token field; spoken count = API total + top 3 by fit. Live-verified against real API. | `c2bbe5f` (714f0e8 + 698355f) |
 
 Earlier (pre-session, already merged): item 1 (travel error visibility, `4b9c997`), item 2
 (no-narrated-actions, `3b85777`), item 10-H1 (job-hunter token — deployed + live-verified 2026-07-05).
@@ -59,20 +60,15 @@ Earlier (pre-session, already merged): item 1 (travel error visibility, `4b9c997
 ## 4. PENDING QUEUE — priority order
 
 ### 🟢 Unblocked — agent can start now (owner-reprioritized 2026-07-05)
-1. **RR-2 · Recruiter fetch-fallback tuning** — NOW UNBLOCKED (G-13 live). See §5. Small.
-2. **Item 10-J2 · Queue read tool** — **NOW UNBLOCKED (H1 live-verified).** Voice-read the
-   not-applied job queue via `GET /api/jobs?status=not_applied` with the bearer token (store the
-   token in `secureStorage`, same pattern as Gmail/Maps keys — see gotcha #1 in §6). Plan:
-   `JOB_AUTOPILOT_PLAN.md`. Branch `feat/job-autopilot` off `main` (or continue same branch as
-   J1/J3 if still around). Prefix `feat(jobap-j2)`.
-3. **Settings menu reorg** — spec approved (`SETTINGS_REORG_PLAN.md`), P1-P3 ready to code.
-4. **Item 9 · Travel insights P1** — `TRAVEL_INSIGHTS_PLAN.md`, branch `feat/travel-insights`.
-5. **Item 11 · Natural speech V1** — `NATURAL_SPEECH_PLAN.md`, branch `feat/natural-speech`.
-6. **Item 6 · Network resilience P1** — `NETWORK_RESILIENCE_PLAN.md`.
-
-### 🔴 Blocked — do NOT start until the gate clears
-- **Item 10-J4** (assisted apply, LinkedIn/Naukri, confirm-gated Submit) — later; needs live CDP
-  AND J2 landed first (reads the queue it'll act on).
+1. **RR-2 · Recruiter fetch-fallback tuning** — NEXT UP (owner: do after J2 merge, which is done).
+   Now that Gmail is live, first determine if `category:primary` is honored on the account; then
+   fix the 0-results-triggers-fallback behavior. Small. See §5.
+2. **Settings menu reorg** — spec approved (`SETTINGS_REORG_PLAN.md`), P1-P3 ready to code.
+3. **Item 9 · Travel insights P1** — `TRAVEL_INSIGHTS_PLAN.md`, branch `feat/travel-insights`.
+4. **Item 11 · Natural speech V1** — `NATURAL_SPEECH_PLAN.md`, branch `feat/natural-speech`.
+5. **Item 6 · Network resilience P1** — `NETWORK_RESILIENCE_PLAN.md`.
+6. **Item 10-J4 · Assisted apply** — now unblocked-ish (J2 landed), but needs live CDP work;
+   sequence after the lighter items. LinkedIn Easy Apply first, confirm-gated Submit.
 
 ### 🎨 Design-first (reviewer+owner specs in progress, 2026-07-05 — agent codes only after spec)
 - **Settings menu reorg** (see 🟢 #3).

@@ -63,7 +63,7 @@ optional. After that, the owner's deploy steps (generate token → set `KRISHNA_
 
 ---
 
-## J2 review (`714f0e8`, `feat/job-autopilot`) — NOT merged; 2 issues to fix, 1 owner decision
+## J2 review — DONE + MERGED (`c2bbe5f`; tool 714f0e8, fixes 698355f). Was: 2 issues + 1 decision, all resolved.
 
 Committed properly this time (m15 clean, 534 tests green, tsc clean). Good: `getSecret(TOKEN_KEY)`
 for the token (secureStorage, matches Gmail/Maps), `getHttpFetch()` transport, clean error taxonomy
@@ -96,5 +96,4 @@ pipeline; top 3 by fit: …"); (b) speak only a high-fit subset count ("N jobs a
 section is its own JobHunterSettings — fix wording. (2) "added today" uses `new Date().toISOString()`
 (UTC) vs the owner's IST — off by part of a day near midnight; low priority.
 
-**Verdict: fix J2-A (safe-list) + J2-B (count via total) + pick the framing, then re-review & merge.
-Then RR-2.**
+**RESOLVED (698355f, merged c2bbe5f):** J2-A job_queue added to KNOWN_SAFE (+trust.test); J2-B count uses total with owner framing (total + top 3 by fit); wording fixed. tsc clean, 97/97 affected tests green. Minor left (non-blocking): "Top 3" label hardcoded even when top.length<3; "added today" uses UTC not IST. NEXT: RR-2.**
