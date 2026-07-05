@@ -55,7 +55,7 @@ describe("getJobQueueTool", () => {
     vi.clearAllMocks();
   });
 
-  it("returns formatted summary with count and top jobs", async () => {
+  it("returns formatted summary with total count and top jobs", async () => {
     mockGetSecret.mockResolvedValue("test-token-123");
     mockFetchResponse({
       rows: [
@@ -63,16 +63,16 @@ describe("getJobQueueTool", () => {
         makeJob({ job_id: "2", title: "Product Manager", company: "Beta Inc", fit: 78 }),
         makeJob({ job_id: "3", title: "Data Analyst", company: "Gamma LLC", fit: 65 }),
       ],
-      total: 3,
+      total: 144,
     });
 
     const result = await getJobQueueTool.run({}, { vars: {} });
 
     expect(result.success).toBe(true);
-    expect(result.output).toContain("3 unapplied jobs");
+    expect(result.output).toContain("144 jobs in your pipeline");
     expect(result.output).toContain("Senior Engineer at Acme Corp");
-    expect(result.output).toContain("Product Manager at Beta Inc");
     expect(result.data?.count).toBe("3");
+    expect(result.data?.total).toBe("144");
   });
 
   it("sorts by fit descending", async () => {

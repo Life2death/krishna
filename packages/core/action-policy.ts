@@ -12,6 +12,7 @@ const KNOWN_SAFE: ReadonlySet<string> = new Set([
   "gmail_read_message",
   "gmail_list_labels",
   "gmail_recruiters",
+  "job_queue",
 ]);
 
 /**

@@ -19,6 +19,10 @@ describe("classifyAction", () => {
     expect(classifyAction("web_search")).toBe("safe");
   });
 
+  it('classifies "job_queue" as safe', () => {
+    expect(classifyAction("job_queue")).toBe("safe");
+  });
+
   it('classifies "delete_file" as sensitive', () => {
     expect(classifyAction("delete_file")).toBe("sensitive");
   });

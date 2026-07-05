@@ -34,7 +34,7 @@ export const getJobQueueTool: Tool = {
       if (!token) {
         return {
           success: false,
-          output: "Job-hunter API token is not configured. Add it in Settings under Integrations.",
+          output: "Job-hunter API token is not configured. Add it in Settings under Job Hunter.",
           error: "JOB_HUNTER_API_TOKEN not found in secure storage",
         };
       }
@@ -79,13 +79,11 @@ export const getJobQueueTool: Tool = {
       const rows = queueData?.rows ?? [];
       const total = queueData?.total ?? rows.length;
 
-      if (rows.length === 0) {
+      if (total === 0) {
         return {
           success: true,
-          output: total === 0
-            ? "Your job queue is empty, sir — no unapplied jobs."
-            : `No unapplied jobs found${total > 0 ? ` (${total} total jobs in the pipeline).` : "."}`,
-          data: { count: "0", total: String(total) },
+          output: "Your job queue is empty, sir — no unapplied jobs.",
+          data: { count: "0", total: "0" },
         };
       }
 
@@ -102,11 +100,7 @@ export const getJobQueueTool: Tool = {
         .map((j) => `${j.title} at ${j.company}${j.fit != null ? ` (fit ${j.fit})` : ""}`)
         .join("; ");
 
-      let spokenResponse = `You have ${rows.length} unapplied job${rows.length > 1 ? "s" : ""} in the queue, sir.`;
-      if (total > rows.length) {
-        spokenResponse += ` (${total} total in pipeline.)`;
-      }
-      spokenResponse += ` Top one${top.length > 1 ? "s" : ""}: ${topItems}.`;
+      let spokenResponse = `You have ${total} job${total > 1 ? "s" : ""} in your pipeline, sir. Top ${top.length > 1 ? "3" : "one"} by fit: ${topItems}.`;
 
       const newToday = rows.filter((r) => {
         const d = (r.created_at ?? r.imported_date ?? "").slice(0, 10);
