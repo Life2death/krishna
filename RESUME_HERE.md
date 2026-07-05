@@ -83,6 +83,7 @@ add the auto-fill and the confirm-gated submit.
 | **9 · Travel insights P4 (+fixes)** | Route-watch poller in 30s scheduler; trigger fires when duration ≤ threshold (cleared), interval-gated (15min default), expiry speaks close-out. Fixed 3 review findings TI-1/2/3. | `f7332a5` + `aced906` |
 | **13 · Recruiter RR-2** | `category:primary` 0-results → valid empty answer (no inbox sweep, no prefix); in:inbox fallback on error/throw only. Probe-confirmed operator honored. | `8de2db4` |
 | **G-16 + G-17 · Gmail spoken hygiene** | Speak sender name not raw email; drop raw msg-id ("Say 'read it'"); em-dash→comma, ISO date→natural. Fixes live TTS garble. 18 tests. | `40df3e7` |
+| **10 · Job autopilot J4-a** | In-app CDP client (getHttpFetch /json + WebSocket, localhost:9222 allowlist+CSP); `job_apply` opens next queued job + clicks Easy Apply (external Apply reported not clicked). JA-1 CDP-unwrap + JA-2 heuristic fixed. 20 tests. | `2ea06b5` |
 
 Earlier (pre-session, already merged): item 1 (travel error visibility, `4b9c997`), item 2
 (no-narrated-actions, `3b85777`), item 10-H1 (job-hunter token — deployed + live-verified 2026-07-05).
@@ -116,17 +117,14 @@ a close-out line. Nothing further scheduled unless the owner wants a P5.
 **Owner re-prioritized 2026-07-05: J4 assisted apply is TOP — owner starts applying tomorrow AM.**
 
 1. **[CURRENT — TOP PRIORITY] Item 10-J4 · Assisted apply (LinkedIn Easy Apply)** —
-   `JOB_AUTOPILOT_PLAN.md` §J4. **Deps J2+J3 already merged.** Branch `feat/job-autopilot` off
-   `main`. The app has **NO CDP integration yet** (only the standalone `cdp-eval.mjs` debug
-   script) — J4 builds the in-app CDP client from scratch. **Break into 3 reviewable sub-phases
-   so something usable lands fastest** (J4-a alone lets the owner start — Krishna opens the right
-   job's apply page in their Chrome):
-   - **J4-a** `feat(jobap-j4a)`: CDP client (connect `http://localhost:9222/json` → WS CDP), add
-     `localhost:9222` to Tauri http allowlist + CSP (**G-15 lesson — do this in the same commit**),
-     `job_apply` action = pull next queue job (J2) → open its apply URL in attached Chrome →
-     detect+click Apply (DOM heuristic `/apply/i`). Speaks what it found. NO fill, NO submit.
-     Tests: detection against a fixture DOM, allowlist entry present.
-   - **J4-b** `feat(jobap-j4b)`: enumerate form fields → map to J3 profile → fill mappable →
+   `JOB_AUTOPILOT_PLAN.md` §J4. Deps J2+J3 merged. Branch `feat/job-autopilot`. In-app CDP client
+   built from scratch. 3 sub-phases:
+   - **J4-a** ✅ DONE + MERGED (`2ea06b5`; feat `2e4310d` + fixes `a333484`): CDP client
+     (getHttpFetch /json + global WebSocket; `localhost:9222` in allowlist+CSP), `job_apply` action
+     opens next queued job's apply page + clicks **Easy Apply** (external plain Apply reported, not
+     clicked). JA-1 (evaluate CDP-unwrap) + JA-2 (heuristic) fixed. **Live-verify owner-side:**
+     needs debug Chrome on 9222 w/ `--remote-allow-origins=*` + LinkedIn logged in.
+   - **J4-b [NEXT]** `feat(jobap-j4b)`: enumerate form fields → map to J3 profile → fill mappable →
      collect unmapped required → ask unmapped by voice one at a time. Still NO submit. Tests:
      field-mapping against fixture DOMs.
    - **J4-c** `feat(jobap-j4c)`: `job_apply_submit` = **sensitive, NOT KNOWN_SAFE**, confirm-gated
