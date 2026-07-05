@@ -154,6 +154,20 @@ almost certainly **module duplication** — the sync engine (`@krishna/core/sync
 — enrollment/DB work fine). Fix when sync becomes a priority: ensure a single driver-module
 instance (dedupe the alias/node_modules resolution) or pass the driver into SyncEngine explicitly.
 
+**⚠️ VID-1 · OPEN · WavLM model re-downloads every app load (dominant cause of "meter stuck")**
+(console, 2026-07-05): every speech event triggers `getModelFile`/`from_pretrained` fetching the
+WavLM model from Hugging Face (`embedding.ts` → `getModel`), and each `Ctrl+R` reload restarts the
+slow (no content-length, tens of MB) download from scratch — the callback-id spam confirms reloads
+interrupting in-flight ops. So `verifyVoice` rarely completes → `considerAddSample` rarely runs →
+meter can't grow. `env.useBrowserCache = true` is set but the Cache API isn't persisting across
+reloads in the dev WebView. **Fix options (pick after confirming in a prod build):** (a) verify
+whether a PRODUCTION build persists the cache (dev webview data dir may be ephemeral) — cheapest;
+(b) bundle the WavLM model with the app + serve via a Tauri asset/custom protocol (avoids the
+SPA-fallback that forced `allowLocalModels=false`); (c) persist to a Tauri-controlled cacheDir.
+Until fixed, workaround: after launch, let the model finish loading ONCE (don't reload) before
+relying on voice-ID. **This must be settled before the score/match question below can even be
+observed.**
+
 **⚠️ OPEN LIVE ISSUE — Voice ID meter stuck at 5** (owner-reported, under diagnosis 2026-07-05):
 DB shows `voiceprint_state: count=5, mature=0, adaptive_threshold=0.85, confidence=17%`. Bootstrap
 add-gate fix (`59e8d6d`) IS in the build and mature=0 (gate=0.85), so it's NOT the add-gate.
