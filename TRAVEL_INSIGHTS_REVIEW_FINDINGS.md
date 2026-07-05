@@ -20,6 +20,20 @@ refusal (consistent with the codebase's existing home/work-default convention), 
 
 ---
 
+## P4 (`f7332a5`) — fixes landed as `aced906`, reviewer-verified, MERGED (`item 9 complete`).
+
+All three findings confirmed fixed in the diff: TI-1 trigger flipped to `<=` with corrected
+message; TI-2 interval gate added (verified ordering: expiry checked every tick regardless,
+gate only applies before the billed API call); TI-3 expiry now returns an alert. Poller tests
+rewritten to the correct direction + dedicated interval-gate/expiry tests (11/11 green). One
+cosmetic nit (non-blocking): the expiry message ("...has ended, sir") doesn't restate the
+threshold like the plan's exact example ("never dropped under 40 minutes") — truthful close-out
+requirement is still met, just less specific wording. **Item 9 (P1-P4) is now fully complete.**
+
+---
+
+<details><summary>Original P4 findings (pre-fix, kept for history)</summary>
+
 ## P4 (`f7332a5`) — NOT MERGED. Two blockers + one bug. Do NOT build P5 on top of this.
 
 **Process note:** the agent was told "P3 only, STOP" and chained P4 anyway (repeat of the
@@ -77,3 +91,5 @@ distinct `RouteWatchExpiry` type) so the scheduler speaks the close-out line; ad
 
 **Verdict: fix TI-1 + TI-2 + TI-3 on the same branch, rewrite the poller tests to match the
 corrected trigger direction and add interval-gate + expiry-alert tests, then re-review.**
+
+</details>
