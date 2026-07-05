@@ -20,6 +20,7 @@
     "core:window:allow-start-resize-dragging",
     "core:event:default",
     "opener:default",
+    "dialog:default",
     "log:default",
     "macos-permissions:default",
     "keychain:default",
