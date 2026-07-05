@@ -1,4 +1,4 @@
-# RESUME HERE — Krishna handoff (updated 2026-07-05, night)
+# RESUME HERE — Krishna handoff (updated 2026-07-05, day 2 — post live smoke test)
 
 > **This is the single source of truth to resume from.** Reviewer (Claude), coding agent, and
 > owner (Vikram) all sync through this file. Read the whole thing before touching anything.
@@ -8,26 +8,26 @@
 
 ## 1. STATUS IN ONE PARAGRAPH
 
-`main` is **GREEN** (tip `e6ee68a`; tsc clean, affected suites green). Everything code-side that
-could be closed this session is closed and merged. **Three features shipped today** — Gmail live
-OAuth repair (item 12), travel spoken-route fix (item 14), and the full Recruiter Radar feature
-(item 13) — plus job-autopilot J1+J3. **Nothing is half-merged or broken.** The only things left
-are (a) two **owner** actions that gate live verification, and (b) fresh feature work for the agent
-on unblocked tracks. Start the agent on **item 9 or item 11**; do the two owner actions when you can.
+`main` is **GREEN** and — new since last update — **LIVE-VERIFIED by the owner** on 2026-07-05:
+the desktop app built and ran (`npm run tauri dev`, Rust side incl. the G-13 fix + migration v19
+compiled clean), and the owner smoke-tested **items 12/13/14 + J1 all good**, including the
+**G-13 Gmail Connect — ✓ Connected live, real mail returned.** That closes the biggest gate.
+**RR-2 is now unblocked** (live data available to decide the `category:primary` question).
+Owner's next focus: design work (settings menu reorg, orb, Android roadmap) + queue the agent on
+RR-2 / item 7 voice-ID P3 / item 9 / item 11.
 
 ---
 
-## 2. OWNER ACTION ITEMS (only you can do these — they unblock everything downstream)
+## 2. OWNER ACTION ITEMS
 
-1. **G-13 · Gmail live Connect (one-time).** In the running app: Settings → Gmail → paste the
-   Google OAuth client_id/secret (if not already) → **Connect** → confirm it flips to **✓ Connected**
-   → ask *"any email from <someone>?"* and confirm real mail comes back. **This gates ALL live
-   verification of Gmail + Recruiter Radar, and settles finding RR-2.** The code is fixed and
-   merged; this is the last mile only you can walk.
-2. **H1 · Deploy the job-hunter API token.** In the `D:\Learning\job-hunter` repo: merge
-   `feat/krishna-api-token` → `main`, generate a token (`python -c "import secrets; print(secrets.token_urlsafe(48))"`),
-   set `KRISHNA_API_TOKEN` + `KRISHNA_API_USER_EMAIL=vikram.panmand@gmail.com` in the Render
-   dashboard, push (Render auto-deploys). **This unblocks item 10-J2.**
+1. ~~**G-13 · Gmail live Connect**~~ — **DONE 2026-07-05, live-verified.** ✓ Connected; searches
+   return real mail. Gmail + Recruiter Radar are live.
+2. **H1 · Deploy the job-hunter API token** — **CONFIRM STATUS.** If done: J2 unblocks. If not:
+   `D:\Learning\job-hunter` → merge `feat/krishna-api-token`, generate a token
+   (`python -c "import secrets; print(secrets.token_urlsafe(48))"`), set `KRISHNA_API_TOKEN` +
+   `KRISHNA_API_USER_EMAIL=vikram.panmand@gmail.com` in Render, push.
+3. **J3 restart-persistence check (small):** Application Profile was filled+saved in-session;
+   the definitive test (quit app → relaunch → fields persist) — do once in passing.
 
 ---
 
@@ -47,37 +47,49 @@ Earlier (pre-session, already merged): item 1 (travel error visibility, `4b9c997
 
 ## 4. PENDING QUEUE — priority order
 
-### 🟢 Unblocked — agent can start now (pick top of list)
-1. **Item 9 · Travel insights P1** — best-departure suggestion + route watch. Plan:
-   `TRAVEL_INSIGHTS_PLAN.md`. Branch `feat/travel-insights` off `main`. Prefix `feat(trvins-pN)`.
-   (Dependency item 1 already landed, so it's clear.)
-2. **Item 11 · Natural speech V1** — variety engine, kills the "One moment, sir" monotony
-   (owner-requested). Plan: `NATURAL_SPEECH_PLAN.md`. Branch `feat/natural-speech`. Prefix
-   `feat(speech-vN)`.
-3. **Item 6 · Network resilience P1** — turn queue / offline handling. Plan:
-   `NETWORK_RESILIENCE_PLAN.md`. Branch `feat/network-pN`.
-4. **Item 7 · Voice-ID P3+P4** — strict-gate the Settings toggle, shared `enabled`, Option-A
-   background fill. Plan: `VOICE_ID_STATUS_METER_PLAN.md`.
+### 🟢 Unblocked — agent can start now (owner-reprioritized 2026-07-05)
+1. **RR-2 · Recruiter fetch-fallback tuning** — NOW UNBLOCKED (G-13 live). See §5. Small.
+2. **Item 7 · Voice-ID P3** — **this fixes the owner's live complaint "why isn't it training on
+   my voice":** root cause confirmed at `KrishnaVAD.tsx:72-95` — passive learning
+   (`considerAddSample`, ≥0.88 auto-add) only runs when Voice ID is **enabled**; when disabled,
+   `verifyVoice` is skipped entirely, so zero samples are ever added from daily use. And enabling
+   requires the meter at 100% (~24 manual recordings) → chicken-and-egg. P3's owner-chosen
+   **Option A background-fill** (silently top up samples from normal use while Voice ID is off,
+   never acting on it) is exactly the fix. Plan: `VOICE_ID_STATUS_METER_PLAN.md` (+ P2-N1 shared
+   `enabled`, strict-gate the old Settings toggle).
+3. **Settings menu reorg** — owner request 2026-07-05; grouped-submenu spec being designed with
+   the reviewer (incl. deduping the system-prompt editing that appears in both KrishnaSettings
+   and Persona). Spec doc to come before agent codes.
+4. **Item 9 · Travel insights P1** — `TRAVEL_INSIGHTS_PLAN.md`, branch `feat/travel-insights`.
+5. **Item 11 · Natural speech V1** — `NATURAL_SPEECH_PLAN.md`, branch `feat/natural-speech`.
+6. **Item 6 · Network resilience P1** — `NETWORK_RESILIENCE_PLAN.md`.
 
 ### 🔴 Blocked — do NOT start until the gate clears
-- **Item 10-J2** (queue read tool) — needs owner **H1 deploy** (§2.2).
+- **Item 10-J2** (queue read tool) — needs owner **H1 deploy** confirmation (§2.2).
 - **Item 10-J4** (assisted apply, LinkedIn/Naukri, confirm-gated Submit) — later; needs live CDP.
-- **RR-2** (Recruiter Radar fetch fallback) — needs **G-13 live** data (§2.1). See §5.
+
+### 🎨 Design-first (reviewer+owner specs in progress, 2026-07-05 — agent codes only after spec)
+- **Settings menu reorg** (see 🟢 #3).
+- **Orb (presence indicator)** — small orb + state animations; spec only for now.
+- **Android roadmap** — consolidate the parked Android tracks into one phased plan.
 
 ### ⚪ Parked (don't start unless asked)
 - M1.5 broad-question brevity (unhardened since owner revert), P6-F4 TTS-too-fast (needs repro),
-  Android tracks (`setTorch` ACL), Ola second-opinion tool, publish draft releases.
+  Ola second-opinion tool, publish draft releases.
 
 ---
 
-## 5. OPEN FINDING — RR-2 (Recruiter Radar, non-blocking, needs G-13 live)
+## 5. OPEN FINDING — RR-2 (Recruiter Radar) — NOW ACTIONABLE (G-13 live done)
 
 `gmailFetchRecruiterCandidates` falls back `category:primary → in:inbox` when primary returns
 **0 results OR throws**. Consequence: every empty-primary bare ask does a full inbox sweep AND
 leaks the spoken prefix *"I checked your inbox, sir —"*, misrepresenting normal operation as a
-fallback. **Fix after G-13 live tells us whether `category:primary` is honored on the account:**
-if yes → fall back only on error (treat 0 as a valid empty answer, no prefix); if no → drop
-`category:primary` and just use `in:inbox`. Full detail: `GMAIL_RECRUITER_RADAR_REVIEW_FINDINGS.md`.
+fallback. **First step (owner or agent via live app): determine whether `category:primary` is
+honored on the connected account** (ask "any recruiter emails this week?" and check whether the
+answer carries the inbox prefix / compare against visible Primary mail). Then: honored → fall
+back only on error (0 = valid empty answer, no prefix); not honored → drop `category:primary`,
+use `in:inbox` plainly (no prefix — it's not a fallback then). Full detail:
+`GMAIL_RECRUITER_RADAR_REVIEW_FINDINGS.md`.
 
 ---
 
