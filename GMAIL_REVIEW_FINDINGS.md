@@ -339,3 +339,17 @@ The G-6 read-hint appends `…use gmail_read with id "19f2ccadeb6e1982".` to the
 reads the hex id aloud (owner asked "what's this id about"). Keep the id as a handle for the read
 action, but drop it from the spoken text (or replace with "say 'read it' to open it"). Same
 "no raw data in speech" rule as item 14 (travel garble). Non-blocking.
+
+
+### G-17 · NIT (bundle with G-16) · Gmail spoken output garbles TTS (raw email / id / ISO date / em-dash)
+Live 2026-07-05: "search my Gmail for category:primary" spoke a line stuffed with TTS-hostile
+tokens that garbled aloud (owner reported garble, "hyphen or semicolon"). Culprits in the gmail
+tools' spoken formatting: the raw sender email (`vikram.panmand@gmail.com` — "@"/dotted local-part
+mangle), the ISO date in the subject (`2026-07-05` — hyphens read as dashes/run together), em-dashes
+`—` and colons (`category:primary`, `gmail_read with id`), and the raw hex message id
+`19f312363e46ea57` (the G-16 issue). **Fix (one spoken-output hygiene pass in gmail.ts formatting,
+covers G-16 too):** speak sender NAME only (drop the raw email); DROP the raw message id from spoken
+text (keep as the read-handle: "say 'read it' to open"); normalize the subject for speech
+(em-dash → comma/pause; render or omit ISO dates); don't echo operator strings like
+`category:primary` verbatim. Same "no raw data in speech" rule as item 14 (travel garble).
+Non-blocking; small.
