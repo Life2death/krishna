@@ -59,7 +59,10 @@ export function useVoiceEnroll(onEnrolled?: () => Promise<void>): VoiceEnrollSta
       setResult(`Enrolled (${enrollResult.sampleCount} sample${enrollResult.sampleCount > 1 ? "s" : ""}, ${enrollResult.dims} dims)`);
       await onEnrolled?.();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Enrollment failed");
+      // Surface the REAL reason (was hidden behind a generic "Enrollment failed").
+      console.error("[voice-id] Enrollment failed:", err);
+      const detail = err instanceof Error ? (err.message || err.name) : String(err);
+      setError(`Enrollment failed: ${detail || "unknown error"}`);
     } finally {
       setEnrolling(false);
     }

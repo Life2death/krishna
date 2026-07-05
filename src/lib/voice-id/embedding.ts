@@ -53,6 +53,19 @@ async function getModel(onProgress?: ProgressCallback): Promise<ModelSingleton> 
       env.allowLocalModels = false;
       env.useBrowserCache = true;
 
+      // Tauri's WebView (production especially) does NOT expose SharedArrayBuffer, so ONNX
+      // Runtime's default multi-threaded WASM backend fails to initialize — which makes the
+      // WavLM model load throw and enrollment fail with a generic error. Force single-threaded,
+      // mirroring the VAD's `ort.env.wasm.numThreads = 1` workaround in KrishnaVAD.tsx.
+      // (transformers.js bundles its own onnxruntime-web instance, so this must be set here too.)
+      try {
+        if (env.backends?.onnx?.wasm) {
+          env.backends.onnx.wasm.numThreads = 1;
+        }
+      } catch {
+        /* env shape can vary across transformers.js versions — best-effort */
+      }
+
       loadStatus = { status: "loading", progress: 0, file: "wavlm-base-plus-sv" };
       notify();
 
