@@ -11,13 +11,12 @@ import type { ModelLoadStatus } from "@/lib/voice-id/embedding";
 import { Mic, Trash2, ShieldCheck, ShieldAlert, Loader2, Download } from "lucide-react";
 
 export const VoiceIdSettings = () => {
-  const [enabled, setEnabled] = useState(isVoiceIdEnabled());
   const [threshold, setThreshold] = useState(readBrainConfig().voiceThreshold ?? 0.85);
   const [resetting, setResetting] = useState(false);
   const [resetError, setResetError] = useState<string | null>(null);
   const [modelStatus, setModelStatus] = useState<ModelLoadStatus>(getModelLoadStatus());
 
-  const { status, loading: statusLoading, refresh: fetchStatus } = useVoiceStatus();
+  const { status, loading: statusLoading, enabled, setEnabled, refresh: fetchStatus } = useVoiceStatus();
   const {
     recording,
     enrolling,
@@ -30,13 +29,6 @@ export const VoiceIdSettings = () => {
   useEffect(() => {
     return subscribeToModelLoad((s) => setModelStatus(s));
   }, []);
-
-  const handleToggle = (checked: boolean) => {
-    const cfg = readBrainConfig();
-    cfg.voiceIdEnabled = checked;
-    saveBrainConfig(cfg);
-    setEnabled(checked);
-  };
 
   const handleThresholdChange = (value: number[]) => {
     const v = value[0];
@@ -79,7 +71,7 @@ export const VoiceIdSettings = () => {
               When enabled, unverified speakers are asked to confirm before executing any action.
             </p>
           </div>
-          <Switch checked={enabled} onCheckedChange={handleToggle} />
+          <Switch checked={enabled} onCheckedChange={setEnabled} />
         </div>
 
         {enabled && (

@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { getVoiceStatus, isVoiceIdEnabled } from "@/lib/voice-client";
+import { readBrainConfig, saveBrainConfig } from "@/lib/brain-config";
 import type { VoiceStatus } from "@/lib/voice-client";
 
 export type VoiceIdCardState = "empty" | "training" | "ready" | "active";
@@ -11,6 +12,8 @@ export interface VoiceStatusDerived {
   percent: number;
   state: VoiceIdCardState;
   canEnable: boolean;
+  enabled: boolean;
+  setEnabled: (value: boolean) => void;
   refresh: () => Promise<void>;
 }
 
@@ -18,6 +21,7 @@ export function useVoiceStatus(): VoiceStatusDerived {
   const [status, setStatus] = useState<VoiceStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [, setTick] = useState(0);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const fetchStatus = useCallback(async () => {
@@ -43,6 +47,15 @@ export function useVoiceStatus(): VoiceStatusDerived {
   const confidence = status?.thresholdConfidence ?? 0;
   const percent = Math.round(confidence * 100);
   const enabled = isVoiceIdEnabled();
+  const canEnable = confidence >= 1;
+
+  const setEnabled = useCallback((value: boolean) => {
+    if (value && !canEnable) return;
+    const cfg = readBrainConfig();
+    cfg.voiceIdEnabled = value;
+    saveBrainConfig(cfg);
+    setTick(n => n + 1);
+  }, [canEnable]);
 
   let state: VoiceIdCardState;
   if (status && status.sampleCount === 0) {
@@ -55,7 +68,5 @@ export function useVoiceStatus(): VoiceStatusDerived {
     state = "active";
   }
 
-  const canEnable = confidence >= 1;
-
-  return { status, loading, error, percent, state, canEnable, refresh: fetchStatus };
+  return { status, loading, error, percent, state, canEnable, enabled, setEnabled, refresh: fetchStatus };
 }

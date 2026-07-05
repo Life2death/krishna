@@ -1,11 +1,9 @@
 import { Badge, Button, Switch } from "@/components";
 import { Mic, ShieldCheck, Fingerprint, Lock, Loader2 } from "lucide-react";
 import { useVoiceStatus, useVoiceEnroll } from "@/hooks";
-import { readBrainConfig, saveBrainConfig } from "@/lib/brain-config";
-import { useState } from "react";
 
 export const VoiceIdCard = () => {
-  const { status, loading, percent, state, canEnable, refresh } = useVoiceStatus();
+  const { status, loading, percent, state, canEnable, enabled, setEnabled, refresh } = useVoiceStatus();
   const {
     recording,
     enrolling,
@@ -13,7 +11,6 @@ export const VoiceIdCard = () => {
     start: startRecording,
     stop: stopRecording,
   } = useVoiceEnroll(refresh);
-  const [enabled, setEnabled] = useState(readBrainConfig().voiceIdEnabled ?? false);
 
   if (loading || !status) {
     return (
@@ -26,13 +23,6 @@ export const VoiceIdCard = () => {
       </div>
     );
   }
-
-  const handleToggle = (checked: boolean) => {
-    const cfg = readBrainConfig();
-    cfg.voiceIdEnabled = checked;
-    saveBrainConfig(cfg);
-    setEnabled(checked);
-  };
 
   const meterColor = percent >= 100 ? "bg-green-500" : "bg-amber-500";
   const borderColor = percent >= 100
@@ -133,7 +123,7 @@ export const VoiceIdCard = () => {
               <ShieldCheck className="h-3.5 w-3.5 text-green-600" />
               <span className="text-xs font-medium">Enable Voice ID</span>
             </div>
-            <Switch checked={enabled} onCheckedChange={handleToggle} />
+            <Switch checked={enabled} onCheckedChange={setEnabled} />
           </div>
         </div>
       )}
@@ -150,7 +140,7 @@ export const VoiceIdCard = () => {
               <ShieldCheck className="h-3.5 w-3.5 text-green-600" />
               <span className="text-xs font-medium">Voice ID Enabled</span>
             </div>
-            <Switch checked={enabled} onCheckedChange={handleToggle} />
+            <Switch checked={enabled} onCheckedChange={setEnabled} />
           </div>
         </div>
       )}
