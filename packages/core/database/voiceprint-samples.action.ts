@@ -77,9 +77,9 @@ export async function addSample(
   const now = Date.now();
   const sample: SampleRow = { id, speaker, embedding, dims, quality: quality ?? null, created_at: now };
   await db.execute(
-    `INSERT INTO voiceprint_samples (id, speaker, embedding, dims, quality, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?)`,
-    [id, speaker, embedding, dims, sample.quality, now]
+    `INSERT INTO voiceprint_samples (id, speaker, embedding, dims, quality, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    [id, speaker, embedding, dims, sample.quality, now, now]
   );
 
   const all = await getAllSamples(speaker);
