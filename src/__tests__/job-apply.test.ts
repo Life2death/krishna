@@ -596,3 +596,352 @@ describe("getJobApplyTool profile loading (JB-1)", () => {
     expect(result.output).toContain("don't have your application profile yet");
   });
 });
+
+// --- Submit-button DOM heuristic (J4-c) ---
+
+function evalSubmitJS(html: string): string {
+  const doc = new DOMParser().parseFromString(html, "text/html");
+  const fn = new Function(
+    "document",
+    `const candidates = document.querySelectorAll('button, input[type=submit], input[type=button]');
+    for (const el of candidates) {
+      const tag = el.tagName.toLowerCase();
+      const text = tag === 'input' ? (el.value || '').trim() : (el.textContent || '').trim();
+      const label = (el.getAttribute('aria-label') || '').trim();
+      const type = el.getAttribute('type') || '';
+      if (!text && !label) continue;
+      if (/cancel|back|previous/i.test(text) || /cancel|back|previous/i.test(label)) continue;
+      if (type === 'submit' || /submit|send application|apply now|next|continue|done/i.test(text) || /submit|send application|apply now|next|continue|done/i.test(label)) {
+        return JSON.stringify({ found: true, clicked: true, text: text || label, tag: tag });
+      }
+    }
+    return JSON.stringify({ found: false });`,
+  );
+  return fn(doc);
+}
+
+describe("clickSubmitButton DOM heuristic (J4-c)", () => {
+  it("finds and clicks a Submit button by type=submit", () => {
+    const result = JSON.parse(evalSubmitJS('<html><body><button type="submit">Submit</button></body></html>'));
+    expect(result.found).toBe(true);
+    expect(result.clicked).toBe(true);
+    expect(result.text).toBe("Submit");
+    expect(result.tag).toBe("button");
+  });
+
+  it("finds and clicks input[type=submit]", () => {
+    const result = JSON.parse(evalSubmitJS('<html><body><input type="submit" value="Apply Now" /></body></html>'));
+    expect(result.found).toBe(true);
+    expect(result.clicked).toBe(true);
+    expect(result.tag).toBe("input");
+  });
+
+  it("matches button with text 'Send Application'", () => {
+    const result = JSON.parse(evalSubmitJS('<html><body><button>Send Application</button></body></html>'));
+    expect(result.found).toBe(true);
+    expect(result.clicked).toBe(true);
+  });
+
+  it("matches 'Next' or 'Continue' for multi-step forms", () => {
+    const next = JSON.parse(evalSubmitJS('<html><body><button>Next</button></body></html>'));
+    expect(next.found).toBe(true);
+    const cont = JSON.parse(evalSubmitJS('<html><body><button>Continue</button></body></html>'));
+    expect(cont.found).toBe(true);
+    const done = JSON.parse(evalSubmitJS('<html><body><button>Done</button></body></html>'));
+    expect(done.found).toBe(true);
+  });
+
+  it("does not match Cancel, Back, or Previous buttons", () => {
+    const cancel = JSON.parse(evalSubmitJS('<html><body><button>Cancel</button></body></html>'));
+    expect(cancel.found).toBe(false);
+    const back = JSON.parse(evalSubmitJS('<html><body><button>Back</button></body></html>'));
+    expect(back.found).toBe(false);
+    const prev = JSON.parse(evalSubmitJS('<html><body><button>Previous</button></body></html>'));
+    expect(prev.found).toBe(false);
+  });
+
+  it("returns not found when no submit-related element exists", () => {
+    const result = JSON.parse(evalSubmitJS('<html><body><button>Click me</button><a>Learn more</a></body></html>'));
+    expect(result.found).toBe(false);
+  });
+
+  it("matches by aria-label for submit-like labels", () => {
+    const result = JSON.parse(evalSubmitJS('<html><body><button aria-label="Submit Application">x</button></body></html>'));
+    expect(result.found).toBe(true);
+    expect(result.clicked).toBe(true);
+  });
+
+  it("excludes elements with no text and no label", () => {
+    const result = JSON.parse(evalSubmitJS('<html><body><button></button></body></html>'));
+    expect(result.found).toBe(false);
+  });
+});
+
+// --- Submission-verification DOM heuristic (J4-c) ---
+
+function evalVerificationJS(bodyText: string): string {
+  const html = `<html><body>${bodyText}</body></html>`;
+  const doc = new DOMParser().parseFromString(html, "text/html");
+  const root = doc.documentElement;
+  const text = root ? root.textContent || '' : bodyText;
+  const success = /application sent|application submitted|thank you|applied successfully|your application has been|submitted successfully|we've received your application/i.test(text);
+  return JSON.stringify({ success: success, signal: success ? "confirmation text found" : "no clear confirmation" });
+}
+
+describe("verifySubmission regex patterns (J4-c)", () => {
+  it("detects 'application sent' text as success", () => {
+    const result = JSON.parse(evalVerificationJS("Your application has been sent"));
+    expect(result.success).toBe(true);
+    expect(result.signal).toBe("confirmation text found");
+  });
+
+  it("detects 'application submitted' text as success", () => {
+    const result = JSON.parse(evalVerificationJS("Application submitted successfully"));
+    expect(result.success).toBe(true);
+  });
+
+  it("detects 'thank you' text as success", () => {
+    const result = JSON.parse(evalVerificationJS("Thank you for your application"));
+    expect(result.success).toBe(true);
+  });
+
+  it("detects 'applied successfully' as success", () => {
+    const result = JSON.parse(evalVerificationJS("You have applied successfully"));
+    expect(result.success).toBe(true);
+  });
+
+  it("returns no success for unrelated page text", () => {
+    const result = JSON.parse(evalVerificationJS("Some random page content here"));
+    expect(result.success).toBe(false);
+    expect(result.signal).toBe("no clear confirmation");
+  });
+});
+
+// --- CDP evaluate path for clickSubmitButton (J4-c) ---
+
+describe("CdpClient.clickSubmitButton CDP evaluate path (J4-c)", () => {
+  beforeEach(() => {
+    setSecretGetter(async () => "test-token");
+  });
+
+  it("calls evaluate with submit-js and parses the result", async () => {
+    const { CdpClient } = await import("@krishna/core/tools/cdp-client");
+    const client = new CdpClient();
+    client.evaluate = vi.fn().mockResolvedValue(JSON.stringify({ found: true, clicked: true, text: "Submit", tag: "button" }));
+
+    const result = await client.clickSubmitButton();
+    expect(result.found).toBe(true);
+    expect(result.clicked).toBe(true);
+    expect(result.text).toBe("Submit");
+  });
+
+  it("returns not found when no submit button exists", async () => {
+    const { CdpClient } = await import("@krishna/core/tools/cdp-client");
+    const client = new CdpClient();
+    client.evaluate = vi.fn().mockResolvedValue(JSON.stringify({ found: false }));
+
+    const result = await client.clickSubmitButton();
+    expect(result.found).toBe(false);
+  });
+});
+
+// --- CDP evaluate path for verifySubmission (J4-c) ---
+
+describe("CdpClient.verifySubmission CDP evaluate path (J4-c)", () => {
+  beforeEach(() => {
+    setSecretGetter(async () => "test-token");
+  });
+
+  it("returns success true when confirmation text is found", async () => {
+    const { CdpClient } = await import("@krishna/core/tools/cdp-client");
+    const client = new CdpClient();
+    client.evaluate = vi.fn().mockResolvedValue(JSON.stringify({ success: true, signal: "confirmation text found", url: "https://linkedin.com/jobs/123" }));
+
+    const result = await client.verifySubmission();
+    expect(result.success).toBe(true);
+    expect(result.signal).toBe("confirmation text found");
+  });
+
+  it("returns success false when no confirmation text", async () => {
+    const { CdpClient } = await import("@krishna/core/tools/cdp-client");
+    const client = new CdpClient();
+    client.evaluate = vi.fn().mockResolvedValue(JSON.stringify({ success: false, signal: "no clear confirmation", url: "https://linkedin.com/jobs/123" }));
+
+    const result = await client.verifySubmission();
+    expect(result.success).toBe(false);
+    expect(result.signal).toBe("no clear confirmation");
+  });
+});
+
+// --- getJobApplySubmitTool graceful error / submit flow ---
+
+describe("getJobApplySubmitTool (J4-c)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    setSecretGetter(async () => "test-token");
+  });
+
+  it("returns submit declined when user does not confirm", async () => {
+    const { setVerbatimConfirm } = await import("@krishna/core/tools/mcp-bridge");
+    setVerbatimConfirm(() => Promise.resolve(false));
+
+    const { getJobApplySubmitTool } = await import("@krishna/core/tools/job-apply-submit");
+    const result = await getJobApplySubmitTool.run(
+      { url: "https://linkedin.com/apply/123", jobId: "j1", title: "Engineer", company: "Acme" },
+      { vars: {} },
+    );
+
+    expect(result.success).toBe(false);
+    expect(result.output).toContain("declined");
+  });
+
+  it("skips confirmation when preConfirmed is true", async () => {
+    const confirmSpy = vi.fn();
+    const { setVerbatimConfirm } = await import("@krishna/core/tools/mcp-bridge");
+    setVerbatimConfirm(confirmSpy);
+
+    const { CdpClient } = await import("@krishna/core/tools/cdp-client");
+    vi.spyOn(CdpClient.prototype, "listTargets").mockResolvedValue([
+      { id: "1", title: "LinkedIn", url: "https://linkedin.com/apply/123", webSocketDebuggerUrl: "ws://localhost:9222/1", type: "page" },
+    ]);
+    vi.spyOn(CdpClient.prototype, "connect").mockResolvedValue(undefined);
+    vi.spyOn(CdpClient.prototype, "clickSubmitButton").mockResolvedValue({
+      found: true, clicked: true, text: "Submit", tag: "button",
+    });
+    vi.spyOn(CdpClient.prototype, "verifySubmission").mockResolvedValue({
+      success: true, signal: "confirmation text found", url: "https://linkedin.com/apply/123",
+    });
+    vi.spyOn(CdpClient.prototype, "disconnect").mockResolvedValue(undefined);
+
+    const { getJobApplySubmitTool } = await import("@krishna/core/tools/job-apply-submit");
+    const result = await getJobApplySubmitTool.run(
+      { url: "https://linkedin.com/apply/123", jobId: "j1", title: "Engineer", company: "Acme" },
+      { vars: {}, preConfirmed: true },
+    );
+
+    expect(result.success).toBe(true);
+    expect(result.output).toContain("Submitted");
+    expect(confirmSpy).not.toHaveBeenCalled();
+  });
+
+  it("submits successfully and returns success output", async () => {
+    const { setVerbatimConfirm } = await import("@krishna/core/tools/mcp-bridge");
+    setVerbatimConfirm(() => Promise.resolve(true));
+
+    const { CdpClient } = await import("@krishna/core/tools/cdp-client");
+    vi.spyOn(CdpClient.prototype, "listTargets").mockResolvedValue([
+      { id: "1", title: "LinkedIn", url: "https://linkedin.com/apply/123", webSocketDebuggerUrl: "ws://localhost:9222/1", type: "page" },
+    ]);
+    vi.spyOn(CdpClient.prototype, "connect").mockResolvedValue(undefined);
+    vi.spyOn(CdpClient.prototype, "clickSubmitButton").mockResolvedValue({
+      found: true, clicked: true, text: "Submit", tag: "button",
+    });
+    vi.spyOn(CdpClient.prototype, "verifySubmission").mockResolvedValue({
+      success: true, signal: "confirmation text found", url: "https://linkedin.com/apply/123",
+    });
+    vi.spyOn(CdpClient.prototype, "disconnect").mockResolvedValue(undefined);
+
+    const httpFetch = vi.fn().mockResolvedValue({ ok: true });
+    setHttpFetch(httpFetch as any);
+
+    const { getJobApplySubmitTool } = await import("@krishna/core/tools/job-apply-submit");
+    const result = await getJobApplySubmitTool.run(
+      { url: "https://linkedin.com/apply/123", jobId: "j1", title: "Engineer", company: "Acme" },
+      { vars: {} },
+    );
+
+    expect(result.success).toBe(true);
+    expect(result.output).toContain("Submitted");
+    expect(result.output).toContain("Engineer");
+    expect(result.output).toContain("Acme");
+  });
+
+  it("reports ambiguous verification when no confirmation text", async () => {
+    const { setVerbatimConfirm } = await import("@krishna/core/tools/mcp-bridge");
+    setVerbatimConfirm(() => Promise.resolve(true));
+
+    const { CdpClient } = await import("@krishna/core/tools/cdp-client");
+    vi.spyOn(CdpClient.prototype, "listTargets").mockResolvedValue([
+      { id: "1", title: "LinkedIn", url: "https://linkedin.com/apply/123", webSocketDebuggerUrl: "ws://localhost:9222/1", type: "page" },
+    ]);
+    vi.spyOn(CdpClient.prototype, "connect").mockResolvedValue(undefined);
+    vi.spyOn(CdpClient.prototype, "clickSubmitButton").mockResolvedValue({
+      found: true, clicked: true, text: "Submit", tag: "button",
+    });
+    vi.spyOn(CdpClient.prototype, "verifySubmission").mockResolvedValue({
+      success: false, signal: "no clear confirmation", url: "https://linkedin.com/apply/123",
+    });
+    vi.spyOn(CdpClient.prototype, "disconnect").mockResolvedValue(undefined);
+
+    const { getJobApplySubmitTool } = await import("@krishna/core/tools/job-apply-submit");
+    const result = await getJobApplySubmitTool.run(
+      { url: "https://linkedin.com/apply/123", jobId: "j1", title: "Engineer", company: "Acme" },
+      { vars: {} },
+    );
+
+    expect(result.success).toBe(true);
+    expect(result.output).toContain("not certain");
+    expect(result.data?.status).toBe("submitted_ambiguous");
+  });
+
+  it("returns friendly message when submit button not found", async () => {
+    const { setVerbatimConfirm } = await import("@krishna/core/tools/mcp-bridge");
+    setVerbatimConfirm(() => Promise.resolve(true));
+
+    const { CdpClient } = await import("@krishna/core/tools/cdp-client");
+    vi.spyOn(CdpClient.prototype, "listTargets").mockResolvedValue([
+      { id: "1", title: "LinkedIn", url: "https://linkedin.com/apply/123", webSocketDebuggerUrl: "ws://localhost:9222/1", type: "page" },
+    ]);
+    vi.spyOn(CdpClient.prototype, "connect").mockResolvedValue(undefined);
+    vi.spyOn(CdpClient.prototype, "clickSubmitButton").mockResolvedValue({
+      found: false,
+    });
+    vi.spyOn(CdpClient.prototype, "disconnect").mockResolvedValue(undefined);
+
+    const { getJobApplySubmitTool } = await import("@krishna/core/tools/job-apply-submit");
+    const result = await getJobApplySubmitTool.run(
+      { url: "https://linkedin.com/apply/123", jobId: "j1", title: "Engineer", company: "Acme" },
+      { vars: {} },
+    );
+
+    expect(result.success).toBe(false);
+    expect(result.output).toContain("couldn't find the Submit button");
+  });
+
+  it("returns friendly message when Chrome not reachable", async () => {
+    const { setVerbatimConfirm } = await import("@krishna/core/tools/mcp-bridge");
+    setVerbatimConfirm(() => Promise.resolve(true));
+
+    const { CdpClient } = await import("@krishna/core/tools/cdp-client");
+    vi.spyOn(CdpClient.prototype, "listTargets").mockResolvedValue([]);
+
+    const { getJobApplySubmitTool } = await import("@krishna/core/tools/job-apply-submit");
+    const result = await getJobApplySubmitTool.run(
+      { url: "https://linkedin.com/apply/123", jobId: "j1", title: "Engineer", company: "Acme" },
+      { vars: {} },
+    );
+
+    expect(result.success).toBe(false);
+    expect(result.output).toContain("can't reach your Chrome");
+  });
+});
+
+// --- Parse job_apply_submit action ---
+
+describe("parseActions job_apply_submit", () => {
+  it("parses a job_apply_submit action block", async () => {
+    const { parseActions } = await import("@/lib/actions");
+    const reply = 'Text ```action\n{"action":"job_apply_submit","url":"https://linkedin.com/apply/123","jobId":"j1","title":"Engineer","company":"Acme"}\n```';
+    const parsed = parseActions(reply);
+    expect(parsed.actions).toHaveLength(1);
+    const action = parsed.actions[0];
+    if (action.action === "job_apply_submit") {
+      expect(action.url).toBe("https://linkedin.com/apply/123");
+      expect(action.jobId).toBe("j1");
+      expect(action.title).toBe("Engineer");
+      expect(action.company).toBe("Acme");
+    } else {
+      expect(action.action).toBe("job_apply_submit");
+    }
+  });
+});

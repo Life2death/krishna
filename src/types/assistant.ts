@@ -19,7 +19,8 @@ export type Action =
   | { action: "job_queue" }
   | { action: "route_watch"; from?: string; to?: string; mode?: string; threshold_minutes?: number; interval_minutes?: number; window_hours?: number }
   | { action: "route_watch_cancel" }
-  | { action: "job_apply" };
+  | { action: "job_apply" }
+  | { action: "job_apply_submit"; url: string; jobId: string; title: string; company: string };
 
 export interface StepAction {
   tool: string;

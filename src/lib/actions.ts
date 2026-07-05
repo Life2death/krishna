@@ -6,6 +6,7 @@ import type { ResolveResult } from "@/lib/resolver";
 import { getTravelTimeTool, suggestDepartureTimeTool } from "@krishna/core/tools/get-travel-time";
 import { getJobQueueTool } from "@krishna/core/tools/job-queue";
 import { getJobApplyTool } from "@krishna/core/tools/job-apply";
+import { getJobApplySubmitTool } from "@krishna/core/tools/job-apply-submit";
 import { gmailSearchMessagesTool, gmailReadMessageTool, gmailListLabelsTool, gmailSendEmailTool, gmailFetchRecruiterCandidates } from "@krishna/core/tools/gmail";
 import { getResponseSettings } from "@krishna/core/settings";
 import { runRecruiterRadar, formatRecruiterOutput, COLD_START_DAYS } from "@krishna/core/tools/recruiter-radar";
@@ -86,6 +87,9 @@ export function parseActions(reply: string): ParsedReply {
         }
         if (parsed && parsed.action === "job_apply") {
           actions.push({ action: "job_apply" });
+        }
+        if (parsed && parsed.action === "job_apply_submit") {
+          actions.push({ action: "job_apply_submit", url: parsed.url ?? "", jobId: parsed.jobId ?? "", title: parsed.title ?? "", company: parsed.company ?? "" });
         }
         if (parsed && parsed.action === "route_watch") {
           actions.push({
@@ -427,6 +431,29 @@ export async function executeAction(
         kind: "answer",
         ok: false,
         spokenResponse: "I couldn't apply to that job, sir.",
+        errorDetail: msg,
+      };
+    }
+  }
+
+  if (action.action === "job_apply_submit") {
+    try {
+      const result = await getJobApplySubmitTool.run(
+        { url: action.url, jobId: action.jobId, title: action.title, company: action.company },
+        { vars: {}, preConfirmed: options?.preConfirmed },
+      );
+      return {
+        kind: "answer",
+        spokenResponse: result.output || "I couldn't submit the application.",
+        ok: result.success,
+        errorDetail: result.error || result.data?.errorDetail,
+      };
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return {
+        kind: "answer",
+        ok: false,
+        spokenResponse: "I couldn't submit the application, sir.",
         errorDetail: msg,
       };
     }
