@@ -129,6 +129,12 @@ sub-phases land (or bundle with the next Settings-reorg pass, since it touches t
 
 ---
 
+## J4-a (`2e4310d` + fixes `a333484`) — FIXED + MERGED (`2ea06b5`).
+
+JA-1 fixed: `evaluate()` now unwraps `resp.result.value` + throws on `exceptionDetails`; real-path test added (mocks the nested CDP shape — would've caught the original bug). JA-2 fixed: Easy-Apply preferred (leading match, clicked), external plain Apply reported `{clicked:false, reason}` without clicking, `{found,clicked,text?,tag?,reason?}` shape, regex excludes applied/apply-filter/reapply. 20 tests green, tsc clean. **Live verification is owner-side** (open a real LinkedIn job → confirm it clicks Easy Apply).
+
+<details><summary>Original J4-a findings (pre-fix)</summary>
+
 ## J4-a (`2e4310d`) — NOT MERGED. 1 blocker + 1 quality gap + a test-coverage hole.
 
 Plumbing is mostly sound: `CdpClient.connect` (WebSocket, id-keyed pending map, CDP-error handling),
@@ -171,3 +177,5 @@ so it doesn't match "applied"/"apply filters" (word-boundary / known-label list)
 
 **Verdict: fix JA-1 (+ its real-path test) and JA-2 on `feat/job-autopilot`, re-review before merge.
 Everything else in the commit (connect/navigate/listTargets/allowlist/CSP/action wiring) is fine.**
+
+</details>
