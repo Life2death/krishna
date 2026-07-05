@@ -57,6 +57,7 @@
         { "url": "https://api.cohere.ai/**" },
         { "url": "https://api.perplexity.ai/**" },
         { "url": "http://localhost:11434/**" },
+        { "url": "http://localhost:9222/**" },
         { "url": "https://speech.googleapis.com/**" },
         { "url": "https://api.deepgram.com/**" },
         { "url": "https://*.stt.speech.microsoft.com/**" },
