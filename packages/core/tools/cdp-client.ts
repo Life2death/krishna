@@ -10,8 +10,10 @@ export interface CdpTarget {
 
 export interface ApplyButtonResult {
   found: boolean;
+  clicked?: boolean;
   text?: string;
   tag?: string;
+  reason?: string;
 }
 
 interface PendingCall {
@@ -112,29 +114,47 @@ export class CdpClient {
   }
 
   async evaluate<T>(expr: string, awaitPromise = true): Promise<T> {
-    const result = await this.send<{ type: string; value?: T; description?: string; subtype?: string }>(
-      "Runtime.evaluate",
-      { expression: expr, awaitPromise, returnByValue: true },
-    );
-    if (result.type === "object" && result.subtype === "error") {
-      throw new Error(`CDP evaluate error: ${result.description}`);
+    const resp = await this.send<{
+      result: { type: string; value?: T; description?: string; subtype?: string };
+      exceptionDetails?: { text?: string; exception?: { description?: string } };
+    }>("Runtime.evaluate", { expression: expr, awaitPromise, returnByValue: true });
+
+    if (resp.exceptionDetails) {
+      const detail = resp.exceptionDetails.text || resp.exceptionDetails.exception?.description || "Unknown error";
+      throw new Error(`CDP evaluate error: ${detail}`);
     }
-    return result.value as T;
+    return resp.result.value as T;
   }
 
   async clickApplyButton(): Promise<ApplyButtonResult> {
-    const js = `(() => {
-      const candidates = document.querySelectorAll('button, a');
-      for (const el of candidates) {
-        const text = (el.textContent || '').trim().toLowerCase();
-        const label = (el.getAttribute('aria-label') || '').trim().toLowerCase();
-        if (/apply/i.test(text) || /apply/i.test(label)) {
-          el.click();
-          return JSON.stringify({ found: true, text: el.textContent?.trim() || '', tag: el.tagName.toLowerCase() });
-        }
-      }
-      return JSON.stringify({ found: false });
-    })()`;
+    const js = [
+      "(() => {",
+      "  const candidates = document.querySelectorAll('button, a');",
+      "  let externalApply = null;",
+      "  for (const el of candidates) {",
+      "    const text = (el.textContent || '').trim();",
+      "    const label = (el.getAttribute('aria-label') || '').trim();",
+      "    const lowerText = text.toLowerCase();",
+      "    const lowerLabel = label.toLowerCase();",
+    "    if (/\\bapplied\\b/.test(lowerText) || /\\bapplied\\b/.test(lowerLabel) ||",
+    "        /apply\\s*filter/.test(lowerText) || /filter\\s*apply/.test(lowerText) ||",
+    "        /apply\\s*filter/.test(lowerLabel) || /filter\\s*apply/.test(lowerLabel)) continue;",
+      "    if (/^\\s*easy\\s+apply\\b/i.test(text) || /^\\s*easy\\s+apply\\b/i.test(label)) {",
+      "      el.click();",
+      "      return JSON.stringify({ found: true, clicked: true, text: text, tag: el.tagName.toLowerCase() });",
+      "    }",
+      "    if (/\\bapply\\b/i.test(lowerText) || /\\bapply\\b/i.test(lowerLabel)) {",
+      "      if (!externalApply) {",
+      "        externalApply = { text: text, tag: el.tagName.toLowerCase() };",
+      "      }",
+      "    }",
+      "  }",
+      "  if (externalApply) {",
+      '    return JSON.stringify({ found: true, clicked: false, reason: "external ATS apply — out of MVP scope" });',
+      "  }",
+      "  return JSON.stringify({ found: false });",
+      "})()",
+    ].join("\n");
 
     const result = await this.evaluate<string>(js);
     return JSON.parse(result) as ApplyButtonResult;

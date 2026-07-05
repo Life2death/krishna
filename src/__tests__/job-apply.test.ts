@@ -1,75 +1,105 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach, beforeAll } from "vitest";
 import { setHttpFetch } from "@krishna/core/http";
 import { setSecretGetter } from "@krishna/core/secrets";
 
-// --- Apply-button JS expression tests (the DOM heuristic logic) ---
+// --- Apply-button JS expression logic (JA-2 DOM heuristic) ---
+// Tests the exact JS expression string that runs in Chrome via CDP,
+// evaluated in jsdom via new Function().
 
-function evalClickApplyJS(html: string): { found: boolean; text?: string; tag?: string } {
+function evalClickApplyJS(html: string): string {
   const doc = new DOMParser().parseFromString(html, "text/html");
-  const js = `(() => {
-    const candidates = document.querySelectorAll('button, a');
-    for (const el of candidates) {
-      const text = (el.textContent || '').trim().toLowerCase();
-      const label = (el.getAttribute('aria-label') || '').trim().toLowerCase();
-      if (/apply/i.test(text) || /apply/i.test(label)) {
-        el.click();
-        return JSON.stringify({ found: true, text: el.textContent?.trim() || '', tag: el.tagName.toLowerCase() });
-      }
-    }
-    return JSON.stringify({ found: false });
-  })()`;
-
   const fn = new Function(
     "document",
     `const candidates = document.querySelectorAll('button, a');
+    let externalApply = null;
     for (const el of candidates) {
-      const text = (el.textContent || '').trim().toLowerCase();
-      const label = (el.getAttribute('aria-label') || '').trim().toLowerCase();
-      if (/apply/i.test(text) || /apply/i.test(label)) {
-        const result = JSON.stringify({ found: true, text: el.textContent?.trim() || '', tag: el.tagName.toLowerCase() });
-        return JSON.parse(result);
+      const text = (el.textContent || '').trim();
+      const label = (el.getAttribute('aria-label') || '').trim();
+      const lowerText = text.toLowerCase();
+      const lowerLabel = label.toLowerCase();
+
+      if (/\\bapplied\\b/.test(lowerText) || /\\bapplied\\b/.test(lowerLabel) ||
+          /apply\\s*filter/.test(lowerText) || /filter\\s*apply/.test(lowerText) ||
+          /apply\\s*filter/.test(lowerLabel) || /filter\\s*apply/.test(lowerLabel)) continue;
+
+      if (/^\\s*easy\\s+apply\\b/i.test(text) || /^\\s*easy\\s+apply\\b/i.test(label)) {
+        return JSON.stringify({ found: true, clicked: true, text: text, tag: el.tagName.toLowerCase() });
+      }
+
+      if (/\\bapply\\b/i.test(lowerText) || /\\bapply\\b/i.test(lowerLabel)) {
+        if (!externalApply) {
+          externalApply = { text: text, tag: el.tagName.toLowerCase() };
+        }
       }
     }
-    return JSON.parse(JSON.stringify({ found: false }));`,
+    if (externalApply) {
+      return JSON.stringify({ found: true, clicked: false, reason: "external ATS apply — out of MVP scope" });
+    }
+    return JSON.stringify({ found: false });`,
   );
   return fn(doc);
 }
 
-describe("clickApplyButton DOM heuristic", () => {
-  it("finds <button> with text 'Apply Now'", () => {
-    const result = evalClickApplyJS('<html><body><button>Apply Now</button></body></html>');
+describe("clickApplyButton DOM heuristic (JA-2)", () => {
+  it("finds and clicks Easy Apply button", () => {
+    const result = JSON.parse(evalClickApplyJS('<html><body><button>Easy Apply</button></body></html>'));
     expect(result.found).toBe(true);
-    expect(result.text).toBe("Apply Now");
-    expect(result.tag).toBe("button");
-  });
-
-  it("finds <a> with text 'Easy Apply'", () => {
-    const result = evalClickApplyJS('<html><body><a>Easy Apply</a></body></html>');
-    expect(result.found).toBe(true);
+    expect(result.clicked).toBe(true);
     expect(result.text).toBe("Easy Apply");
-    expect(result.tag).toBe("a");
-  });
-
-  it("finds button via aria-label", () => {
-    const result = evalClickApplyJS('<html><body><button aria-label="Apply for this job">Click</button></body></html>');
-    expect(result.found).toBe(true);
-    expect(result.text).toBe("Click");
     expect(result.tag).toBe("button");
   });
 
-  it("returns not found when no apply button exists", () => {
-    const result = evalClickApplyJS('<html><body><button>Cancel</button><a>Learn more</a></body></html>');
+  it("finds Easy Apply by aria-label", () => {
+    const result = JSON.parse(evalClickApplyJS('<html><body><button aria-label="Easy Apply now">Click</button></body></html>'));
+    expect(result.found).toBe(true);
+    expect(result.clicked).toBe(true);
+    expect(result.text).toBe("Click");
+  });
+
+  it("does not click external Apply button, returns reason", () => {
+    const result = JSON.parse(evalClickApplyJS('<html><body><button>Apply Now</button></body></html>'));
+    expect(result.found).toBe(true);
+    expect(result.clicked).toBe(false);
+    expect(result.reason).toContain("external ATS apply");
+  });
+
+  it("does not click external Apply link, returns reason", () => {
+    const result = JSON.parse(evalClickApplyJS('<html><body><a>Apply for this job</a></body></html>'));
+    expect(result.found).toBe(true);
+    expect(result.clicked).toBe(false);
+  });
+
+  it("does not match 'applied' text", () => {
+    const result = JSON.parse(evalClickApplyJS('<html><body><button>Already Applied</button></body></html>'));
     expect(result.found).toBe(false);
   });
 
-  it("is case-insensitive", () => {
-    const result = evalClickApplyJS('<html><body><button>APPLY</button></body></html>');
-    expect(result.found).toBe(true);
+  it("does not match 'apply filters' text", () => {
+    const result = JSON.parse(evalClickApplyJS('<html><body><button>Apply Filters</button></body></html>'));
+    expect(result.found).toBe(false);
   });
 
-  it("matches when 'apply' is part of longer text", () => {
-    const result = evalClickApplyJS('<html><body><a>Click to Apply Here</a></body></html>');
+  it("does not match 'filter apply' text", () => {
+    const result = JSON.parse(evalClickApplyJS('<html><body><button>Filter Apply</button></body></html>'));
+    expect(result.found).toBe(false);
+  });
+
+  it("returns not found when no apply-related element exists", () => {
+    const result = JSON.parse(evalClickApplyJS('<html><body><button>Cancel</button><a>Learn more</a></body></html>'));
+    expect(result.found).toBe(false);
+  });
+
+  it("is case-insensitive for Easy Apply", () => {
+    const result = JSON.parse(evalClickApplyJS('<html><body><button>EASY APPLY</button></body></html>'));
     expect(result.found).toBe(true);
+    expect(result.clicked).toBe(true);
+  });
+
+  it("prefers Easy Apply over external Apply when both present", () => {
+    const result = JSON.parse(evalClickApplyJS('<html><body><button>Easy Apply</button><a>Apply Here</a></body></html>'));
+    expect(result.found).toBe(true);
+    expect(result.clicked).toBe(true);
+    expect(result.text).toBe("Easy Apply");
   });
 });
 
@@ -126,6 +156,38 @@ describe("CdpClient.listTargets", () => {
     const { CdpClient } = await import("@krishna/core/tools/cdp-client");
     const client = new CdpClient();
     await expect(client.listTargets()).rejects.toThrow("Chrome DevTools returned 500");
+  });
+});
+
+// --- Real-path CDP evaluate test (JA-1) ---
+
+describe("CdpClient.evaluate CDP response unwrapping (JA-1)", () => {
+  beforeEach(() => {
+    setSecretGetter(async () => "test-token");
+  });
+
+  it("extracts value from nested CDP Runtime.evaluate response", async () => {
+    const { CdpClient } = await import("@krishna/core/tools/cdp-client");
+    const client = new CdpClient();
+    client.send = vi.fn().mockResolvedValue({
+      result: { type: "string", value: '{"found":true,"clicked":true,"text":"Easy Apply","tag":"button"}' },
+    });
+
+    const result = await client.evaluate<string>("document.title");
+    expect(JSON.parse(result)).toEqual({
+      found: true, clicked: true, text: "Easy Apply", tag: "button",
+    });
+  });
+
+  it("throws on exceptionDetails from CDP", async () => {
+    const { CdpClient } = await import("@krishna/core/tools/cdp-client");
+    const client = new CdpClient();
+    client.send = vi.fn().mockResolvedValue({
+      result: { type: "object" },
+      exceptionDetails: { text: "ReferenceError: foo is not defined" },
+    });
+
+    await expect(client.evaluate<string>("foo()")).rejects.toThrow("ReferenceError");
   });
 });
 

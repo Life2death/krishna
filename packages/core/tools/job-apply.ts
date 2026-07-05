@@ -112,10 +112,12 @@ export const getJobApplyTool: Tool = {
         const company = nextJob.company;
 
         let spokenResponse: string;
-        if (applyResult.found) {
+        if (applyResult.clicked) {
           spokenResponse = `Opened the ${portal} application for ${title} at ${company}, sir — the Apply form is up.`;
+        } else if (applyResult.found) {
+          spokenResponse = `Opened the ${portal} application for ${title} at ${company}, sir. The page has an external Apply link — that is beyond MVP scope, sir.`;
         } else {
-          spokenResponse = `Opened the ${portal} application for ${title} at ${company}, sir. The page is loaded, but I couldn't spot the Apply button automatically.`;
+          spokenResponse = `Opened the ${portal} application for ${title} at ${company}, sir. The page is loaded, but I could not spot the Apply button automatically.`;
         }
 
         return {
