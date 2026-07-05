@@ -35,6 +35,24 @@ after J2); then settings reorg / item 9 / item 11.
 3. **J3 restart-persistence check (small):** Application Profile was filled+saved in-session;
    the definitive test (quit app → relaunch → fields persist) — do once in passing.
 
+### 🔴 OWNER SETUP FOR J4 ASSISTED APPLY (do TONIGHT — gates tomorrow morning regardless of code)
+The J4 code can be perfect and still do nothing without this local setup:
+1. **Launch Chrome with remote debugging** so the app can attach via CDP. Close all Chrome first,
+   then start it with:
+   `chrome.exe --remote-debugging-port=9222 --user-data-dir="C:\chrome-krishna"`
+   (a dedicated user-data-dir avoids clobbering your main profile; the app will attach to port
+   9222). Verify it works by opening `http://localhost:9222/json` in any browser → should return
+   JSON of open tabs.
+2. **Log into LinkedIn** (and Naukri later) in THAT Chrome instance and stay logged in — J4 uses
+   the already-logged-in session (no passwords stored in the app, by design).
+3. **Fill + verify the Application Profile** (Settings → Application Profile): name, email, phone,
+   current/expected CTC, notice period, resume path, LinkedIn URL, etc. J4 types these into forms;
+   unmapped fields get asked by voice. Confirm it persists across an app restart (item 2.3 above).
+4. Confirm the **resume file path** in the profile points at an actual PDF on disk (LinkedIn Easy
+   Apply often needs a resume upload).
+Once #1–#4 are done, J4-a (when it lands) can open the next job's apply page in your Chrome; b/c
+add the auto-fill and the confirm-gated submit.
+
 ---
 
 > **⚠️ G-15 / J2-C (fixed `e525b60`, needs rebuild + live re-verify):** `gmail.googleapis.com`
@@ -94,14 +112,34 @@ trigger direction correct, interval gate in place (no more 30s Google-API spam),
 a close-out line. Nothing further scheduled unless the owner wants a P5.
 
 ### 🟢 Unblocked — agent queue, IN THIS EXACT ORDER (single worktree, one branch at a time)
-1. **[CURRENT] G-16 + G-17 · Gmail spoken-output hygiene** — fixes the live TTS garble (raw
-   email/id/ISO date/em-dash reaching speech). Branch `fix/gmail-spoken-hygiene` off latest `main`
-   (RR-2 already merged, so no conflict). See `GMAIL_REVIEW_FINDINGS.md` G-16/G-17. Small.
-2. **Settings menu reorg** — spec approved (`SETTINGS_REORG_PLAN.md`), P1-P3 ready.
-3. **Item 11 · Natural speech V1** — `NATURAL_SPEECH_PLAN.md`, branch `feat/natural-speech`.
-4. **Item 6 · Network resilience P1** — `NETWORK_RESILIENCE_PLAN.md`.
-5. **Item 10-J4 · Assisted apply** — J2 landed; needs live CDP; sequence later. LinkedIn Easy
-   Apply first, confirm-gated Submit.
+**Owner re-prioritized 2026-07-05: J4 assisted apply is TOP — owner starts applying tomorrow AM.**
+
+1. **[CURRENT — TOP PRIORITY] Item 10-J4 · Assisted apply (LinkedIn Easy Apply)** —
+   `JOB_AUTOPILOT_PLAN.md` §J4. **Deps J2+J3 already merged.** Branch `feat/job-autopilot` off
+   `main`. The app has **NO CDP integration yet** (only the standalone `cdp-eval.mjs` debug
+   script) — J4 builds the in-app CDP client from scratch. **Break into 3 reviewable sub-phases
+   so something usable lands fastest** (J4-a alone lets the owner start — Krishna opens the right
+   job's apply page in their Chrome):
+   - **J4-a** `feat(jobap-j4a)`: CDP client (connect `http://localhost:9222/json` → WS CDP), add
+     `localhost:9222` to Tauri http allowlist + CSP (**G-15 lesson — do this in the same commit**),
+     `job_apply` action = pull next queue job (J2) → open its apply URL in attached Chrome →
+     detect+click Apply (DOM heuristic `/apply/i`). Speaks what it found. NO fill, NO submit.
+     Tests: detection against a fixture DOM, allowlist entry present.
+   - **J4-b** `feat(jobap-j4b)`: enumerate form fields → map to J3 profile → fill mappable →
+     collect unmapped required → ask unmapped by voice one at a time. Still NO submit. Tests:
+     field-mapping against fixture DOMs.
+   - **J4-c** `feat(jobap-j4c)`: `job_apply_submit` = **sensitive, NOT KNOWN_SAFE**, confirm-gated
+     via verbatim-confirm (G-5); truth-check success (URL change / confirmation el / 2xx) before
+     claiming applied (gotcha #3); POST applied-status back to job-hunter + audit; stop on
+     CAPTCHA/login wall (never bypass). Tests: submit refuses w/o confirm, success-verify,
+     stop-conditions.
+   One sub-phase per commit, STOP+report after each. (Plan calls Naukri "J4b" — that's AFTER the
+   LinkedIn J4-a/b/c land.)
+2. **G-16 + G-17 · Gmail spoken-output hygiene** — live TTS garble fix (raw email/id/ISO date/
+   em-dash reaching speech). Branch `fix/gmail-spoken-hygiene` off `main`. Small. Slotted after J4.
+3. **Settings menu reorg** — spec approved (`SETTINGS_REORG_PLAN.md`), P1-P3 ready.
+4. **Item 11 · Natural speech V1** — `NATURAL_SPEECH_PLAN.md`, branch `feat/natural-speech`.
+5. **Item 6 · Network resilience P1** — `NETWORK_RESILIENCE_PLAN.md`.
 
 ### 🎨 Design-first (reviewer+owner specs in progress, 2026-07-05 — agent codes only after spec)
 - **Settings menu reorg** (see 🟢 #3).
