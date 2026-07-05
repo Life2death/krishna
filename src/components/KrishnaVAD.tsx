@@ -68,8 +68,11 @@ export const KrishnaVAD = () => {
 
         setIsTranscribing(true);
 
-        // Run STT and (optionally) voice-ID verification in parallel.
-        // When voice ID is disabled, skip verify entirely.
+        // Run STT and voice-ID verification in parallel.
+        // Even when Voice ID is disabled, run verification passively so
+        // considerAddSample can top up the gallery from daily use (Option A
+        // background-fill). When disabled, the result is never acted on:
+        // no status indicator, no command gating.
         const voiceIdEnabled = isVoiceIdEnabled();
         const [transcription, voiceResult] = await Promise.all([
           fetchSTT({
@@ -77,28 +80,29 @@ export const KrishnaVAD = () => {
             selectedProvider: selectedSttProvider,
             audio: audioBlob,
           }),
-          voiceIdEnabled
-            ? verifyVoice(audio, 16000).catch((err) => {
-                console.error("[voice-id] Verify failed (fail-open):", err);
-                return null as any;
-              })
-            : Promise.resolve(null),
+          verifyVoice(audio, 16000).catch((err) => {
+            console.error("[voice-id] Verify failed (fail-open):", err);
+            return null as any;
+          }),
         ]);
 
         if (voiceResult) {
-          setVoiceStatus(voiceResult);
-
           // Passive learning: on every verified utterance, consider adding a sample
+          // regardless of whether Voice ID is enabled (fills the meter from normal use).
           if (voiceResult.enrolled && voiceResult.match) {
             considerAddSample(audio, 16000, voiceResult).catch((err) =>
               console.error("[voice-id] Passive sample add failed:", err)
             );
           }
+          // Only show status indicator and pass result when Voice ID is enabled
+          if (voiceIdEnabled) {
+            setVoiceStatus(voiceResult);
+          }
         }
 
         if (transcription) {
           await krishna.processCommand(transcription, {
-            voiceVerifyResult: voiceResult ?? undefined,
+            voiceVerifyResult: voiceIdEnabled ? (voiceResult ?? undefined) : undefined,
           });
         }
       } catch (error) {
