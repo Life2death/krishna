@@ -7,6 +7,7 @@ import { parseActions, executeAction, resolveActionForConfirm, decideActionRespo
 import { executePlan, resolvePlaceholders } from "@/lib/executor";
 import { getAllTools } from "@/lib/tools";
 import { selectTools } from "@krishna/core/tool-selector";
+import { checkRouteWatches } from "@krishna/core/tools/check-route-watches";
 import { getTTS, getElevenLabsTTS, getPiperTTS, type TTSProvider } from "@/lib/tts";
 import { setSpokenUrlNames } from "@/lib/speech-sanitize";
 import { APP_ALIASES } from "@/config/app-aliases";
@@ -729,7 +730,23 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
           }
         }
       } catch {
-        // Scheduler failures are non-critical
+        // Reminder scheduler failures are non-critical
+      }
+
+      // Route watch poller — check active watches every 30s
+      try {
+        const alerts = await checkRouteWatches();
+        for (const alert of alerts) {
+          setLastSpoken(alert.message);
+          setKrishnaSpeaking(true);
+          try {
+            await speakLogged(alert.message, "answer");
+          } finally {
+            setKrishnaSpeaking(false);
+          }
+        }
+      } catch {
+        // Route watch poller failures are non-critical
       }
     }, 30000);
     return () => {

@@ -60,6 +60,34 @@ export async function cancelRouteWatch(id: string): Promise<boolean> {
   return result.rowsAffected > 0;
 }
 
+export async function updateRouteWatch(
+  id: string,
+  updates: {
+    last_checked_at?: number;
+    last_duration_minutes?: number | null;
+    consecutive_failures?: number;
+    status?: RouteWatchStatus;
+  },
+): Promise<boolean> {
+  const db = await getDatabase();
+  const setClauses: string[] = [];
+  const values: unknown[] = [];
+
+  for (const [key, value] of Object.entries(updates)) {
+    setClauses.push(`${key} = ?`);
+    values.push(value);
+  }
+
+  if (setClauses.length === 0) return false;
+
+  values.push(id);
+  const result = await db.execute(
+    `UPDATE route_watches SET ${setClauses.join(", ")} WHERE id = ?`,
+    values,
+  );
+  return result.rowsAffected > 0;
+}
+
 export async function getRouteWatch(id: string): Promise<RouteWatch | null> {
   const db = await getDatabase();
   const rows = await db.select<DbRouteWatch[]>(

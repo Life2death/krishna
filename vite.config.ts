@@ -22,6 +22,7 @@ export default defineConfig(async () => ({
       "@krishna/core/http": path.resolve(__dirname, "packages/core/http.ts"),
       "@krishna/core/settings": path.resolve(__dirname, "packages/core/settings.ts"),
       "@krishna/core/secrets": path.resolve(__dirname, "packages/core/secrets.ts"),
+      "@krishna/core/tools/check-route-watches": path.resolve(__dirname, "packages/core/tools/check-route-watches.ts"),
       "@krishna/core/tools/mcp-bridge": path.resolve(__dirname, "packages/core/tools/mcp-bridge.ts"),
       "@krishna/core/tools/computer": path.resolve(__dirname, "packages/core/tools/computer.ts"),
       "@krishna/core/tools/get-travel-time": path.resolve(__dirname, "packages/core/tools/get-travel-time.ts"),
