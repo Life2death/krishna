@@ -11,7 +11,7 @@
 `main` is **GREEN** and — new since last update — **LIVE-VERIFIED by the owner** on 2026-07-05:
 the desktop app built and ran (`npm run tauri dev`, Rust side incl. the G-13 fix + migration v19
 compiled clean), and the owner smoke-tested **items 12/13/14 + J1 all good**, including the
-**G-13 Gmail Connect — ✓ Connected live, real mail returned.** **Both owner gates are now
+**G-13 Gmail Connect — ✓ Connected live.** (NOTE: only the OAuth Connect step was verified; actual Gmail API calls were still blocked by a missing http-scope allowlist — see G-15 below, now fixed.) **Both owner gates are now
 CLEARED**: G-13 (Gmail) and H1 (job-hunter token, confirmed live — `GET /api/jobs` returns real
 queue data with the bearer token). **RR-2 and item 10-J2 are both now unblocked.** Design specs
 approved and written (settings reorg, mini orb, Android roadmap). **Item 7 voice-ID P3** (`c38ecd1`,
@@ -23,8 +23,10 @@ after J2); then settings reorg / item 9 / item 11.
 
 ## 2. OWNER ACTION ITEMS
 
-1. ~~**G-13 · Gmail live Connect**~~ — **DONE 2026-07-05, live-verified.** ✓ Connected; searches
-   return real mail. Gmail + Recruiter Radar are live.
+1. **G-13 · Gmail Connect** — ✓ Connected (OAuth verified). **BUT Gmail API calls were still
+   blocked** by a missing http-scope allowlist (G-15, fixed `e525b60`). **After the next rebuild,
+   re-verify live:** "search my Gmail for from:<someone>" must return real messages (not a scope
+   error), then recruiter radar.
 2. ~~**H1 · Deploy the job-hunter API token**~~ — **DONE 2026-07-05, live-verified.** Merged
    `feat/krishna-api-token` → `master`, token generated, `KRISHNA_API_TOKEN` +
    `KRISHNA_API_USER_EMAIL=vikram.panmand@gmail.com` set in Render, deployed. Confirmed live:
@@ -34,6 +36,15 @@ after J2); then settings reorg / item 9 / item 11.
    the definitive test (quit app → relaunch → fields persist) — do once in passing.
 
 ---
+
+> **⚠️ G-15 / J2-C (fixed `e525b60`, needs rebuild + live re-verify):** `gmail.googleapis.com`
+> and the job-hunter host were never in the Tauri http allowlist / CSP — so Gmail search/read,
+> **recruiter radar**, and the J2 in-app queue call were ALL blocked at the transport layer
+> ("url not allowed on the configured scope"). OAuth worked (Rust reqwest, no scope). Added both
+> hosts to capabilities + CSP. **These three features have NOT completed a live in-app API call
+> yet** — re-verify after `npm run tauri dev`. (J2's tool logic WAS verified by hitting the real
+> API directly via curl; only the in-app path was scope-blocked.) T1-F4-class bug; unit tests
+> mock `getHttpFetch` so they can't catch a missing allowlist entry.
 
 ## 3. DONE + MERGED (this session, 2026-07-04 → 07-05)
 
