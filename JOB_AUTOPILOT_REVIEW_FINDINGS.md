@@ -179,3 +179,43 @@ so it doesn't match "applied"/"apply filters" (word-boundary / known-label list)
 Everything else in the commit (connect/navigate/listTargets/allowlist/CSP/action wiring) is fine.**
 
 </details>
+
+---
+
+## J4-b (`3f4db06`) — NOT MERGED. 1 blocker (wrong profile store). Everything else sound.
+
+`field-fill.ts` is well-built: `ENUMERATION_JS` (resolves labels via for/aria-label/wrapping-label/
+placeholder, skips hidden/submit/button, builds unique selectors), `mapFields` (label-pattern regex
+per profile key, collects unmapped required, detects file inputs), `makeFillJs` (native setter +
+input/change events; select option-matching), `fillForm`, `filledSummary`. **`FillProfile` keys
+exactly match J3's `ApplicationProfile`** — no shape drift. Real-path CDP `evaluate` test present
+(JA-1 lesson applied). Good work overall.
+
+### JB-1 · BLOCKER · profile loaded from `localStorage`, but J3 saved it to the memory DB store
+`job-apply.ts:118` does `localStorage.getItem("application_profile")`. But J3's
+`ApplicationProfileSettings` saves the profile via `createMemory({ key: "application_profile", ... })`
+into the **`memories` DB table** (SQLCipher) and reads it back via `getMemoryByKey`. localStorage is
+never written — so `getItem` returns `null`, J4-b always hits the else branch ("I don't have your
+application profile yet, sir"), and **no fields are ever filled** even though the owner filled the
+profile. **Fix:** load via the same store J3 wrote to —
+```ts
+import { getMemoryByKey } from "../database/memories.action";
+...
+const mem = await getMemoryByKey("application_profile");
+if (mem?.value) {
+  const profile = JSON.parse(mem.value) as FillProfile;
+  const fillResult = await fillForm(cdp, profile);
+  ...
+} else { /* the existing "no profile yet" spoken line */ }
+```
+(`getMemoryByKey` uses the same `getDatabase` driver the tool layer already relies on.)
+
+### JB-1-TESTS · the load-path seam is untested (why JB-1 slipped)
+The J4-b tests pass a `FillProfile` fixture directly into `mapFields`/`fillForm` — none exercise
+`job-apply.ts` loading the profile from the store. Add a test for the execute path that mocks
+`getMemoryByKey` returning a stored profile and asserts `fillForm` is invoked with it (and the
+"no profile" branch when it returns null). Same recurring lesson: test the real integration seam,
+not just the pure helper.
+
+**Verdict: fix JB-1 (+ load-path test) on `feat/job-autopilot`, re-review before merge. Rest of
+J4-b is approved.**
