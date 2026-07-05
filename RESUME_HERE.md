@@ -60,6 +60,8 @@ after J2); then settings reorg / item 9 / item 11.
 | **9 · Travel insights P1** | `callGoogleRoutes` departureTime (now+60s floor); `sampleDepartures()` sequential, cap 8, per-sample failure capture, abort-aware. 9 tests. | `8dda179` |
 | **9 · Travel insights P2** | `suggest_departure_time` tool (min-duration selection, spoken best-window) + `travel_best` action + prompt + KNOWN_SAFE. 37 tests, 559 green. | `a6e5d89` |
 | **7 · Voice-ID enrollment** | 3 live bugs fixed: ONNX single-thread (Tauri no SharedArrayBuffer), `addSample` missing `created_at`, real-error surfacing; enable gate → ≥3 samples. Owner enrolled + enabled live. | `04905c4`, `fa83f69`, `540213c` |
+| **7 · Voice-ID passive-fill bootstrap** | Meter stuck at enrolled count — add-gate (0.88) was stricter than match threshold (~0.85), so conversation could never grow the gallery. Now bootstrap-aware: while not mature, add-gate = match threshold; once mature, 0.88. Debug logs added. | `59e8d6d` |
+| **9 · Travel insights P3** | `route_watches` migration (v20, LF-normalized), repo fns, `route_watch`/`route_watch_cancel` arm+cancel, single-active-watch replace-on-rearm, unresolved-address refusal. No findings. | `e6589b7` |
 
 Earlier (pre-session, already merged): item 1 (travel error visibility, `4b9c997`), item 2
 (no-narrated-actions, `3b85777`), item 10-H1 (job-hunter token — deployed + live-verified 2026-07-05).
@@ -88,8 +90,13 @@ Earlier (pre-session, already merged): item 1 (travel error visibility, `4b9c997
 1. **RR-2 · Recruiter fetch-fallback tuning** — Gmail now live (G-15). First probe whether
    `category:primary` is honored (owner running "search my Gmail for category:primary"); then fix
    the 0-results-triggers-fallback behavior. Small. See §5.
-2. **Item 9 · Travel insights P3** — P1+P2 DONE+merged (`8dda179`, `a6e5d89`). P3 = route-watch
-   storage + arm/cancel (`route_watches` migration). `TRAVEL_INSIGHTS_PLAN.md`, `feat/travel-insights`.
+2. **Item 9 · Travel insights P4 FIX (not new P5)** — P1-P3 DONE+merged (`8dda179`, `a6e5d89`,
+   `e6589b7`). P4 (`f7332a5`) is NOT merged — reviewer found 2 blockers + 1 bug (see
+   `TRAVEL_INSIGHTS_REVIEW_FINDINGS.md` TI-1/TI-2/TI-3): trigger direction inverted (fires
+   ABOVE threshold instead of AT-OR-BELOW), no interval gate (polls Google every 30s instead of
+   every 15min — quota/cost risk), expiry never speaks the required close-out line. Fix all 3 on
+   `feat/travel-insights`, rewrite the poller tests (they encode the same inverted assumption),
+   add interval-gate + expiry-alert tests. Do NOT start P5 until this is fixed + re-reviewed.
 3. **Settings menu reorg** — spec approved (`SETTINGS_REORG_PLAN.md`), P1-P3 ready.
 4. **Item 11 · Natural speech V1** — `NATURAL_SPEECH_PLAN.md`, branch `feat/natural-speech`.
 5. **Item 6 · Network resilience P1** — `NETWORK_RESILIENCE_PLAN.md`.
