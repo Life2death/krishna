@@ -102,16 +102,33 @@ export const VoiceIdCard = () => {
             )}
           </Button>
 
-          <div className="flex items-center justify-between rounded-md border border-dashed px-2 py-1.5">
-            <div className="flex items-center gap-1.5">
-              <Lock className="h-3 w-3 text-muted-foreground" />
-              <span className="text-xs text-muted-foreground">Enable Voice ID</span>
-            </div>
-            <Switch checked={false} disabled />
-          </div>
-          <p className="text-xs text-muted-foreground">
-            Unlocks when training reaches 100%.
-          </p>
+          {canEnable ? (
+            <>
+              <div className="flex items-center justify-between rounded-md border px-2 py-1.5">
+                <div className="flex items-center gap-1.5">
+                  <ShieldCheck className="h-3.5 w-3.5 text-green-600" />
+                  <span className="text-xs font-medium">Enable Voice ID</span>
+                </div>
+                <Switch checked={enabled} onCheckedChange={setEnabled} />
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Accuracy keeps improving as the meter fills — you can enable it now.
+              </p>
+            </>
+          ) : (
+            <>
+              <div className="flex items-center justify-between rounded-md border border-dashed px-2 py-1.5">
+                <div className="flex items-center gap-1.5">
+                  <Lock className="h-3 w-3 text-muted-foreground" />
+                  <span className="text-xs text-muted-foreground">Enable Voice ID</span>
+                </div>
+                <Switch checked={false} disabled />
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Record at least 3 samples to enable. Accuracy keeps improving as the meter fills.
+              </p>
+            </>
+          )}
         </div>
       )}
 

@@ -47,7 +47,11 @@ export function useVoiceStatus(): VoiceStatusDerived {
   const confidence = status?.thresholdConfidence ?? 0;
   const percent = Math.round(confidence * 100);
   const enabled = isVoiceIdEnabled();
-  const canEnable = confidence >= 1;
+  // Owner decision 2026-07-05: allow enabling once a few samples exist (not the full 100%
+  // meter). The meter/confidence stays as a progress indicator; passive fill (P3) + per-
+  // utterance ≥0.88 match still govern actual verification, and unverified fails open.
+  const MIN_SAMPLES_TO_ENABLE = 3;
+  const canEnable = (status?.sampleCount ?? 0) >= MIN_SAMPLES_TO_ENABLE;
 
   const setEnabled = useCallback((value: boolean) => {
     if (value && !canEnable) return;

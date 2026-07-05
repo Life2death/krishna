@@ -57,7 +57,7 @@ describe("useVoiceStatus — state derivation", () => {
   });
 
   it("returns training state when 0 < confidence < 1", async () => {
-    mockGetVoiceStatus.mockResolvedValue(makeStatus({ thresholdConfidence: 0.5 }));
+    mockGetVoiceStatus.mockResolvedValue(makeStatus({ thresholdConfidence: 0.5, sampleCount: 2 }));
     mockBrainConfig.voiceIdEnabled = false;
 
     const { result } = renderHook(() => useVoiceStatus());
@@ -145,8 +145,8 @@ describe("useVoiceStatus — canEnable boundary", () => {
     mockIsVoiceIdEnabled.mockImplementation(() => mockBrainConfig.voiceIdEnabled ?? false);
   });
 
-  it("canEnable is false at 0.99 confidence", async () => {
-    mockGetVoiceStatus.mockResolvedValue(makeStatus({ thresholdConfidence: 0.99 }));
+  it("canEnable is false at 2 samples (below the 3-sample floor), even at high confidence", async () => {
+    mockGetVoiceStatus.mockResolvedValue(makeStatus({ sampleCount: 2, thresholdConfidence: 0.99 }));
     mockBrainConfig.voiceIdEnabled = false;
 
     const { result } = renderHook(() => useVoiceStatus());
@@ -157,15 +157,14 @@ describe("useVoiceStatus — canEnable boundary", () => {
     expect(result.current.canEnable).toBe(false);
   });
 
-  it("canEnable is true at exactly 1.0 confidence", async () => {
-    mockGetVoiceStatus.mockResolvedValue(makeStatus({ thresholdConfidence: 1 }));
+  it("canEnable is true at exactly 3 samples (the floor), even mid-training", async () => {
+    mockGetVoiceStatus.mockResolvedValue(makeStatus({ sampleCount: 3, thresholdConfidence: 0.5 }));
     mockBrainConfig.voiceIdEnabled = false;
 
     const { result } = renderHook(() => useVoiceStatus());
 
     await waitFor(() => expect(result.current.loading).toBe(false));
 
-    expect(result.current.percent).toBe(100);
     expect(result.current.canEnable).toBe(true);
   });
 });
@@ -215,7 +214,7 @@ describe("useVoiceStatus — enabled / setEnabled", () => {
   });
 
   it("setEnabled(false) saves even when canEnable is false", async () => {
-    mockGetVoiceStatus.mockResolvedValue(makeStatus({ thresholdConfidence: 0.5 }));
+    mockGetVoiceStatus.mockResolvedValue(makeStatus({ thresholdConfidence: 0.5, sampleCount: 2 }));
     mockBrainConfig = { voiceIdEnabled: true, voiceThreshold: 0.85 };
 
     const { result } = renderHook(() => useVoiceStatus());
@@ -240,8 +239,8 @@ describe("useVoiceStatus — setEnabled strict gate", () => {
     mockIsVoiceIdEnabled.mockImplementation(() => mockBrainConfig.voiceIdEnabled ?? false);
   });
 
-  it("blocks enabling when confidence < 1", async () => {
-    mockGetVoiceStatus.mockResolvedValue(makeStatus({ thresholdConfidence: 0.75 }));
+  it("blocks enabling when below the 3-sample floor", async () => {
+    mockGetVoiceStatus.mockResolvedValue(makeStatus({ sampleCount: 2, thresholdConfidence: 0.75 }));
     mockBrainConfig.voiceIdEnabled = false;
 
     const { result } = renderHook(() => useVoiceStatus());
@@ -276,8 +275,8 @@ describe("useVoiceStatus — setEnabled strict gate", () => {
     expect(result.current.enabled).toBe(true);
   });
 
-  it("always allows disabling regardless of confidence", async () => {
-    mockGetVoiceStatus.mockResolvedValue(makeStatus({ thresholdConfidence: 0.4 }));
+  it("always allows disabling even below the sample floor", async () => {
+    mockGetVoiceStatus.mockResolvedValue(makeStatus({ sampleCount: 2, thresholdConfidence: 0.4 }));
     mockBrainConfig = { voiceIdEnabled: true, voiceThreshold: 0.85 };
 
     const { result } = renderHook(() => useVoiceStatus());
