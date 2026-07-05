@@ -14,7 +14,8 @@ export type Action =
   | { action: "gmail_read"; id: string }
   | { action: "gmail_list_labels" }
   | { action: "gmail_send"; to: string; subject: string; body: string; cc?: string; bcc?: string }
-  | { action: "gmail_recruiters"; window_days?: number };
+  | { action: "gmail_recruiters"; window_days?: number }
+  | { action: "job_queue" };
 
 export interface StepAction {
   tool: string;
