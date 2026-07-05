@@ -227,3 +227,35 @@ not just the pure helper.
 J4-b is approved.**
 
 </details>
+
+---
+
+## J4-c (`52e141a`) — MERGED (`ed1fd08`). Confirm-gated submit. 1 follow-up (JC-1).
+
+`job_apply_submit` tool: sensitive (NOT in KNOWN_SAFE), verbatim-confirm gate (G-5 pattern,
+`preConfirmed` skip like gmail_send), decline returns clean message. `clickSubmitButton` (excludes
+cancel/back/previous; type=submit + submit/send/next/continue/done; input value vs textContent) and
+`verifySubmission` (body confirmation-text regex) both use the FIXED CDP `evaluate` (JA-1). Honest
+ambiguous path ("clicked Submit but not certain it went through"). Clean CDP-unreachable handling.
+59 job-apply tests green, tsc clean. Reviewer-verified + merged per owner request.
+
+### JC-1 · MEDIUM follow-up · applied-status POST is unconditional (tension with gotcha #3)
+In `job-apply-submit.ts`, the `POST /api/jobs/{jobId}/status {status:"applied"}` runs right after a
+successful submit click, **before and regardless of `verification.success`**. So on an ambiguous
+result the spoken line says "I'm not certain it went through" while the backend has already been told
+"applied" → the job leaves the not_applied queue even if the submit actually failed (a genuinely
+un-submitted job is lost). Mitigated today: submit is confirm-gated + owner-supervised. **Recommended
+fix:** POST "applied" only when `verification.success`; on ambiguous, either skip the POST (leave in
+queue to retry) or POST a distinct status (e.g. "submitted_unverified") if job-hunter supports it.
+Also worth clarifying the plan wording (§J4 step 6 reads ambiguously on whether to POST when
+ambiguous). Non-blocking; owner watches each submit.
+
+### ⚠️ J3-A · NOT COMMITTED — nothing to merge yet
+J3-A (resume file picker) was NEVER committed. Its changes sit UNCOMMITTED in the `krishna-m15`
+worktree: `package.json` (+@tauri-apps/plugin-dialog), `Cargo.toml` (+tauri-plugin-dialog),
+`capabilities/cross-platform.json` (dialog permission), plus presumably `ApplicationProfileSettings.tsx`
++ `src-tauri/src/lib.rs` (plugin register) + tests. **These are the changes whose `npm install`
+corrupted node_modules.** Because `main` was clean-installed from `main`'s lockfile (WITHOUT
+plugin-dialog), J3-A cannot be merged until: (1) the agent COMMITS it including the updated
+`package.json` AND `package-lock.json` (or the picker breaks on the next `npm ci`), and (2) reviewer
+re-installs + reviews. **Do NOT merge J3-A until committed with the lockfile.**
