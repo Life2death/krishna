@@ -3,6 +3,7 @@ import { youtubeSearchTool } from "./youtube-search";
 import { webSearchTool } from "./web-search";
 import { getTravelTimeTool, suggestDepartureTimeTool } from "./get-travel-time";
 import { getJobQueueTool } from "./job-queue";
+import { getJobApplyTool } from "./job-apply";
 import { gmailSearchMessagesTool, gmailReadMessageTool, gmailListLabelsTool, gmailSendEmailTool } from "./gmail";
 import {
   computerTypeTool,
@@ -56,6 +57,7 @@ register(webSearchTool);
 register(getTravelTimeTool);
 register(suggestDepartureTimeTool);
 register(getJobQueueTool);
+register(getJobApplyTool);
 register(gmailSearchMessagesTool);
 register(gmailReadMessageTool);
 register(gmailListLabelsTool);
