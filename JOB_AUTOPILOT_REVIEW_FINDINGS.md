@@ -97,3 +97,32 @@ section is its own JobHunterSettings — fix wording. (2) "added today" uses `ne
 (UTC) vs the owner's IST — off by part of a day near midnight; low priority.
 
 **RESOLVED (698355f, merged c2bbe5f):** J2-A job_queue added to KNOWN_SAFE (+trust.test); J2-B count uses total with owner framing (total + top 3 by fit); wording fixed. tsc clean, 97/97 affected tests green. Minor left (non-blocking): "Top 3" label hardcoded even when top.length<3; "added today" uses UTC not IST. NEXT: RR-2.**
+
+---
+
+## J3-A · NIT (owner-reported, live 2026-07-05) · Resume Path requires manually typing an absolute file path
+
+`ApplicationProfileSettings.tsx:140-146` — the "Resume Path" field is a plain `<input type="text">`
+(`placeholder="C:\Users\vikra\Documents\resume.pdf"`). The owner has to hand-type or paste a full
+Windows path with no way to browse the filesystem. User-hostile and error-prone (typos, wrong
+drive, no validation that the file exists). Confirmed: the project has **no Tauri file-dialog
+plugin at all** (`@tauri-apps/plugin-dialog` is not a dependency; the only "dialog" in the repo is
+the unrelated Radix UI modal component) — this needs a real addition, not a one-line tweak.
+
+**Fix (small, self-contained; do NOT block J4 on this):**
+1. Add `@tauri-apps/plugin-dialog` (npm) + the matching Rust crate (`tauri-plugin-dialog`) +
+   register it in `src-tauri/src/lib.rs` + grant the `dialog:default` (or scoped `dialog:allow-open`)
+   capability in `capabilities/default.json`/`cross-platform.json` (same pattern as every other
+   plugin addition — capabilities file, not just `Cargo.toml`).
+2. In `ApplicationProfileSettings.tsx`, add a "Browse..." button next to the Resume Path input
+   that calls the plugin's `open({ multiple: false, filters: [{ name: "PDF", extensions: ["pdf"] }] })`
+   and writes the returned path into `profile.resumePath`. Keep the text input too (manual paste
+   still works; some users may want to type a network path) — just add the picker as the easy path.
+3. Nice-to-have: on load, if `resumePath` is set but the file doesn't exist (basic existence check
+   via a Tauri fs command), show a small warning inline — catches a stale/renamed resume before
+   J4 tries to upload it.
+4. Tests: browse-button wiring (mock the dialog plugin), path still editable manually.
+
+**Priority:** low/non-blocking — J4 just reads `profile.resumePath` as a string regardless of how
+it got there, so this doesn't gate assisted apply. Schedule it as a quick UX fix once the J4
+sub-phases land (or bundle with the next Settings-reorg pass, since it touches the same file).
