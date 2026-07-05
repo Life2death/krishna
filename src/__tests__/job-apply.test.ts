@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach, beforeAll } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import { setHttpFetch } from "@krishna/core/http";
 import { setSecretGetter } from "@krishna/core/secrets";
 
@@ -261,5 +261,257 @@ describe("parseActions job_apply", () => {
     const parsed = parseActions(reply);
     expect(parsed.actions).toHaveLength(1);
     expect(parsed.actions[0].action).toBe("job_apply");
+  });
+});
+
+// --- Field enumeration JS (J4-b) ---
+
+let ENUMERATION_JS: string;
+
+async function evalEnumJS(html: string): Promise<string> {
+  const doc = new DOMParser().parseFromString(html, "text/html");
+  if (!ENUMERATION_JS) {
+    const mod = await import("@krishna/core/tools/field-fill");
+    ENUMERATION_JS = mod.ENUMERATION_JS;
+  }
+  const fn = new Function("document", "return " + ENUMERATION_JS);
+  return fn(doc);
+}
+
+function evalFillJS(html: string, fillJs: string): string {
+  const doc = new DOMParser().parseFromString(html, "text/html");
+  const fn = new Function("document", "return " + fillJs);
+  return fn(doc);
+}
+
+describe("form field enumeration JS (J4-b)", () => {
+  it("finds input, select, and textarea fields", async () => {
+    const raw = await evalEnumJS(`
+      <html><body>
+        <label for="name">Full Name</label>
+        <input id="name" name="full_name" required />
+        <label for="email">Email</label>
+        <input id="email" type="email" />
+        <label for="exp">Years of Experience</label>
+        <select id="exp"><option>1</option></select>
+        <textarea id="cover" placeholder="Cover letter"></textarea>
+      </body></html>
+    `);
+    const fields = JSON.parse(raw);
+    expect(fields).toHaveLength(4);
+    expect(fields[0].name).toBe("full_name");
+    expect(fields[0].required).toBe(true);
+    expect(fields[1].type).toBe("email");
+    expect(fields[2].tag).toBe("select");
+    expect(fields[3].tag).toBe("textarea");
+  });
+
+  it("skips hidden, submit, button, and reset inputs", async () => {
+    const raw = await evalEnumJS(`
+      <html><body>
+        <input type="hidden" name="csrf" />
+        <input type="submit" value="Go" />
+        <input type="button" value="Click" />
+        <input type="reset" value="Clear" />
+        <input type="text" name="real" />
+      </body></html>
+    `);
+    const fields = JSON.parse(raw);
+    expect(fields).toHaveLength(1);
+    expect(fields[0].name).toBe("real");
+  });
+
+  it("resolves label via for, aria-label, closest label, and placeholder", async () => {
+    const raw = await evalEnumJS(`
+      <html><body>
+        <label for="f1">First Name</label>
+        <input id="f1" />
+        <input aria-label="Email Address" id="f2" />
+        <label>Phone<input name="phone" /></label>
+        <input placeholder="City" name="city" />
+      </body></html>
+    `);
+    const fields = JSON.parse(raw);
+    expect(fields).toHaveLength(4);
+    expect(fields[0].label).toBe("First Name");
+    expect(fields[1].label).toBe("Email Address");
+    expect(fields[2].label).toContain("Phone");
+    expect(fields[3].placeholder).toBe("City");
+  });
+});
+
+// --- Field-to-profile mapping (J4-b) ---
+
+describe("mapFields pure function (J4-b)", () => {
+  it("maps label-matched fields to profile keys", async () => {
+    const { mapFields } = await import("@krishna/core/tools/field-fill");
+    const fields = [
+      { tag: "input", type: "text", name: "name", id: "", label: "Full Name", ariaLabel: "", placeholder: "", required: true, selector: "input[name='name']" },
+      { tag: "input", type: "email", name: "email", id: "", label: "Email", ariaLabel: "", placeholder: "", required: true, selector: "input[name='email']" },
+    ];
+    const result = mapFields(fields, {
+      fullName: "Vikram", email: "vik@test.com", phone: "",
+      currentLocation: "", noticePeriod: "", currentCtc: "", expectedCtc: "",
+      yearsOfExperience: "", resumePath: "", linkedInUrl: "", whyThisRole: "",
+      relocationOk: false,
+    });
+    expect(result.filled).toHaveLength(2);
+    expect(result.filled[0].profileKey).toBe("fullName");
+    expect(result.filled[0].profileValue).toBe("Vikram");
+    expect(result.filled[1].profileKey).toBe("email");
+  });
+
+  it("matches fields by aria-label", async () => {
+    const { mapFields } = await import("@krishna/core/tools/field-fill");
+    const fields = [
+      { tag: "input", type: "text", name: "", id: "", label: "", ariaLabel: "Phone Number", placeholder: "", required: true, selector: "input" },
+    ];
+    const result = mapFields(fields, {
+      fullName: "", email: "", phone: "9999999999",
+      currentLocation: "", noticePeriod: "", currentCtc: "", expectedCtc: "",
+      yearsOfExperience: "", resumePath: "", linkedInUrl: "", whyThisRole: "",
+      relocationOk: false,
+    });
+    expect(result.filled).toHaveLength(1);
+    expect(result.filled[0].profileKey).toBe("phone");
+  });
+
+  it("matches fields by placeholder", async () => {
+    const { mapFields } = await import("@krishna/core/tools/field-fill");
+    const fields = [
+      { tag: "input", type: "text", name: "", id: "", label: "", ariaLabel: "", placeholder: "LinkedIn URL", required: false, selector: "input" },
+    ];
+    const result = mapFields(fields, {
+      fullName: "", email: "", phone: "", currentLocation: "", noticePeriod: "",
+      currentCtc: "", expectedCtc: "", yearsOfExperience: "", resumePath: "",
+      linkedInUrl: "https://linkedin.com/in/vikram", whyThisRole: "",
+      relocationOk: false,
+    });
+    expect(result.filled).toHaveLength(1);
+    expect(result.filled[0].profileKey).toBe("linkedInUrl");
+  });
+
+  it("collects unmapped required fields", async () => {
+    const { mapFields } = await import("@krishna/core/tools/field-fill");
+    const fields = [
+      { tag: "input", type: "text", name: "name", id: "", label: "Full Name", ariaLabel: "", placeholder: "", required: true, selector: "input[name='name']" },
+      { tag: "input", type: "text", name: "exp", id: "", label: "Years of Experience", ariaLabel: "", placeholder: "", required: true, selector: "input[name='exp']" },
+    ];
+    const result = mapFields(fields, {
+      fullName: "Vikram", email: "", phone: "", currentLocation: "", noticePeriod: "",
+      currentCtc: "", expectedCtc: "", yearsOfExperience: "", resumePath: "",
+      linkedInUrl: "", whyThisRole: "", relocationOk: false,
+    });
+    expect(result.filled).toHaveLength(1);
+    expect(result.unmappedRequired.length).toBeGreaterThan(0);
+    const expField = result.unmappedRequired.find((f) => f.name === "exp");
+    expect(expField).toBeDefined();
+  });
+
+  it("skips file inputs in mapping but reports fileInputFound", async () => {
+    const { mapFields } = await import("@krishna/core/tools/field-fill");
+    const fields = [
+      { tag: "input", type: "file", name: "resume", id: "", label: "Upload Resume", ariaLabel: "", placeholder: "", required: true, selector: "input[name='resume']" },
+    ];
+    const result = mapFields(fields, {
+      fullName: "", email: "", phone: "", currentLocation: "", noticePeriod: "",
+      currentCtc: "", expectedCtc: "", yearsOfExperience: "", resumePath: "/tmp/resume.pdf",
+      linkedInUrl: "", whyThisRole: "", relocationOk: false,
+    });
+    expect(result.filled).toHaveLength(0);
+    expect(result.fileInputFound).toBe(true);
+  });
+});
+
+// --- FilledSummary helper (J4-b) ---
+
+describe("filledSummary (J4-b)", () => {
+  it("formats a summary with filled and unmapped counts", async () => {
+    const { filledSummary } = await import("@krishna/core/tools/field-fill");
+    const result = {
+      filled: [
+        { field: null as any, profileKey: "fullName", profileValue: "V", displayName: "Full name" },
+        { field: null as any, profileKey: "email", profileValue: "v@t.com", displayName: "Email" },
+      ],
+      unmappedRequired: [
+        { tag: "input", type: "text", name: "exp", id: "", label: "Years of Experience", ariaLabel: "", placeholder: "", required: true, selector: "input" },
+      ],
+      fileInputFound: false,
+    };
+    const s = filledSummary(result);
+    expect(s).toContain("filled 2 fields");
+    expect(s).toContain("could not map 1 required field");
+    expect(s).toContain("Years of Experience");
+  });
+
+  it("mentions file input when found", async () => {
+    const { filledSummary } = await import("@krishna/core/tools/field-fill");
+    const result = {
+      filled: [],
+      unmappedRequired: [],
+      fileInputFound: true,
+    };
+    const s = filledSummary(result);
+    expect(s).toContain("filled 0 fields");
+    expect(s).toContain("found a file-upload field");
+  });
+});
+
+// --- Fill JS execution against fixture DOM (J4-b) ---
+
+describe("makeFillJs execution (J4-b)", () => {
+  it("fills an input value and dispatches events", async () => {
+    const { makeFillJs } = await import("@krishna/core/tools/field-fill");
+    const fillJs = makeFillJs([
+      { field: { tag: "input", type: "text", name: "", id: "name", label: "Name", ariaLabel: "", placeholder: "", required: false, selector: "#name" }, profileKey: "fullName", profileValue: "Vikram", displayName: "Full name" },
+    ]);
+    const raw = evalFillJS('<html><body><input id="name" /></body></html>', fillJs);
+    const results = JSON.parse(raw);
+    expect(results["#name"]).toBe(true);
+    const doc = new DOMParser().parseFromString('<html><body><input id="name" /></body></html>', "text/html");
+    const fn = new Function("document", "return " + fillJs);
+    fn(doc);
+    expect((doc.getElementById("name") as HTMLInputElement).value).toBe("Vikram");
+  });
+
+  it("selects a matching option in a select element", async () => {
+    const { makeFillJs } = await import("@krishna/core/tools/field-fill");
+    const fillJs = makeFillJs([
+      { field: { tag: "select", type: "select-one", name: "", id: "exp", label: "Experience", ariaLabel: "", placeholder: "", required: false, selector: "#exp" }, profileKey: "yearsOfExperience", profileValue: "5 years", displayName: "Years of experience" },
+    ]);
+    const doc = new DOMParser().parseFromString('<html><body><select id="exp"><option value="">Select</option><option value="5">5 years</option></select></body></html>', "text/html");
+    const fn = new Function("document", "return " + fillJs);
+    fn(doc);
+    expect((doc.getElementById("exp") as HTMLSelectElement).value).toBe("5");
+  });
+});
+
+// --- Real-path CDP evaluate for fillForm (J4-b) ---
+
+describe("fillForm CDP evaluate path (J4-b)", () => {
+  beforeEach(() => {
+    setSecretGetter(async () => "test-token");
+  });
+
+  it("enumerates, maps, and fills fields via mocked send", async () => {
+    const { CdpClient } = await import("@krishna/core/tools/cdp-client");
+    const client = new CdpClient();
+    const enumResult = JSON.stringify([
+      { tag: "input", type: "text", name: "name", id: "", label: "Full Name", ariaLabel: "", placeholder: "", required: true, selector: "input[name='name']" },
+    ]);
+    client.send = vi.fn()
+      .mockResolvedValueOnce({ result: { type: "string", value: enumResult } })
+      .mockResolvedValueOnce({ result: { type: "string", value: JSON.stringify({ "input[name='name']": true }) } });
+
+    const { fillForm } = await import("@krishna/core/tools/field-fill");
+    const result = await fillForm(client, {
+      fullName: "Vikram", email: "", phone: "", currentLocation: "", noticePeriod: "",
+      currentCtc: "", expectedCtc: "", yearsOfExperience: "", resumePath: "",
+      linkedInUrl: "", whyThisRole: "", relocationOk: false,
+    });
+
+    expect(result.filled).toHaveLength(1);
+    expect(result.filled[0].profileKey).toBe("fullName");
+    expect(result.filled[0].profileValue).toBe("Vikram");
   });
 });

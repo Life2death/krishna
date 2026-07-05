@@ -2,6 +2,7 @@ import type { Tool } from "./index";
 import { getSecret } from "../secrets";
 import { getHttpFetch } from "../http";
 import { CdpClient } from "./cdp-client";
+import { fillForm, filledSummary, type FillProfile } from "./field-fill";
 
 const API_BASE = "https://job-hunter-x5l1.onrender.com";
 const TOKEN_KEY = "JOB_HUNTER_API_TOKEN";
@@ -113,7 +114,18 @@ export const getJobApplyTool: Tool = {
 
         let spokenResponse: string;
         if (applyResult.clicked) {
-          spokenResponse = `Opened the ${portal} application for ${title} at ${company}, sir — the Apply form is up.`;
+          try {
+            const raw = localStorage.getItem("application_profile");
+            if (raw) {
+              const profile: FillProfile = JSON.parse(raw);
+              const fillResult = await fillForm(cdp, profile);
+              spokenResponse = `Opened the ${portal} application for ${title} at ${company}, sir. ${filledSummary(fillResult)}`;
+            } else {
+              spokenResponse = `Opened the ${portal} application for ${title} at ${company}, sir — the Apply form is up, but I don't have your application profile yet, sir.`;
+            }
+          } catch {
+            spokenResponse = `Opened the ${portal} application for ${title} at ${company}, sir — the Apply form is up, but I could not fill the fields automatically.`;
+          }
         } else if (applyResult.found) {
           spokenResponse = `Opened the ${portal} application for ${title} at ${company}, sir. The page has an external Apply link — that is beyond MVP scope, sir.`;
         } else {
