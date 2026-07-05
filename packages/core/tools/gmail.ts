@@ -297,8 +297,10 @@ export async function gmailFetchRecruiterCandidates(
     if (result.candidates.length > 0) {
       return { ...result, inboxFallback: false };
     }
+    // category:primary honored but empty → valid empty answer, no inbox sweep
+    return { candidates: [], capHit: false, inboxFallback: false };
   } catch {
-    // Fall through to inbox fallback
+    // Fall through to inbox fallback on error/throw only
   }
 
   const result = await tryFetch(`in:inbox after:${sinceSec}`);

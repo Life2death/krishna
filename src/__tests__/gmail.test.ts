@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { sanitizeEmailField, isValidEmail, formatSearchOutput, gmailSearchMessagesTool, gmailSendEmailTool } from "@krishna/core/tools/gmail";
+import { sanitizeEmailField, isValidEmail, formatSearchOutput, gmailSearchMessagesTool, gmailSendEmailTool, gmailFetchRecruiterCandidates } from "@krishna/core/tools/gmail";
 import type { SearchResult } from "@krishna/core/tools/gmail";
 import { setSecretGetter } from "@krishna/core/secrets";
 import { setHttpFetch, getHttpFetch } from "@krishna/core/http";
@@ -197,5 +197,54 @@ describe("gmailSendEmailTool — preConfirmed skips confirm", () => {
     expect(confirmSpy).toHaveBeenCalledTimes(1);
     expect(result.success).toBe(false);
     expect(result.error).toBe("User declined");
+  });
+});
+
+describe("gmailFetchRecruiterCandidates — RR-2", () => {
+  beforeEach(() => {
+    mockSecretGetter();
+  });
+
+  it("returns empty candidates with no prefix when primary returns 0 results", async () => {
+    const mockFetch = vi.fn();
+    mockFetch.mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ messages: [] }),
+    });
+    setHttpFetch(mockFetch);
+
+    const result = await gmailFetchRecruiterCandidates(0);
+
+    expect(result.candidates).toEqual([]);
+    expect(result.capHit).toBe(false);
+    expect(result.inboxFallback).toBe(false);
+    // Only the primary query was made — no inbox fallback
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    const url0 = decodeURIComponent(mockFetch.mock.calls[0][0]);
+    expect(url0).toContain("category:primary");
+  });
+
+  it("falls back to in:inbox when category:primary throws", async () => {
+    const mockFetch = vi.fn();
+    // First call (primary) — throws
+    mockFetch.mockRejectedValueOnce(new Error("Network error"));
+    // Second call (inbox fallback) — empty result
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => ({ messages: [] }),
+    });
+    setHttpFetch(mockFetch);
+
+    const result = await gmailFetchRecruiterCandidates(0);
+
+    expect(result.candidates).toEqual([]);
+    expect(result.capHit).toBe(false);
+    expect(result.inboxFallback).toBe(true);
+    // Both primary (failed) and inbox fallback were attempted
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+    const url1 = decodeURIComponent(mockFetch.mock.calls[1][0]);
+    expect(url1).toContain("in:inbox");
   });
 });
