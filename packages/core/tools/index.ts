@@ -4,6 +4,7 @@ import { webSearchTool } from "./web-search";
 import { getTravelTimeTool, suggestDepartureTimeTool } from "./get-travel-time";
 import { getJobQueueTool } from "./job-queue";
 import { getJobApplyTool } from "./job-apply";
+import { getJobApplySubmitTool } from "./job-apply-submit";
 import { gmailSearchMessagesTool, gmailReadMessageTool, gmailListLabelsTool, gmailSendEmailTool } from "./gmail";
 import {
   computerTypeTool,
@@ -58,6 +59,7 @@ register(getTravelTimeTool);
 register(suggestDepartureTimeTool);
 register(getJobQueueTool);
 register(getJobApplyTool);
+register(getJobApplySubmitTool);
 register(gmailSearchMessagesTool);
 register(gmailReadMessageTool);
 register(gmailListLabelsTool);

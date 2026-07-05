@@ -141,6 +141,7 @@ export const getJobApplyTool: Tool = {
             title,
             company,
             portal: nextJob.portal ?? "",
+            url: nextJob.url ?? "",
             buttonFound: String(applyResult.found),
           } as Record<string, string>,
         };

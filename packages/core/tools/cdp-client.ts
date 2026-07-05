@@ -16,6 +16,12 @@ export interface ApplyButtonResult {
   reason?: string;
 }
 
+export interface SubmissionVerification {
+  success: boolean;
+  signal: string;
+  url?: string;
+}
+
 interface PendingCall {
   resolve: (value: unknown) => void;
   reject: (reason: unknown) => void;
@@ -158,6 +164,48 @@ export class CdpClient {
 
     const result = await this.evaluate<string>(js);
     return JSON.parse(result) as ApplyButtonResult;
+  }
+
+  async clickSubmitButton(): Promise<ApplyButtonResult> {
+    const js = [
+      "(() => {",
+      "  const candidates = document.querySelectorAll('button, input[type=submit], input[type=button]');",
+      "  for (const el of candidates) {",
+      "    const tag = el.tagName.toLowerCase();",
+      "    const text = tag === 'input' ? (el.value || '').trim() : (el.textContent || '').trim();",
+      "    const label = (el.getAttribute('aria-label') || '').trim();",
+      "    const type = el.getAttribute('type') || '';",
+      "    if (!text && !label) continue;",
+      "    if (/cancel|back|previous/i.test(text) || /cancel|back|previous/i.test(label)) continue;",
+      "    if (type === 'submit' || /submit|send application|apply now|next|continue|done/i.test(text) || /submit|send application|apply now|next|continue|done/i.test(label)) {",
+      "      el.click();",
+      "      return JSON.stringify({ found: true, clicked: true, text: text || label, tag: tag });",
+      "    }",
+      "  }",
+      "  return JSON.stringify({ found: false });",
+      "})()",
+    ].join("\n");
+
+    const result = await this.evaluate<string>(js);
+    return JSON.parse(result) as ApplyButtonResult;
+  }
+
+  async verifySubmission(): Promise<SubmissionVerification> {
+    const js = [
+      "(() => {",
+      "  const text = document.body.textContent || '';",
+      "  const url = window.location.href;",
+      "  const success = /application sent|application submitted|thank you|applied successfully|your application has been|submitted successfully|we've received your application/i.test(text);",
+      "  return JSON.stringify({",
+      "    success: success,",
+      '    signal: success ? "confirmation text found" : "no clear confirmation",',
+      "    url: url",
+      "  });",
+      "})()",
+    ].join("\n");
+
+    const result = await this.evaluate<string>(js);
+    return JSON.parse(result) as SubmissionVerification;
   }
 
   async disconnect(): Promise<void> {
