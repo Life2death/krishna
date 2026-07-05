@@ -11,10 +11,12 @@
 `main` is **GREEN** and — new since last update — **LIVE-VERIFIED by the owner** on 2026-07-05:
 the desktop app built and ran (`npm run tauri dev`, Rust side incl. the G-13 fix + migration v19
 compiled clean), and the owner smoke-tested **items 12/13/14 + J1 all good**, including the
-**G-13 Gmail Connect — ✓ Connected live, real mail returned.** That closes the biggest gate.
-**RR-2 is now unblocked** (live data available to decide the `category:primary` question).
-Owner's next focus: design work (settings menu reorg, orb, Android roadmap) + queue the agent on
-RR-2 / item 7 voice-ID P3 / item 9 / item 11.
+**G-13 Gmail Connect — ✓ Connected live, real mail returned.** **Both owner gates are now
+CLEARED**: G-13 (Gmail) and H1 (job-hunter token, confirmed live — `GET /api/jobs` returns real
+queue data with the bearer token). **RR-2 and item 10-J2 are both now unblocked.** Design specs
+approved and written (settings reorg, mini orb, Android roadmap). Agent is starting **item 7
+voice-ID P3** next (fixes the "not training on my voice" complaint); J2, RR-2, settings reorg,
+item 9/11 all queued behind it.
 
 ---
 
@@ -22,10 +24,11 @@ RR-2 / item 7 voice-ID P3 / item 9 / item 11.
 
 1. ~~**G-13 · Gmail live Connect**~~ — **DONE 2026-07-05, live-verified.** ✓ Connected; searches
    return real mail. Gmail + Recruiter Radar are live.
-2. **H1 · Deploy the job-hunter API token** — **CONFIRM STATUS.** If done: J2 unblocks. If not:
-   `D:\Learning\job-hunter` → merge `feat/krishna-api-token`, generate a token
-   (`python -c "import secrets; print(secrets.token_urlsafe(48))"`), set `KRISHNA_API_TOKEN` +
-   `KRISHNA_API_USER_EMAIL=vikram.panmand@gmail.com` in Render, push.
+2. ~~**H1 · Deploy the job-hunter API token**~~ — **DONE 2026-07-05, live-verified.** Merged
+   `feat/krishna-api-token` → `master`, token generated, `KRISHNA_API_TOKEN` +
+   `KRISHNA_API_USER_EMAIL=vikram.panmand@gmail.com` set in Render, deployed. Confirmed live:
+   `GET /api/jobs?status=not_applied` with the bearer token returns real queue data (LinkedIn
+   jobs, correctly scoped to the user). **Item 10-J2 is now UNBLOCKED.**
 3. **J3 restart-persistence check (small):** Application Profile was filled+saved in-session;
    the definitive test (quit app → relaunch → fields persist) — do once in passing.
 
@@ -57,16 +60,19 @@ Earlier (pre-session, already merged): item 1 (travel error visibility, `4b9c997
    **Option A background-fill** (silently top up samples from normal use while Voice ID is off,
    never acting on it) is exactly the fix. Plan: `VOICE_ID_STATUS_METER_PLAN.md` (+ P2-N1 shared
    `enabled`, strict-gate the old Settings toggle).
-3. **Settings menu reorg** — owner request 2026-07-05; grouped-submenu spec being designed with
-   the reviewer (incl. deduping the system-prompt editing that appears in both KrishnaSettings
-   and Persona). Spec doc to come before agent codes.
-4. **Item 9 · Travel insights P1** — `TRAVEL_INSIGHTS_PLAN.md`, branch `feat/travel-insights`.
-5. **Item 11 · Natural speech V1** — `NATURAL_SPEECH_PLAN.md`, branch `feat/natural-speech`.
-6. **Item 6 · Network resilience P1** — `NETWORK_RESILIENCE_PLAN.md`.
+3. **Item 10-J2 · Queue read tool** — **NOW UNBLOCKED (H1 live-verified).** Voice-read the
+   not-applied job queue via `GET /api/jobs?status=not_applied` with the bearer token (store the
+   token in `secureStorage`, same pattern as Gmail/Maps keys — see gotcha #1 in §6). Plan:
+   `JOB_AUTOPILOT_PLAN.md`. Branch `feat/job-autopilot` off `main` (or continue same branch as
+   J1/J3 if still around). Prefix `feat(jobap-j2)`.
+4. **Settings menu reorg** — spec approved (`SETTINGS_REORG_PLAN.md`), P1-P3 ready to code.
+5. **Item 9 · Travel insights P1** — `TRAVEL_INSIGHTS_PLAN.md`, branch `feat/travel-insights`.
+6. **Item 11 · Natural speech V1** — `NATURAL_SPEECH_PLAN.md`, branch `feat/natural-speech`.
+7. **Item 6 · Network resilience P1** — `NETWORK_RESILIENCE_PLAN.md`.
 
 ### 🔴 Blocked — do NOT start until the gate clears
-- **Item 10-J2** (queue read tool) — needs owner **H1 deploy** confirmation (§2.2).
-- **Item 10-J4** (assisted apply, LinkedIn/Naukri, confirm-gated Submit) — later; needs live CDP.
+- **Item 10-J4** (assisted apply, LinkedIn/Naukri, confirm-gated Submit) — later; needs live CDP
+  AND J2 landed first (reads the queue it'll act on).
 
 ### 🎨 Design-first (reviewer+owner specs in progress, 2026-07-05 — agent codes only after spec)
 - **Settings menu reorg** (see 🟢 #3).
