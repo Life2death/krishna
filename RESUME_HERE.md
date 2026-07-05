@@ -86,15 +86,13 @@ Earlier (pre-session, already merged): item 1 (travel error visibility, `4b9c997
    the enable-gate relax (≥3 samples, not 100% — owner decision) + G-16 (stop speaking the raw
    msg-id). See `VOICE_ID_STATUS_REVIEW_FINDINGS.md` + `GMAIL_REVIEW_FINDINGS.md` G-16.
 
+### ✅ Item 9 Travel Insights — FULLY COMPLETE (P1–P4, all merged)
+Best-departure suggestion + route watch, both live-verified. P4 fixes (`aced906`) landed clean:
+trigger direction correct, interval gate in place (no more 30s Google-API spam), expiry speaks
+a close-out line. Nothing further scheduled unless the owner wants a P5.
+
 ### 🟢 Unblocked — agent queue, IN THIS EXACT ORDER (single worktree, one branch at a time)
-0. **[CURRENT] Item 9 · Travel insights P4 FIX (not new P5)** — P1-P3 DONE+merged (`8dda179`,
-   `a6e5d89`, `e6589b7`). P4 (`f7332a5`) is NOT merged — reviewer found 2 blockers + 1 bug (see
-   `TRAVEL_INSIGHTS_REVIEW_FINDINGS.md` TI-1/TI-2/TI-3): trigger direction inverted (fires
-   ABOVE threshold instead of AT-OR-BELOW), no interval gate (polls Google every 30s instead of
-   every 15min — quota/cost risk), expiry never speaks the required close-out line. Fix all 3 on
-   `feat/travel-insights`, rewrite the poller tests (they encode the same inverted assumption),
-   add interval-gate + expiry-alert tests. Do NOT start P5 until this is fixed + re-reviewed.
-1. **RR-2 · Recruiter fetch-fallback tuning** — Gmail now live (G-15), probe DONE
+1. **[CURRENT] RR-2 · Recruiter fetch-fallback tuning** — Gmail now live (G-15), probe DONE
    (`category:primary` IS honored, decision locked). Branch `fix/recradar-rr2` off `main`. See §5
    + `GMAIL_RECRUITER_RADAR_REVIEW_FINDINGS.md`. Small.
 2. **G-16 + G-17 · Gmail spoken-output hygiene** — fixes the live TTS garble (raw email/id/ISO
