@@ -60,3 +60,41 @@ and excludes `/api/settings` (now 403 at the gate, with GET+POST regression test
 are small and they convert a security boundary from robust-by-accident to robust-by-design. H1-3
 optional. After that, the owner's deploy steps (generate token → set `KRISHNA_API_TOKEN` +
 `KRISHNA_API_USER_EMAIL` in Render → push) are unchanged.
+
+---
+
+## J2 review (`714f0e8`, `feat/job-autopilot`) — NOT merged; 2 issues to fix, 1 owner decision
+
+Committed properly this time (m15 clean, 534 tests green, tsc clean). Good: `getSecret(TOKEN_KEY)`
+for the token (secureStorage, matches Gmail/Maps), `getHttpFetch()` transport, clean error taxonomy
+(no-token / 401 / non-ok / network / empty), G-2 `errorDetail` propagation, `kind:"answer"`,
+JobHunterSettings password field. Response envelope `{rows, total}` VERIFIED correct against the
+live API **for the `&limit=25` query** (bare-array only when no limit) — the agent guessed right.
+
+**J2-A · BLOCKER (functional) · `job_queue` is classified "sensitive" → gated behind confirmation.**
+The agent added the tool but did NOT add the action to `KNOWN_SAFE` (`packages/core/action-policy.ts`).
+`classifyAction("job_queue")` misses KNOWN_SAFE, isn't `computer_`/`mcp_`, so falls through to
+`return "sensitive"` (line 55). A read-only queue lookup will therefore trigger the confirm /
+unverified-speaker gate every time — every other read tool (gmail_search, gmail_recruiters, …) is
+in KNOWN_SAFE. **Fix:** add `"job_queue"` to `KNOWN_SAFE` (one line) + a classifyAction test.
+
+**J2-B · MEDIUM (correctness/UX) · spoken count reports the page cap (25), not the real count.**
+The summary says `You have ${rows.length} unapplied jobs` — but `rows` is capped at `limit=25`, so
+whenever there are ≥25 it always says "25". Live API returns `total: 14408` (the real not-applied
+count) alongside 25 rows. So the tool currently says "You have 25 unapplied jobs… (14408 total in
+pipeline)" — self-contradictory. The tests missed this because the mock set `rows.length == total`.
+**Fix:** lead with `total` as the count; use `rows` only for the top-3 preview. Add a test where
+`total > rows.length` asserting the spoken count uses `total`.
+
+**OWNER DECISION (blocks the J2-B framing):** `total = 14408` unapplied jobs is huge (the scraper
+imports listings the user hasn't applied to). Speaking "you have 14,408 unapplied jobs" is
+technically right but useless. Decide the framing: (a) speak total + top-3 by fit ("14,408 in your
+pipeline; top 3 by fit: …"); (b) speak only a high-fit subset count ("N jobs above fit X"); or
+(c) a fixed "top matches" view. Recommend (a) for J2, refine later. Agent implements once chosen.
+
+**Minor (non-blocking):** (1) no-token error says "add it in Settings under Integrations" but the
+section is its own JobHunterSettings — fix wording. (2) "added today" uses `new Date().toISOString()`
+(UTC) vs the owner's IST — off by part of a day near midnight; low priority.
+
+**Verdict: fix J2-A (safe-list) + J2-B (count via total) + pick the framing, then re-review & merge.
+Then RR-2.**
