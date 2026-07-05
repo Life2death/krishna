@@ -145,6 +145,15 @@ a close-out line. Nothing further scheduled unless the owner wants a P5.
 4. **Item 11 · Natural speech V1** — `NATURAL_SPEECH_PLAN.md`, branch `feat/natural-speech`.
 5. **Item 6 · Network resilience P1** — `NETWORK_RESILIENCE_PLAN.md`.
 
+**⚠️ OPEN ISSUE — sync "SqlDriver not set"** (console, 2026-07-05, low priority): background sync
+cycle fails `SqlDriver not set - call setDriver() before first DB access`, even though
+`initializeCore` calls `setDriver` (startup.ts:50) BEFORE `startSync` (line 99). Root cause is
+almost certainly **module duplication** — the sync engine (`@krishna/core/sync`) resolves
+`@krishna/core/database/driver` to a *different instance* than the app's `setDriver` call
+(vite-alias vs node_modules dual-instance). Only breaks sync (main app/voice use the set instance
+— enrollment/DB work fine). Fix when sync becomes a priority: ensure a single driver-module
+instance (dedupe the alias/node_modules resolution) or pass the driver into SyncEngine explicitly.
+
 **⚠️ OPEN LIVE ISSUE — Voice ID meter stuck at 5** (owner-reported, under diagnosis 2026-07-05):
 DB shows `voiceprint_state: count=5, mature=0, adaptive_threshold=0.85, confidence=17%`. Bootstrap
 add-gate fix (`59e8d6d`) IS in the build and mature=0 (gate=0.85), so it's NOT the add-gate.
