@@ -84,6 +84,7 @@ add the auto-fill and the confirm-gated submit.
 | **13 · Recruiter RR-2** | `category:primary` 0-results → valid empty answer (no inbox sweep, no prefix); in:inbox fallback on error/throw only. Probe-confirmed operator honored. | `8de2db4` |
 | **G-16 + G-17 · Gmail spoken hygiene** | Speak sender name not raw email; drop raw msg-id ("Say 'read it'"); em-dash→comma, ISO date→natural. Fixes live TTS garble. 18 tests. | `40df3e7` |
 | **10 · Job autopilot J4-a** | In-app CDP client (getHttpFetch /json + WebSocket, localhost:9222 allowlist+CSP); `job_apply` opens next queued job + clicks Easy Apply (external Apply reported not clicked). JA-1 CDP-unwrap + JA-2 heuristic fixed. 20 tests. | `2ea06b5` |
+| **10 · Job autopilot J4-b** | Field-fill engine: enumerate form fields → map to J3 profile (label patterns) → fill via CDP → spoken summary; profile from memory DB store (JB-1 fix). No submit. 35 tests. | `b579f43` |
 
 Earlier (pre-session, already merged): item 1 (travel error visibility, `4b9c997`), item 2
 (no-narrated-actions, `3b85777`), item 10-H1 (job-hunter token — deployed + live-verified 2026-07-05).
@@ -124,10 +125,11 @@ a close-out line. Nothing further scheduled unless the owner wants a P5.
      opens next queued job's apply page + clicks **Easy Apply** (external plain Apply reported, not
      clicked). JA-1 (evaluate CDP-unwrap) + JA-2 (heuristic) fixed. **Live-verify owner-side:**
      needs debug Chrome on 9222 w/ `--remote-allow-origins=*` + LinkedIn logged in.
-   - **J4-b [NEXT]** `feat(jobap-j4b)`: enumerate form fields → map to J3 profile → fill mappable →
-     collect unmapped required → ask unmapped by voice one at a time. Still NO submit. Tests:
-     field-mapping against fixture DOMs.
-   - **J4-c** `feat(jobap-j4c)`: `job_apply_submit` = **sensitive, NOT KNOWN_SAFE**, confirm-gated
+   - **J4-b** ✅ DONE + MERGED (`b579f43`; feat `3f4db06` + fix `2afa128`): field-fill engine
+     (enumerate → map to J3 profile by label patterns → fill via CDP → collect unmapped → spoken
+     summary). JB-1 fixed: profile loaded from the memory DB store (`getMemoryByKey`), not empty
+     localStorage. No submit. **Live-verify owner-side:** open a real Easy Apply → fields fill.
+   - **J4-c [NEXT]** `feat(jobap-j4c)`: `job_apply_submit` = **sensitive, NOT KNOWN_SAFE**, confirm-gated
      via verbatim-confirm (G-5); truth-check success (URL change / confirmation el / 2xx) before
      claiming applied (gotcha #3); POST applied-status back to job-hunter + audit; stop on
      CAPTCHA/login wall (never bypass). Tests: submit refuses w/o confirm, success-verify,

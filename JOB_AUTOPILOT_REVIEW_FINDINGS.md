@@ -182,6 +182,12 @@ Everything else in the commit (connect/navigate/listTargets/allowlist/CSP/action
 
 ---
 
+## J4-b (`3f4db06` + fix `2afa128`) — FIXED + MERGED (`b579f43`).
+
+JB-1 fixed: profile now loaded via `getMemoryByKey("application_profile")` from the memory DB store (matching J3) + load-path tests (stored-profile fills; null → 'no profile yet'). Field-fill engine (enumerate/map/fill/summary) sound, FillProfile keys match J3. 35 tests green, tsc clean. **Live-verify owner-side:** open a real LinkedIn Easy Apply → confirm fields fill from the saved profile. Original finding below.
+
+<details><summary>Original J4-b finding (pre-fix)</summary>
+
 ## J4-b (`3f4db06`) — NOT MERGED. 1 blocker (wrong profile store). Everything else sound.
 
 `field-fill.ts` is well-built: `ENUMERATION_JS` (resolves labels via for/aria-label/wrapping-label/
@@ -219,3 +225,5 @@ not just the pure helper.
 
 **Verdict: fix JB-1 (+ load-path test) on `feat/job-autopilot`, re-review before merge. Rest of
 J4-b is approved.**
+
+</details>
