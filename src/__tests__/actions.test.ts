@@ -6,6 +6,7 @@ import { invoke } from "@tauri-apps/api/core";
 import type { ExecuteActionResult } from "@/lib/actions";
 
 const mockTravelToolRun = vi.hoisted(() => vi.fn());
+const mockJobQueueRun = vi.hoisted(() => vi.fn());
 const mockGmailSearchRun = vi.hoisted(() => vi.fn());
 const mockGmailReadRun = vi.hoisted(() => vi.fn());
 const mockGmailListLabelsRun = vi.hoisted(() => vi.fn());
@@ -19,6 +20,12 @@ const mockResolveTarget = vi.hoisted(() => vi.fn());
 vi.mock("@krishna/core/tools/get-travel-time", () => ({
   getTravelTimeTool: {
     run: mockTravelToolRun,
+  },
+}));
+
+vi.mock("@krishna/core/tools/job-queue", () => ({
+  getJobQueueTool: {
+    run: mockJobQueueRun,
   },
 }));
 

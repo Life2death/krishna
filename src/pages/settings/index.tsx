@@ -13,6 +13,7 @@ import {
   MapsSettings,
   GmailSettings,
   ApplicationProfileSettings,
+  JobHunterSettings,
 } from "./components";
 import {
   ResponseLength,
@@ -108,6 +109,9 @@ const Settings = () => {
 
       {/* Application Profile */}
       <ApplicationProfileSettings />
+
+      {/* Job Hunter */}
+      <JobHunterSettings />
 
       {/* Integrations (GitHub, etc.) */}
       <Integrations />

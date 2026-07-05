@@ -2,6 +2,7 @@ import { openTargetTool } from "./open-target";
 import { youtubeSearchTool } from "./youtube-search";
 import { webSearchTool } from "./web-search";
 import { getTravelTimeTool } from "./get-travel-time";
+import { getJobQueueTool } from "./job-queue";
 import { gmailSearchMessagesTool, gmailReadMessageTool, gmailListLabelsTool, gmailSendEmailTool } from "./gmail";
 import {
   computerTypeTool,
@@ -53,6 +54,7 @@ register(openTargetTool);
 register(youtubeSearchTool);
 register(webSearchTool);
 register(getTravelTimeTool);
+register(getJobQueueTool);
 register(gmailSearchMessagesTool);
 register(gmailReadMessageTool);
 register(gmailListLabelsTool);

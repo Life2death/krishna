@@ -4,6 +4,7 @@ import { resolveAppAlias, isUrl, isFilePath } from "@/config/app-aliases";
 import { resolveTarget, saveAndConfirm, needsConfirmation } from "@/lib/resolver";
 import type { ResolveResult } from "@/lib/resolver";
 import { getTravelTimeTool } from "@krishna/core/tools/get-travel-time";
+import { getJobQueueTool } from "@krishna/core/tools/job-queue";
 import { gmailSearchMessagesTool, gmailReadMessageTool, gmailListLabelsTool, gmailSendEmailTool, gmailFetchRecruiterCandidates } from "@krishna/core/tools/gmail";
 import { getResponseSettings } from "@krishna/core/settings";
 import { runRecruiterRadar, formatRecruiterOutput, COLD_START_DAYS } from "@krishna/core/tools/recruiter-radar";
@@ -73,6 +74,9 @@ export function parseActions(reply: string): ParsedReply {
         }
         if (parsed && parsed.action === "gmail_recruiters") {
           actions.push({ action: "gmail_recruiters", window_days: parsed.window_days });
+        }
+        if (parsed && parsed.action === "job_queue") {
+          actions.push({ action: "job_queue" });
         }
       } catch {
         // Not valid JSON, ignore
@@ -329,6 +333,26 @@ export async function executeAction(
         kind: "answer",
         ok: false,
         spokenResponse: "I couldn't check recruiter mail, sir.",
+        errorDetail: msg,
+      };
+    }
+  }
+
+  if (action.action === "job_queue") {
+    try {
+      const result = await getJobQueueTool.run({}, { vars: {} });
+      return {
+        kind: "answer",
+        spokenResponse: result.output || "I couldn't check your job queue.",
+        ok: result.success,
+        errorDetail: result.error || result.data?.errorDetail,
+      };
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return {
+        kind: "answer",
+        ok: false,
+        spokenResponse: "I couldn't check your job queue, sir.",
         errorDetail: msg,
       };
     }
