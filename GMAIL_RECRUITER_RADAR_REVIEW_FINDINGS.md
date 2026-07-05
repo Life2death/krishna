@@ -57,6 +57,14 @@ triggers, `KNOWN_SAFE`. G-2 verified end-to-end: `errorDetail` is logged to `spe
 threaded correctly. Graceful degrade to heuristic when no `llmFallback`. +76 lines of handler
 tests (mocked fetch+classify: happy path, fetch-failure, window_days). tsc clean, 496 green.
 
+**RR-2 · READY TO CODE (probe done 2026-07-05).** Live probe "search my Gmail for category:primary"
+returned **10 real Primary messages → the operator IS honored** on the owner's account. **LOCKED
+FIX:** in `gmailFetchRecruiterCandidates`, fall back to `in:inbox` **ONLY on an actual error/throw**,
+NOT on 0 results. Treat 0 primary results as a valid empty answer (`{candidates:[], inboxFallback:false}`)
+so the spoken "I checked your inbox, sir —" prefix never fires on the normal path. Tests:
+0-results-from-primary → empty success + no prefix; primary-throws → in:inbox fallback path. Branch
+`fix/recradar-rr2` off `main`, commit `fix(recradar-rr2)`. Original analysis below.
+
 **RR-2 · MEDIUM · follow-up (needs G-13 live data) · Stage-1 fallback fires on "0 results", not
 just on operator failure.** `gmailFetchRecruiterCandidates` (gmail.ts) does
 `tryFetch("category:primary …")` and falls through to `in:inbox` whenever primary returns
