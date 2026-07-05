@@ -126,3 +126,48 @@ the unrelated Radix UI modal component) — this needs a real addition, not a on
 **Priority:** low/non-blocking — J4 just reads `profile.resumePath` as a string regardless of how
 it got there, so this doesn't gate assisted apply. Schedule it as a quick UX fix once the J4
 sub-phases land (or bundle with the next Settings-reorg pass, since it touches the same file).
+
+---
+
+## J4-a (`2e4310d`) — NOT MERGED. 1 blocker + 1 quality gap + a test-coverage hole.
+
+Plumbing is mostly sound: `CdpClient.connect` (WebSocket, id-keyed pending map, CDP-error handling),
+`listTargets` (getHttpFetch → /json, page filter), `navigate` (Page.navigate). Allowlist + CSP for
+`localhost:9222` added correctly. But the core path (click Apply) is broken against real Chrome.
+
+### JA-1 · BLOCKER · `evaluate()` unwraps the CDP response one level too shallow → returns undefined live
+`Runtime.evaluate`'s result object is `{ result: RemoteObject, exceptionDetails? }`, and with
+`returnByValue:true` the value is at **`result.result.value`**. `send()` returns `msg.result` =
+`{ result: {type,value}, exceptionDetails? }`, but `evaluate()` reads `result.type` / `result.value`
+(one level too shallow) — both `undefined` against real Chrome. So `clickApplyButton` does
+`JSON.parse(undefined)` → throws. **`job_apply` cannot click Apply on a real page.** The eval-error
+check is also wrong: CDP signals script errors via `exceptionDetails`, not `result.subtype==="error"`.
+**Fix:**
+```ts
+const resp = await this.send<{ result: { type: string; subtype?: string; value?: T; description?: string }, exceptionDetails?: { text: string; exception?: { description?: string } } }>(
+  "Runtime.evaluate", { expression: expr, awaitPromise, returnByValue: true });
+if (resp.exceptionDetails) throw new Error(`CDP evaluate error: ${resp.exceptionDetails.exception?.description ?? resp.exceptionDetails.text}`);
+return resp.result.value as T;
+```
+
+### JA-1-TESTS · why JA-1 slipped · tests reimplement the heuristic instead of exercising the real path
+`job-apply.test.ts`'s `evalClickApplyJS` is a **hand-copied** version of the button-matching logic run
+against jsdom HTML — it never calls `clickApplyButton` → `evaluate`, so the CDP unwrapping is 100%
+untested (same class as G-11 / J2-B / TI-1: the mock/reimpl doesn't match the real seam). **Fix:**
+add a test that drives `clickApplyButton()` against a **mocked CDP WebSocket** whose `Runtime.evaluate`
+reply has the REAL nested shape `{ result: { result: { type:"string", value: '{"found":true,...}' } } }`.
+That test must fail against the current shallow `evaluate` and pass after the JA-1 fix.
+
+### JA-2 · QUALITY (do with JA-1) · Apply heuristic clicks the first `/apply/i` match — no Easy-Apply preference
+The reviewer-recommended guardrail was not implemented. `clickApplyButton` clicks the FIRST `button/a`
+whose text/aria-label matches `/apply/i` and returns `{found,text,tag}`. On a real LinkedIn job page
+that can hit a nav "apply filters" control, a footer link, "reapply", or a plain external **"Apply"**
+(redirects off-site — J4 can't fill those) BEFORE the in-page **"Easy Apply"** button. Clicking the
+wrong one is a dead end for the owner tomorrow. **Fix:** (1) prefer an exact/leading "Easy Apply"
+match; (2) if only a plain external "Apply" exists, return `{found:true, clicked:false, reason:"external
+ATS apply — out of MVP scope"}` and do NOT click it; (3) richer return shape `{found, clicked, text?,
+tag?, reason?}` (separate found/clicked; reason on every negative — EV-1 discipline). Tighten the regex
+so it doesn't match "applied"/"apply filters" (word-boundary / known-label list).
+
+**Verdict: fix JA-1 (+ its real-path test) and JA-2 on `feat/job-autopilot`, re-review before merge.
+Everything else in the commit (connect/navigate/listTargets/allowlist/CSP/action wiring) is fine.**
