@@ -56,6 +56,8 @@ after J2); then settings reorg / item 9 / item 11.
 | **10 · Job autopilot J1+J3** | J1 = Job Pipeline URL alias (voice-open); J3 = ApplicationProfile store (12 fields, Settings UI, keyed memory row → SQLCipher) | `3500695`, `e910938` |
 | **7 · Voice-ID P3** | Option-A passive background-fill (fixes "not training on my voice"): `verifyVoice` always runs, `considerAddSample` fills gallery from daily use even when Voice ID off, never acting on it; P2-N1 shared `enabled` via `useVoiceStatus`; strict 100% enable-gate in the hook. 15 tests, tsc clean. | `c38ecd1` |
 | **10 · Job autopilot J2** | `get_job_queue` tool (GET /api/jobs, token via secureStorage, getHttpFetch, error taxonomy, G-2); `job_queue` action + KNOWN_SAFE; JobHunterSettings token field; spoken count = API total + top 3 by fit. Live-verified against real API. | `c2bbe5f` (714f0e8 + 698355f) |
+| **15 · Gmail transport scope** | `gmail.googleapis.com` + job-hunter host added to Tauri http allowlist + CSP (were blocked). Live-verified: Gmail search returns real mail. | `e525b60` |
+| **9 · Travel insights P1** | `callGoogleRoutes` departureTime (now+60s floor); `sampleDepartures()` sequential, cap 8, per-sample failure capture, abort-aware. Core only (P2 = tool/action/prompt). 9 tests. | `8dda179` |
 
 Earlier (pre-session, already merged): item 1 (travel error visibility, `4b9c997`), item 2
 (no-narrated-actions, `3b85777`), item 10-H1 (job-hunter token — deployed + live-verified 2026-07-05).
@@ -70,16 +72,24 @@ Earlier (pre-session, already merged): item 1 (travel error visibility, `4b9c997
 
 ## 4. PENDING QUEUE — priority order
 
-### 🟢 Unblocked — agent can start now (owner-reprioritized 2026-07-05)
-1. **RR-2 · Recruiter fetch-fallback tuning** — NEXT UP (owner: do after J2 merge, which is done).
-   Now that Gmail is live, first determine if `category:primary` is honored on the account; then
-   fix the 0-results-triggers-fallback behavior. Small. See §5.
-2. **Settings menu reorg** — spec approved (`SETTINGS_REORG_PLAN.md`), P1-P3 ready to code.
-3. **Item 9 · Travel insights P1** — `TRAVEL_INSIGHTS_PLAN.md`, branch `feat/travel-insights`.
+### 🔴 LIVE BLOCKER (top priority — being debugged 2026-07-05)
+0. **Voice enrollment fails** ("Enrollment failed", 0 samples) — WavLM model download/init suspect
+   (`src/lib/voice-id/embedding.ts`, `@xenova/transformers` from HF). Need the real error
+   (Settings→VoiceID model-status line or in-app console) to root-cause. **Bundle the fix with:**
+   the enable-gate relax (≥3 samples, not 100% — owner decision) + G-16 (stop speaking the raw
+   msg-id). See `VOICE_ID_STATUS_REVIEW_FINDINGS.md` + `GMAIL_REVIEW_FINDINGS.md` G-16.
+
+### 🟢 Unblocked — agent queue
+1. **Item 9 · Travel insights P2** — P1 DONE+merged (`8dda179`). P2 = `suggest_departure_time`
+   tool + `travel_best` action + prompt. `TRAVEL_INSIGHTS_PLAN.md`, branch `feat/travel-insights`.
+2. **RR-2 · Recruiter fetch-fallback tuning** — Gmail now live (G-15). First probe whether
+   `category:primary` is honored (owner running "search my Gmail for category:primary"); then fix
+   the 0-results-triggers-fallback behavior. Small. See §5.
+3. **Settings menu reorg** — spec approved (`SETTINGS_REORG_PLAN.md`), P1-P3 ready.
 4. **Item 11 · Natural speech V1** — `NATURAL_SPEECH_PLAN.md`, branch `feat/natural-speech`.
 5. **Item 6 · Network resilience P1** — `NETWORK_RESILIENCE_PLAN.md`.
-6. **Item 10-J4 · Assisted apply** — now unblocked-ish (J2 landed), but needs live CDP work;
-   sequence after the lighter items. LinkedIn Easy Apply first, confirm-gated Submit.
+6. **Item 10-J4 · Assisted apply** — J2 landed; needs live CDP; sequence later. LinkedIn Easy
+   Apply first, confirm-gated Submit.
 
 ### 🎨 Design-first (reviewer+owner specs in progress, 2026-07-05 — agent codes only after spec)
 - **Settings menu reorg** (see 🟢 #3).
