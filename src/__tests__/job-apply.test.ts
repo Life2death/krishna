@@ -1,6 +1,11 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { setHttpFetch } from "@krishna/core/http";
 import { setSecretGetter } from "@krishna/core/secrets";
+
+vi.mock("@krishna/core/database", async (importOriginal) => {
+  const mod = await importOriginal();
+  return { ...(mod as object), getMemoryByKey: vi.fn() };
+});
 
 // --- Apply-button JS expression logic (JA-2 DOM heuristic) ---
 // Tests the exact JS expression string that runs in Chrome via CDP,
@@ -513,5 +518,81 @@ describe("fillForm CDP evaluate path (J4-b)", () => {
     expect(result.filled).toHaveLength(1);
     expect(result.filled[0].profileKey).toBe("fullName");
     expect(result.filled[0].profileValue).toBe("Vikram");
+  });
+});
+
+// --- Profile loading from memory store (JB-1) ---
+
+describe("getJobApplyTool profile loading (JB-1)", () => {
+  const PROFILE_JSON = JSON.stringify({
+    fullName: "Vikram", email: "vik@t.com", phone: "9999999999",
+    currentLocation: "Bangalore", noticePeriod: "30 days", currentCtc: "1200000",
+    expectedCtc: "1800000", yearsOfExperience: "5", resumePath: "",
+    linkedInUrl: "https://linkedin.com/in/vikram", whyThisRole: "",
+    relocationOk: false,
+  });
+
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    setSecretGetter(async () => "test-token");
+
+    const mockFetch = vi.fn().mockImplementation(async (url: string) => {
+      if (url.includes("job-hunter-x5l1")) {
+        return {
+          ok: true, status: 200,
+          json: async () => ({
+            rows: [{ job_id: "j1", title: "Engineer", company: "Acme", url: "https://linkedin.com/apply/123", portal: "LinkedIn" }],
+            total: 1,
+          }),
+        };
+      }
+      if (url.includes("localhost:9222/json")) {
+        return {
+          ok: true, status: 200,
+          json: async () => [{ id: "1", title: "Test", url: "https://example.com", webSocketDebuggerUrl: "ws://localhost:9222/1", type: "page" }],
+        };
+      }
+      throw new Error("unexpected URL");
+    });
+    setHttpFetch(mockFetch as any);
+
+    const { CdpClient } = await import("@krishna/core/tools/cdp-client");
+    vi.spyOn(CdpClient.prototype, "listTargets").mockResolvedValue([
+      { id: "1", title: "Test", url: "https://example.com", webSocketDebuggerUrl: "ws://localhost:9222/1", type: "page" },
+    ]);
+    vi.spyOn(CdpClient.prototype, "connect").mockResolvedValue(undefined);
+    vi.spyOn(CdpClient.prototype, "navigate").mockResolvedValue(undefined);
+    vi.spyOn(CdpClient.prototype, "clickApplyButton").mockResolvedValue({
+      found: true, clicked: true, text: "Easy Apply", tag: "button",
+    });
+    vi.spyOn(CdpClient.prototype, "evaluate")
+      .mockResolvedValueOnce("[]")
+      .mockResolvedValueOnce("{}");
+    vi.spyOn(CdpClient.prototype, "disconnect").mockResolvedValue(undefined);
+  });
+
+  it("loads profile from memory store and fills fields", async () => {
+    const { getMemoryByKey } = await import("@krishna/core/database");
+    vi.mocked(getMemoryByKey).mockResolvedValue({
+      id: "m1", key: "application_profile", value: PROFILE_JSON,
+      source: "user", confirmed: 1, createdAt: 0, lastUsedAt: null,
+    });
+
+    const { getJobApplyTool } = await import("@krishna/core/tools/job-apply");
+    const result = await getJobApplyTool.run({}, { vars: {} });
+
+    expect(result.success).toBe(true);
+    expect(result.output).toContain("filled");
+  });
+
+  it("says no profile when memory store returns null", async () => {
+    const { getMemoryByKey } = await import("@krishna/core/database");
+    vi.mocked(getMemoryByKey).mockResolvedValue(null);
+
+    const { getJobApplyTool } = await import("@krishna/core/tools/job-apply");
+    const result = await getJobApplyTool.run({}, { vars: {} });
+
+    expect(result.success).toBe(true);
+    expect(result.output).toContain("don't have your application profile yet");
   });
 });

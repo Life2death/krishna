@@ -3,6 +3,7 @@ import { getSecret } from "../secrets";
 import { getHttpFetch } from "../http";
 import { CdpClient } from "./cdp-client";
 import { fillForm, filledSummary, type FillProfile } from "./field-fill";
+import { getMemoryByKey } from "../database";
 
 const API_BASE = "https://job-hunter-x5l1.onrender.com";
 const TOKEN_KEY = "JOB_HUNTER_API_TOKEN";
@@ -115,9 +116,9 @@ export const getJobApplyTool: Tool = {
         let spokenResponse: string;
         if (applyResult.clicked) {
           try {
-            const raw = localStorage.getItem("application_profile");
-            if (raw) {
-              const profile: FillProfile = JSON.parse(raw);
+            const mem = await getMemoryByKey("application_profile");
+            if (mem?.value) {
+              const profile: FillProfile = JSON.parse(mem.value);
               const fillResult = await fillForm(cdp, profile);
               spokenResponse = `Opened the ${portal} application for ${title} at ${company}, sir. ${filledSummary(fillResult)}`;
             } else {
