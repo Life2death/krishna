@@ -90,6 +90,7 @@ export async function callGoogleRoutes(params: {
   mode: TravelMode;
   alternatives: boolean;
   apiKey: string;
+  departureTime?: string;
   signal?: AbortSignal;
 }): Promise<RouteInfo[]> {
   const { origin, destination, mode, alternatives, apiKey, signal } = params;
@@ -104,6 +105,12 @@ export async function callGoogleRoutes(params: {
 
   if (mode === "car" || mode === "two_wheeler") {
     body.routingPreference = "TRAFFIC_AWARE";
+  }
+
+  if (params.departureTime) {
+    const dt = new Date(params.departureTime);
+    const floor = new Date(Date.now() + 60000);
+    body.departureTime = dt < floor ? floor.toISOString() : params.departureTime;
   }
 
   const fieldMask = [
@@ -156,6 +163,89 @@ export async function callGoogleRoutes(params: {
 
     return info;
   });
+}
+
+// ── Departure sampling (Feature A) ────────────────────────────────────────
+
+export interface DepartureSample {
+  departureTime: string;
+  ok: boolean;
+  duration?: number;
+  staticDuration?: number;
+  distanceMeters?: number;
+  errorReason?: string;
+}
+
+export interface SampleDeparturesParams {
+  origin: string;
+  destination: string;
+  mode: TravelMode;
+  apiKey: string;
+  window_hours?: number;
+  signal?: AbortSignal;
+}
+
+export async function sampleDepartures(
+  params: SampleDeparturesParams,
+): Promise<{ samples: DepartureSample[]; failures: number }> {
+  const { origin, destination, mode, apiKey, window_hours = 3, signal } = params;
+  const maxSamples = 8;
+  const intervalMinutes = 30;
+
+  const now = new Date();
+  const firstDeparture = new Date(now.getTime() + 60000);
+
+  const numSamples = Math.min(
+    Math.ceil((window_hours * 60) / intervalMinutes) + 1,
+    maxSamples,
+  );
+
+  const samples: DepartureSample[] = [];
+  let firstError: Error | null = null;
+
+  for (let i = 0; i < numSamples; i++) {
+    if (signal?.aborted) throw new DOMException("The operation was aborted", "AbortError");
+
+    const departureTime = new Date(firstDeparture.getTime() + i * intervalMinutes * 60000).toISOString();
+
+    try {
+      const routes = await callGoogleRoutes({
+        origin,
+        destination,
+        mode,
+        alternatives: false,
+        apiKey,
+        departureTime,
+        signal,
+      });
+
+      const best = routes[0];
+      samples.push({
+        departureTime,
+        ok: true,
+        duration: best.duration,
+        staticDuration: best.staticDuration,
+        distanceMeters: best.distanceMeters,
+      });
+    } catch (err) {
+      const reason = err instanceof Error ? err.message : String(err);
+      if (!firstError) firstError = err instanceof Error ? err : new Error(reason);
+
+      samples.push({
+        departureTime,
+        ok: false,
+        errorReason: reason,
+      });
+    }
+  }
+
+  const failures = samples.filter((s) => !s.ok).length;
+
+  if (failures === numSamples) {
+    throw firstError ?? new Error("All departure samples failed");
+  }
+
+  return { samples, failures };
 }
 
 function parseDuration(s: string | undefined): number {

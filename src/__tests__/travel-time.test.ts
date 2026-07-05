@@ -35,8 +35,11 @@ import {
   formatTravelOutput,
   buildMapsUrl,
   callGoogleRoutes,
+  sampleDepartures,
   type RouteInfo,
   type TravelMode,
+  type DepartureSample,
+  type SampleDeparturesParams,
 } from "@krishna/core/tools/get-travel-time";
 import { getAllMemories } from "@krishna/core/database";
 
@@ -370,6 +373,46 @@ describe("callGoogleRoutes (pure function)", () => {
     ).rejects.toThrow("Google Routes API error (403)");
   });
 
+  it("omits departureTime when not set", async () => {
+    mockRoutesResponse([]);
+    await expect(
+      callGoogleRoutes({
+        origin: "A", destination: "B", mode: "car", alternatives: false, apiKey: "k",
+      }),
+    ).rejects.toThrow("No routes found");
+
+    const body = JSON.parse(mockFetch.mock.calls[0][1].body);
+    expect(body.departureTime).toBeUndefined();
+  });
+
+  it("includes departureTime in body when set", async () => {
+    mockRoutesResponse([]);
+    const dt = new Date(Date.now() + 3600000).toISOString(); // 1h from now
+
+    await expect(
+      callGoogleRoutes({
+        origin: "A", destination: "B", mode: "car", alternatives: false, apiKey: "k", departureTime: dt,
+      }),
+    ).rejects.toThrow("No routes found");
+
+    const body = JSON.parse(mockFetch.mock.calls[0][1].body);
+    expect(body.departureTime).toBe(dt);
+  });
+
+  it("applies now+60s floor when departureTime is in the past", async () => {
+    mockRoutesResponse([]);
+    const past = new Date(Date.now() - 60000).toISOString();
+
+    await expect(
+      callGoogleRoutes({
+        origin: "A", destination: "B", mode: "car", alternatives: false, apiKey: "k", departureTime: past,
+      }),
+    ).rejects.toThrow("No routes found");
+
+    const body = JSON.parse(mockFetch.mock.calls[0][1].body);
+    expect(new Date(body.departureTime).getTime()).toBeGreaterThan(Date.now() - 1000);
+  });
+
   it("sends the required X-Goog-FieldMask header with transit fields", async () => {
     mockRoutesResponse([]);
     await expect(
@@ -387,6 +430,101 @@ describe("callGoogleRoutes (pure function)", () => {
     expect(headers["X-Goog-FieldMask"]).toContain("routes.legs.steps.travelMode");
     expect(headers["X-Goog-FieldMask"]).toContain("routes.legs.steps.transitDetails.transitLine.vehicle.type");
     expect(headers["X-Goog-FieldMask"]).toContain("routes.legs.steps.transitDetails.transitLine.name");
+  });
+});
+
+// ── sampleDepartures ──────────────────────────────────────────────────────
+
+describe("sampleDepartures", () => {
+  const baseParams: SampleDeparturesParams = {
+    origin: "Home",
+    destination: "Work",
+    mode: "car",
+    apiKey: "test-key",
+  };
+
+  beforeEach(() => {
+    mockFetch.mockReset();
+    setHttpFetch(mockFetch);
+    vi.stubGlobal("fetch", mockFetch);
+  });
+
+  it("samples at 30-minute intervals up to window_hours, capped at 8", async () => {
+    for (let i = 0; i < 8; i++) {
+      mockRoutesResponse([{ duration: "1800s", staticDuration: "1800s", distanceMeters: 20000 }]);
+    }
+
+    const result = await sampleDepartures({ ...baseParams, window_hours: 12 });
+
+    expect(result.samples).toHaveLength(8);
+    expect(result.failures).toBe(0);
+
+    // Verify increasing timestamps
+    for (let i = 1; i < result.samples.length; i++) {
+      const prev = new Date(result.samples[i - 1].departureTime).getTime();
+      const curr = new Date(result.samples[i].departureTime).getTime();
+      expect(curr - prev).toBeGreaterThanOrEqual(29 * 60 * 1000);
+    }
+  });
+
+  it("defaults to 7 samples for 3-hour window", async () => {
+    for (let i = 0; i < 7; i++) {
+      mockRoutesResponse([{ duration: "1800s", staticDuration: "1800s", distanceMeters: 20000 }]);
+    }
+
+    const result = await sampleDepartures(baseParams);
+
+    expect(result.samples).toHaveLength(7);
+    expect(result.failures).toBe(0);
+  });
+
+  it("returns all samples with correct duration data", async () => {
+    const durations = [1800, 1500, 2100, 2400, 1950, 2200, 1700];
+    for (const d of durations) {
+      mockRoutesResponse([{ duration: `${d}s`, staticDuration: "1800s", distanceMeters: 20000 }]);
+    }
+
+    const result = await sampleDepartures(baseParams);
+
+    expect(result.samples).toHaveLength(7);
+    expect(result.samples.every((s) => s.ok)).toBe(true);
+    expect(result.samples[1].duration).toBe(1500); // lowest — "best"
+  });
+
+  it("continues on partial failure and records errorReason", async () => {
+    mockRoutesResponse([{ duration: "1800s", staticDuration: "1800s", distanceMeters: 20000 }]);
+    mockFetchError(500, "Internal error");
+    mockRoutesResponse([{ duration: "2100s", staticDuration: "2000s", distanceMeters: 22000 }]);
+    mockRoutesResponse([{ duration: "1950s", staticDuration: "1950s", distanceMeters: 21000 }]);
+    mockRoutesResponse([{ duration: "1700s", staticDuration: "1700s", distanceMeters: 19000 }]);
+    mockRoutesResponse([{ duration: "1900s", staticDuration: "1800s", distanceMeters: 20000 }]);
+    mockRoutesResponse([{ duration: "2000s", staticDuration: "1900s", distanceMeters: 20500 }]);
+
+    const result = await sampleDepartures(baseParams);
+
+    expect(result.samples).toHaveLength(7);
+    expect(result.failures).toBe(1);
+    expect(result.samples[0].ok).toBe(true);
+    expect(result.samples[1].ok).toBe(false);
+    expect(result.samples[1].errorReason).toContain("500");
+    expect(result.samples[1].duration).toBeUndefined();
+  });
+
+  it("throws on total failure with first real reason", async () => {
+    for (let i = 0; i < 7; i++) {
+      mockFetchError(403, "API key expired");
+    }
+
+    await expect(sampleDepartures(baseParams)).rejects.toThrow("API key expired");
+  });
+
+  it("respects AbortSignal mid-sampling", async () => {
+    const controller = new AbortController();
+    mockRoutesResponse([{ duration: "1800s", staticDuration: "1800s", distanceMeters: 20000 }]);
+    controller.abort();
+
+    const params = { ...baseParams, signal: controller.signal };
+    await expect(sampleDepartures(params)).rejects.toThrow("The operation was aborted");
   });
 });
 
