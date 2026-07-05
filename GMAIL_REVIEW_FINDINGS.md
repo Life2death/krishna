@@ -334,14 +334,17 @@ OAuth worked (Rust reqwest, no scope). Added the host to capabilities (default/c
 + CSP csp/devCsp. **Live-verified 2026-07-05:** "search my Gmail for mail from Archer" returned 5 real
 messages. Same class as the job-hunter host gap (J2-C, fixed same commit) and travel T1-F4.
 
-### G-16 · NIT · raw Gmail message id is spoken aloud
+### G-16 · FIXED + MERGED (`40df3e7`, merge `0850347`) · raw Gmail message id was spoken aloud
+
+**RESOLVED:** `extractSenderName` (speak sender name, not raw email), `normalizeSubject` (em-dash/en-dash → comma, ISO date → natural language), raw hex id dropped from spoken text → "Say 'read it' to open the newest one." Applied in formatSearchOutput/formatReadOutput + recruiter buildBrief fallback. 18 tests, tsc clean, 77 gmail+recruiter green. Minor residual (non-blocking): operator strings like `category:primary` are still spoken with the colon — low priority, leave unless it grates live.
+
 The G-6 read-hint appends `…use gmail_read with id "19f2ccadeb6e1982".` to the SPOKEN output — TTS
 reads the hex id aloud (owner asked "what's this id about"). Keep the id as a handle for the read
 action, but drop it from the spoken text (or replace with "say 'read it' to open it"). Same
 "no raw data in speech" rule as item 14 (travel garble). Non-blocking.
 
 
-### G-17 · NIT (bundle with G-16) · Gmail spoken output garbles TTS (raw email / id / ISO date / em-dash)
+### G-17 · FIXED + MERGED (`40df3e7`) · Gmail spoken output garbled TTS (raw email / id / ISO date / em-dash)
 Live 2026-07-05: "search my Gmail for category:primary" spoke a line stuffed with TTS-hostile
 tokens that garbled aloud (owner reported garble, "hyphen or semicolon"). Culprits in the gmail
 tools' spoken formatting: the raw sender email (`vikram.panmand@gmail.com` — "@"/dotted local-part
