@@ -131,5 +131,12 @@ pub fn migrations() -> Vec<Migration> {
             sql: include_str!("migrations/recruiter-radar-v1.sql"),
             kind: MigrationKind::Up,
         },
+        // Migration 20: Route watches — background route monitoring (Feature B)
+        Migration {
+            version: 20,
+            description: "create_route_watches_table",
+            sql: include_str!("migrations/route-watches-v1.sql"),
+            kind: MigrationKind::Up,
+        },
     ]
 }

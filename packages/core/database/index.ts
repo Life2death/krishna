@@ -11,3 +11,4 @@ export * from "./voiceprints.action";
 export * from "./voiceprint-samples.action";
 export * from "./voiceprint-state.action";
 export * from "./speech-log.action";
+export * from "./route-watches.action";

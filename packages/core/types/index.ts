@@ -6,6 +6,7 @@ export * from "./memory";
 export * from "./plan";
 export * from "./provider.type";
 export * from "./reminder";
+export * from "./route-watch";
 export * from "./settings";
 export * from "./shortcuts";
 export * from "./skill";

@@ -17,6 +17,10 @@ const mockRunRecruiterRadar = vi.hoisted(() => vi.fn());
 const mockFormatRecruiterOutput = vi.hoisted(() => vi.fn());
 const mockGetLastCheckAt = vi.hoisted(() => vi.fn());
 const mockResolveTarget = vi.hoisted(() => vi.fn());
+const mockCreateRouteWatch = vi.hoisted(() => vi.fn());
+const mockGetActiveRouteWatch = vi.hoisted(() => vi.fn());
+const mockCancelRouteWatch = vi.hoisted(() => vi.fn());
+const mockResolvePlace = vi.hoisted(() => vi.fn());
 
 vi.mock("@krishna/core/tools/get-travel-time", () => ({
   getTravelTimeTool: {
@@ -55,6 +59,16 @@ vi.mock("@/lib/resolver", () => ({
   resolveTarget: mockResolveTarget,
   saveAndConfirm: vi.fn(),
   needsConfirmation: vi.fn().mockReturnValue(false),
+}));
+
+vi.mock("@krishna/core/database", () => ({
+  createRouteWatch: mockCreateRouteWatch,
+  getActiveRouteWatch: mockGetActiveRouteWatch,
+  cancelRouteWatch: mockCancelRouteWatch,
+}));
+
+vi.mock("@krishna/core/tools/place-resolver", () => ({
+  resolvePlace: mockResolvePlace,
 }));
 
 describe("parseActions", () => {
@@ -166,6 +180,21 @@ describe("parseActions", () => {
   it("parses gmail_recruiters with window_days", () => {
     const result = parseActions('```action\n{"action":"gmail_recruiters","window_days":7}\n```');
     expect(result.actions[0]).toEqual({ action: "gmail_recruiters", window_days: 7 });
+  });
+
+  it("parses route_watch action from action block", () => {
+    const result = parseActions('Keeping an eye.\n```action\n{"action":"route_watch","from":"work","to":"home","mode":"car","threshold_minutes":40}\n```');
+    expect(result.actions[0]).toEqual({ action: "route_watch", from: "work", to: "home", mode: "car", threshold_minutes: 40 });
+  });
+
+  it("parses route_watch with all optional fields", () => {
+    const result = parseActions('```action\n{"action":"route_watch","from":"home","to":"work","threshold_minutes":30,"interval_minutes":10,"window_hours":2}\n```');
+    expect(result.actions[0]).toEqual({ action: "route_watch", from: "home", to: "work", threshold_minutes: 30, interval_minutes: 10, window_hours: 2 });
+  });
+
+  it("parses route_watch_cancel action", () => {
+    const result = parseActions('```action\n{"action":"route_watch_cancel"}\n```');
+    expect(result.actions[0]).toEqual({ action: "route_watch_cancel" });
   });
 });
 
@@ -455,6 +484,111 @@ describe("executeAction — travel_best", () => {
     expect(result.ok).toBe(false);
     expect(result.spokenResponse).toBe("I couldn't check departure times, sir.");
     expect(result.errorDetail).toBe("Network error");
+  });
+});
+
+describe("executeAction — route_watch", () => {
+  const now = 1780000000000;
+
+  beforeEach(() => {
+    vi.setSystemTime(now);
+    mockResolvePlace.mockReset();
+    mockCreateRouteWatch.mockReset();
+    mockGetActiveRouteWatch.mockReset();
+    mockCancelRouteWatch.mockReset();
+  });
+
+  it("arms a new watch with correct expiry", async () => {
+    mockResolvePlace.mockImplementation((p: string) => p === "home" ? "123 Main St" : p);
+    mockGetActiveRouteWatch.mockResolvedValue(null);
+    mockCreateRouteWatch.mockImplementation((w: any) => w);
+
+    const result = await executeAction({
+      action: "route_watch",
+      from: "home",
+      to: "work",
+      mode: "car",
+      threshold_minutes: 40,
+    });
+
+    expect(result.kind).toBe("status");
+    expect(result.ok).toBe(true);
+    expect(result.spokenResponse).toContain("Watching");
+    expect(result.spokenResponse).toContain("123 Main St");
+    expect(result.spokenResponse).toContain("40 minutes");
+    expect(mockCreateRouteWatch).toHaveBeenCalled();
+
+    const watch = mockCreateRouteWatch.mock.calls[0][0];
+    expect(watch.origin).toBe("123 Main St");
+    expect(watch.destination).toBe("work");
+    expect(watch.mode).toBe("car");
+    expect(watch.threshold_minutes).toBe(40);
+    expect(watch.interval_minutes).toBe(15);
+    // expires_at should be ~4h from now
+    expect(watch.expires_at).toBe(now + 4 * 3600000);
+    expect(watch.status).toBe("active");
+  });
+
+  it("replaces existing active watch on rearm", async () => {
+    mockResolvePlace.mockImplementation((p: string) => p === "home" ? "123 Main St" : p);
+    mockGetActiveRouteWatch.mockResolvedValue({
+      id: "old-id", origin: "456 Oak Ave", destination: "work",
+    });
+    mockCancelRouteWatch.mockResolvedValue(true);
+    mockCreateRouteWatch.mockImplementation((w: any) => w);
+
+    await executeAction({
+      action: "route_watch",
+      from: "home",
+      to: "work",
+      mode: "car",
+      threshold_minutes: 30,
+    });
+
+    expect(mockCancelRouteWatch).toHaveBeenCalledWith("old-id");
+    expect(mockCreateRouteWatch).toHaveBeenCalled();
+  });
+
+  it("cancels an active watch", async () => {
+    mockGetActiveRouteWatch.mockResolvedValue({
+      id: "watch-1", origin: "123 Main St", destination: "work",
+    });
+    mockCancelRouteWatch.mockResolvedValue(true);
+
+    const result = await executeAction({
+      action: "route_watch_cancel",
+    });
+
+    expect(result.kind).toBe("status");
+    expect(result.ok).toBe(true);
+    expect(result.spokenResponse).toContain("Cancelled");
+    expect(mockCancelRouteWatch).toHaveBeenCalledWith("watch-1");
+  });
+
+  it("refuses to arm when address is not found", async () => {
+    mockResolvePlace.mockImplementation((p: string) => p); // returns input unchanged
+    mockGetActiveRouteWatch.mockResolvedValue(null);
+
+    const result = await executeAction({
+      action: "route_watch",
+      from: "home",
+      to: "unknownplace",
+      mode: "car",
+    });
+
+    expect(result.spokenResponse).toContain("don't have your unknownplace address");
+    expect(mockCreateRouteWatch).not.toHaveBeenCalled();
+  });
+
+  it("returns status message when no active watch to cancel", async () => {
+    mockGetActiveRouteWatch.mockResolvedValue(null);
+
+    const result = await executeAction({
+      action: "route_watch_cancel",
+    });
+
+    expect(result.kind).toBe("status");
+    expect(result.spokenResponse).toContain("no active route watch");
   });
 });
 
@@ -779,6 +913,19 @@ describe("resolveActionForConfirm — gmail_send and travel_time (G-4)", () => {
     expect(result.needsConfirmation).toBe(true);
     expect(result.pendingResult?.target).toBe("https://example.com");
     expect(result.pendingResult?.actionToResume).toBeUndefined();
+  });
+
+  it("route_watch returns needsConfirmation with pendingResult", async () => {
+    const result = await resolveActionForConfirm({
+      action: "route_watch", from: "work", to: "home", mode: "car", threshold_minutes: 40,
+    });
+
+    expect(result.needsConfirmation).toBe(true);
+    expect(result.pendingResult).toBeDefined();
+    expect(result.pendingResult?.actionToResume).toBeDefined();
+    const action = JSON.parse(result.pendingResult!.actionToResume!);
+    expect(action.action).toBe("route_watch");
+    expect(action.to).toBe("home");
   });
 });
 
