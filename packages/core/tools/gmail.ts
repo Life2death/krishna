@@ -119,7 +119,7 @@ export function formatSearchOutput(
   query: string,
   honorific: string,
 ): string {
-  const label = query ? `"${query}"` : "your inbox";
+  const label = query ? normalizeSubject(query) : "your inbox";
 
   if (results.length === 0) {
     return `No messages found matching ${label}, ${honorific}.`;
@@ -127,9 +127,11 @@ export function formatSearchOutput(
 
   const top = results[0];
   const count = results.length;
-  let output = `Found ${count} message${count > 1 ? "s" : ""} matching ${label}${count > 0 ? ` — newest is from ${top.from}: "${top.subject}"` : ""}, ${honorific}.`;
+  const senderName = extractSenderName(top.from);
+  const subj = normalizeSubject(top.subject);
+  let output = `Found ${count} message${count > 1 ? "s" : ""} matching ${label}, newest is from ${senderName}: "${subj}", ${honorific}.`;
   if (count > 0) {
-    output += ` To read the newest one, use gmail_read with id "${top.id}".`;
+    output += ` Say "read it" to open the newest one.`;
   }
   return output;
 }
@@ -143,7 +145,35 @@ function formatReadOutput(
     : "no content";
   const sentences = gist.split(/[.!?]+/).filter(Boolean);
   const brief = sentences.slice(0, 2).join(". ").trim();
-  return `From ${message.from}, subject "${message.subject}". ${brief}${brief.length < gist.length ? "..." : ""}, ${honorific}.`;
+  const senderName = extractSenderName(message.from);
+  const subj = normalizeSubject(message.subject);
+  return `From ${senderName}, subject "${subj}". ${brief}${brief.length < gist.length ? "..." : ""}, ${honorific}.`;
+}
+
+export function extractSenderName(from: string): string {
+  const bracketMatch = from.match(/^["']?(.+?)["']?\s*</);
+  if (bracketMatch) {
+    return bracketMatch[1].trim();
+  }
+  const atMatch = from.match(/^([^@<]+)@/);
+  if (atMatch) {
+    return atMatch[1].replace(/[._]/g, " ").trim();
+  }
+  return from || "unknown sender";
+}
+
+export function normalizeSubject(text: string): string {
+  return text
+    .replace(/\u2014/g, ",")
+    .replace(/\u2013/g, ",")
+    .replace(/--/g, ", ")
+    .replace(/\b(\d{4})-(\d{2})-(\d{2})\b/g, (_, y, m, d) => {
+      const date = new Date(parseInt(y), parseInt(m) - 1, parseInt(d));
+      if (!isNaN(date.getTime())) {
+        return date.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
+      }
+      return `${y} ${m} ${d}`;
+    });
 }
 
 function formatListLabelsOutput(

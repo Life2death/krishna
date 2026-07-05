@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { sanitizeEmailField, isValidEmail, formatSearchOutput, gmailSearchMessagesTool, gmailSendEmailTool, gmailFetchRecruiterCandidates } from "@krishna/core/tools/gmail";
+import { sanitizeEmailField, isValidEmail, formatSearchOutput, extractSenderName, normalizeSubject, gmailSearchMessagesTool, gmailSendEmailTool, gmailFetchRecruiterCandidates } from "@krishna/core/tools/gmail";
 import type { SearchResult } from "@krishna/core/tools/gmail";
 import { setSecretGetter } from "@krishna/core/secrets";
 import { setHttpFetch, getHttpFetch } from "@krishna/core/http";
@@ -59,28 +59,31 @@ describe("isValidEmail", () => {
 
 describe("formatSearchOutput", () => {
   const results: SearchResult[] = [
-    { id: "18abc123", threadId: "thread1", from: "boss@example.com", subject: "Meeting tomorrow", date: "2026-07-04", snippet: "Let's meet" },
+    { id: "18abc123", threadId: "thread1", from: "Boss <boss@example.com>", subject: "Meeting tomorrow", date: "2026-07-04", snippet: "Let's meet" },
     { id: "19def456", threadId: "thread2", from: "hr@example.com", subject: "Holiday list", date: "2026-07-03", snippet: "Holidays" },
   ];
 
-  it("includes count and newest message info", () => {
+  it("includes count, sender name (not raw email), subject", () => {
     const output = formatSearchOutput(results, "meeting", "sir");
     expect(output).toContain("Found 2 messages");
-    expect(output).toContain("boss@example.com");
+    expect(output).toContain("Boss");
+    expect(output).not.toContain("boss@example.com");
     expect(output).toContain("Meeting tomorrow");
     expect(output).toContain("sir");
   });
 
-  it("includes the message ID for follow-up read", () => {
+  it("speaks 'say read it' instead of raw message ID", () => {
     const output = formatSearchOutput(results, "meeting", "sir");
-    expect(output).toContain('gmail_read with id "18abc123"');
+    expect(output).toContain('Say "read it"');
+    expect(output).not.toContain("18abc123");
+    expect(output).not.toContain("gmail_read");
   });
 
   it("handles empty results", () => {
     const output = formatSearchOutput([], "nothing", "sir");
     expect(output).toContain("No messages found");
     expect(output).toContain("nothing");
-    expect(output).not.toContain("gmail_read");
+    expect(output).not.toContain("read it");
   });
 
   it("uses provided honorific", () => {
@@ -89,13 +92,52 @@ describe("formatSearchOutput", () => {
     expect(output).not.toContain("sir");
   });
 
-  it("works with single result", () => {
+  it("works with single result and uses local-part name for bare email", () => {
     const oneResult: SearchResult[] = [
       { id: "single1", threadId: "t1", from: "a@b.com", subject: "Hello", date: "", snippet: "" },
     ];
     const output = formatSearchOutput(oneResult, "hello", "sir");
     expect(output).toContain("Found 1 message");
-    expect(output).toContain('gmail_read with id "single1"');
+    expect(output).toContain("a");
+    expect(output).toContain("Hello");
+    expect(output).toContain('Say "read it"');
+    expect(output).not.toContain("single1");
+  });
+
+  it("extracts display name from bracket-form sender", () => {
+    const results: SearchResult[] = [
+      { id: "x1", threadId: "t1", from: '"Vikram Panmand" <vik@example.com>', subject: "Hey", date: "", snippet: "" },
+    ];
+    const output = formatSearchOutput(results, "test", "sir");
+    expect(output).toContain("Vikram Panmand");
+    expect(output).not.toContain("vik@example.com");
+  });
+
+  it("normalizes em-dash in subject for speech", () => {
+    const results: SearchResult[] = [
+      { id: "x2", threadId: "t1", from: "x@y.com", subject: "Hello\u2014world", date: "", snippet: "" },
+    ];
+    const output = formatSearchOutput(results, "q", "sir");
+    expect(output).not.toContain("\u2014");
+    expect(output).toContain("Hello,world");
+  });
+
+  it("normalizes ISO date in subject for speech", () => {
+    const results: SearchResult[] = [
+      { id: "x3", threadId: "t1", from: "x@y.com", subject: "Report 2026-07-05", date: "", snippet: "" },
+    ];
+    const output = formatSearchOutput(results, "q", "sir");
+    expect(output).toContain("July");
+    expect(output).not.toContain("2026-07-05");
+  });
+
+  it("normalizes colons in query label for speech (no raw operators)", () => {
+    const results: SearchResult[] = [
+      { id: "x4", threadId: "t1", from: "a@b.com", subject: "Hi", date: "", snippet: "" },
+    ];
+    const output = formatSearchOutput(results, "category:primary", "sir");
+    expect(output).toContain("category");
+    expect(output).toContain("primary");
   });
 });
 
@@ -246,5 +288,45 @@ describe("gmailFetchRecruiterCandidates — RR-2", () => {
     expect(mockFetch).toHaveBeenCalledTimes(2);
     const url1 = decodeURIComponent(mockFetch.mock.calls[1][0]);
     expect(url1).toContain("in:inbox");
+  });
+});
+
+describe("extractSenderName", () => {
+  it("extracts display name from bracket form", () => {
+    expect(extractSenderName('"Vikram Panmand" <vik@example.com>')).toBe("Vikram Panmand");
+  });
+
+  it("extracts display name from bracket form without quotes", () => {
+    expect(extractSenderName("Vikram Panmand <vik@example.com>")).toBe("Vikram Panmand");
+  });
+
+  it("returns local-part for bare email", () => {
+    expect(extractSenderName("ahr@example.com")).toBe("ahr");
+  });
+
+  it("returns 'unknown sender' for empty string", () => {
+    expect(extractSenderName("")).toBe("unknown sender");
+  });
+});
+
+describe("normalizeSubject", () => {
+  it("replaces em-dash with comma", () => {
+    expect(normalizeSubject("Hello\u2014world")).toBe("Hello,world");
+  });
+
+  it("replaces en-dash with comma", () => {
+    expect(normalizeSubject("Hello\u2013world")).toBe("Hello,world");
+  });
+
+  it("converts ISO date to spoken form", () => {
+    const result = normalizeSubject("Report 2026-07-05");
+    expect(result).toContain("July");
+    expect(result).toContain("5");
+    expect(result).toContain("2026");
+    expect(result).not.toContain("2026-07-05");
+  });
+
+  it("leaves plain text unchanged", () => {
+    expect(normalizeSubject("Meeting tomorrow")).toBe("Meeting tomorrow");
   });
 });

@@ -154,6 +154,20 @@ export function formatRecruiterOutput(
   return lines.join("\n") + capNote;
 }
 
+export function normalizeRecruiterSubject(text: string): string {
+  return text
+    .replace(/\u2014/g, ",")
+    .replace(/\u2013/g, ",")
+    .replace(/--/g, ", ")
+    .replace(/\b(\d{4})-(\d{2})-(\d{2})\b/g, (_, y, m, d) => {
+      const date = new Date(parseInt(y), parseInt(m) - 1, parseInt(d));
+      if (!isNaN(date.getTime())) {
+        return date.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
+      }
+      return `${y} ${m} ${d}`;
+    });
+}
+
 function buildBrief(item: Classification, candidate?: Candidate): string {
   const parts: string[] = [];
 
@@ -173,7 +187,8 @@ function buildBrief(item: Classification, candidate?: Candidate): string {
         return extracted || candidate.from.split("@")[0].trim();
       })()
     : "";
-  const fallback = displayName ? `${displayName} — "${candidate!.subject}"` : `Message ${item.id}`;
+  const subj = candidate ? normalizeRecruiterSubject(candidate.subject) : "";
+  const fallback = displayName ? `${displayName}, "${subj}"` : `A message from your inbox`;
   return fallback;
 }
 

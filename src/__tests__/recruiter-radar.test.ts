@@ -3,6 +3,7 @@ import {
   checkRecruiters,
   formatRecruiterOutput,
   formatSince,
+  normalizeRecruiterSubject,
   Candidate,
   Classification,
   MAX_CANDIDATES,
@@ -528,5 +529,63 @@ describe("runRecruiterRadar", () => {
     // Result still processed normally
     expect(result.outreach).toHaveLength(1);
     expect(result.degraded).toBe(false);
+  });
+});
+
+describe("normalizeRecruiterSubject", () => {
+  it("replaces em-dash with comma", () => {
+    expect(normalizeRecruiterSubject("Hello\u2014world")).toBe("Hello,world");
+  });
+
+  it("replaces en-dash with comma", () => {
+    expect(normalizeRecruiterSubject("Hello\u2013world")).toBe("Hello,world");
+  });
+
+  it("converts ISO date to spoken form", () => {
+    const result = normalizeRecruiterSubject("Meeting 2026-07-05");
+    expect(result).toContain("July");
+    expect(result).not.toContain("2026-07-05");
+  });
+});
+
+describe("formatRecruiterOutput spoken hygiene", () => {
+  const candidates: Candidate[] = [
+    { id: "msg1", from: 'Alice Smith <alice@co.com>', subject: "Hi\u2014there", snippet: "" },
+  ];
+  const classifications: Classification[] = [
+    { id: "cl1", class: "recruiter_outreach", recruiterName: "Alice Smith", company: "Co", roleTitle: "Engineer" },
+  ];
+
+  const options = { since: Date.now() - 86400000, capHit: false, degraded: false };
+
+  it("uses recruiterName in output, not raw email or em-dash", () => {
+    const output = formatRecruiterOutput(classifications, candidates, options);
+    expect(output).toContain("Alice Smith");
+    expect(output).not.toContain("alice@co.com");
+    expect(output).not.toContain("\u2014");
+  });
+
+  it("fallback line contains displayName and normalized subject, no raw id", () => {
+    const fallbackCandidates: Candidate[] = [
+      { id: "cl2", from: 'Alice Smith <alice@co.com>', subject: "Hi\u2014there", snippet: "" },
+    ];
+    const fallbackClassifications: Classification[] = [
+      { id: "cl2", class: "recruiter_outreach" },
+    ];
+    const output = formatRecruiterOutput(fallbackClassifications, fallbackCandidates, options);
+    expect(output).toContain("Alice Smith");
+    expect(output).toContain("Hi,there");
+    expect(output).not.toContain("\u2014");
+    expect(output).not.toContain("msg1");
+    expect(output).not.toContain("alice@co.com");
+  });
+
+  it("ultimate fallback line is 'A message from your inbox', not raw id", () => {
+    const fallbackClassifications: Classification[] = [
+      { id: "cl3", class: "other" },
+    ];
+    const output = formatRecruiterOutput(fallbackClassifications, [], options);
+    expect(output).toContain("A message from your inbox");
+    expect(output).not.toContain("cl3");
   });
 });
