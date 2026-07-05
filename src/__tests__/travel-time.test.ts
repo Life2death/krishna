@@ -32,6 +32,7 @@ import { setHttpFetch } from "@krishna/core/http";
 import { resolvePlace } from "@krishna/core/tools/place-resolver";
 import {
   getTravelTimeTool,
+  suggestDepartureTimeTool,
   formatTravelOutput,
   buildMapsUrl,
   callGoogleRoutes,
@@ -525,6 +526,114 @@ describe("sampleDepartures", () => {
 
     const params = { ...baseParams, signal: controller.signal };
     await expect(sampleDepartures(params)).rejects.toThrow("The operation was aborted");
+  });
+});
+
+// ── suggestDepartureTimeTool ──────────────────────────────────────────────
+
+describe("suggestDepartureTimeTool", () => {
+  beforeEach(() => {
+    mockFetch.mockReset();
+    setHttpFetch(mockFetch);
+    vi.stubGlobal("fetch", mockFetch);
+    mockGetSecret.mockReset();
+    mockGetSecret.mockResolvedValue("test-key");
+    mockGetResponseSettings.mockReturnValue({
+      responseLength: "auto",
+      language: "english",
+      autoScroll: true,
+      honorific: "sir",
+      voiceMaxTokens: 100,
+      voiceModel: "",
+    });
+  });
+
+  it("returns best departure suggestion when a later sample is better", async () => {
+    // 7 samples: durations increase then a dip at index 4
+    const durations = [3200, 3100, 3000, 2900, 2400, 2800, 3100];
+    for (const d of durations) {
+      mockRoutesResponse([{ duration: `${d}s`, staticDuration: `${d - 100}s`, distanceMeters: 20000 }]);
+    }
+
+    const result = await suggestDepartureTimeTool.run(
+      { from: "home", to: "work", mode: "car" },
+      { vars: {} },
+    );
+
+    expect(result.success).toBe(true);
+    expect(result.output).toContain("If you wait until");
+    expect(result.data?.bestDuration).toBe("2400");
+    expect(result.data?.samples).toBeTruthy();
+  });
+
+  it("says now is best when first sample has minimum duration", async () => {
+    const durations = [1800, 2000, 2100, 2200, 2300, 2400, 2500];
+    for (const d of durations) {
+      mockRoutesResponse([{ duration: `${d}s`, staticDuration: `${d - 100}s`, distanceMeters: 20000 }]);
+    }
+
+    const result = await suggestDepartureTimeTool.run(
+      { from: "home", to: "work", mode: "car" },
+      { vars: {} },
+    );
+
+    expect(result.success).toBe(true);
+    expect(result.output).toContain("now is as good as it gets");
+    expect(result.output).toContain("30 minutes"); // 1800s = 30 min
+  });
+
+  it("returns error when all samples fail", async () => {
+    for (let i = 0; i < 7; i++) {
+      mockFetchError(500, "Internal error");
+    }
+
+    const result = await suggestDepartureTimeTool.run(
+      { from: "home", to: "work", mode: "car" },
+      { vars: {} },
+    );
+
+    expect(result.success).toBe(false);
+    expect(result.error).toContain("couldn't check departure times");
+  });
+
+  it("returns error when API key is missing", async () => {
+    mockGetSecret.mockResolvedValue(null);
+
+    const result = await suggestDepartureTimeTool.run(
+      { from: "home", to: "work", mode: "car" },
+      { vars: {} },
+    );
+
+    expect(result.success).toBe(false);
+    expect(result.error).toContain("API key is not configured");
+  });
+
+  it("returns error for invalid mode", async () => {
+    const result = await suggestDepartureTimeTool.run(
+      { from: "home", to: "work", mode: "flying" },
+      { vars: {} },
+    );
+
+    expect(result.success).toBe(false);
+    expect(result.error).toContain("Invalid mode");
+  });
+
+  it("uses passed window_hours", async () => {
+    const durations = [3200, 3000, 2800, 2600, 2400];
+    for (const d of durations) {
+      mockRoutesResponse([{ duration: `${d}s`, staticDuration: `${d - 100}s`, distanceMeters: 20000 }]);
+    }
+
+    const result = await suggestDepartureTimeTool.run(
+      { from: "home", to: "work", mode: "car", window_hours: "2" },
+      { vars: {} },
+    );
+
+    expect(result.success).toBe(true);
+    expect(result.output).toContain("next 2 hours");
+    // 2h window with 2h window_hours = 5 samples (now + 4 × 30min = within 2h)
+    const parsed = JSON.parse(result.data!.samples);
+    expect(parsed).toHaveLength(5);
   });
 });
 

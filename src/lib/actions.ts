@@ -3,7 +3,7 @@ import type { Action, ParsedReply, StepAction } from "@/types/assistant";
 import { resolveAppAlias, isUrl, isFilePath } from "@/config/app-aliases";
 import { resolveTarget, saveAndConfirm, needsConfirmation } from "@/lib/resolver";
 import type { ResolveResult } from "@/lib/resolver";
-import { getTravelTimeTool } from "@krishna/core/tools/get-travel-time";
+import { getTravelTimeTool, suggestDepartureTimeTool } from "@krishna/core/tools/get-travel-time";
 import { getJobQueueTool } from "@krishna/core/tools/job-queue";
 import { gmailSearchMessagesTool, gmailReadMessageTool, gmailListLabelsTool, gmailSendEmailTool, gmailFetchRecruiterCandidates } from "@krishna/core/tools/gmail";
 import { getResponseSettings } from "@krishna/core/settings";
@@ -59,6 +59,9 @@ export function parseActions(reply: string): ParsedReply {
         }
         if (parsed && parsed.action === "travel_time") {
           actions.push({ action: "travel_time", from: parsed.from, to: parsed.to, mode: parsed.mode });
+        }
+        if (parsed && parsed.action === "travel_best") {
+          actions.push({ action: "travel_best", from: parsed.from, to: parsed.to, mode: parsed.mode, window_hours: parsed.window_hours });
         }
         if (parsed && parsed.action === "gmail_search") {
           actions.push({ action: "gmail_search", query: parsed.query ?? "", maxResults: parsed.maxResults });
@@ -247,6 +250,37 @@ export async function executeAction(
       ok: result.success,
       errorDetail: result.data?.errorDetail,
     };
+  }
+
+  if (action.action === "travel_best") {
+    const to = action.to || "";
+    const mode = action.mode || "car";
+
+    if (!to) {
+      return { kind: "answer", spokenResponse: "Where would you like to go?" };
+    }
+
+    try {
+      const result = await suggestDepartureTimeTool.run(
+        { from: action.from ?? "home", to, mode, window_hours: String(action.window_hours ?? 3) },
+        { vars: {} },
+      );
+
+      return {
+        kind: "answer",
+        spokenResponse: result.success ? (result.output || "I couldn't find a good departure window.") : (result.error || "I couldn't check departure times, sir."),
+        ok: result.success,
+        errorDetail: result.data?.errorDetail || result.error,
+      };
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return {
+        kind: "answer",
+        ok: false,
+        spokenResponse: "I couldn't check departure times, sir.",
+        errorDetail: msg,
+      };
+    }
   }
 
   if (action.action === "gmail_search") {

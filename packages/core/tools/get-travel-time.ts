@@ -472,6 +472,102 @@ export const getTravelTimeTool: Tool = {
   },
 };
 
+// ── Best-departure tool (Feature A) ───────────────────────────────────────
+
+function formatDepartureOutput(
+  samples: DepartureSample[],
+  best: { departureTime: string; duration: number },
+  windowHours: number,
+  honorific: string,
+): string {
+  const firstOk = samples.find((s) => s.ok) ?? samples[0];
+  const nowDuration = firstOk.duration!;
+  const nowMin = Math.round(nowDuration / 60);
+  const bestMin = Math.round(best.duration / 60);
+  const windowLabel = windowHours >= 2 ? `${windowHours} hours` : `${windowHours} hour`;
+
+  if (best.duration >= nowDuration) {
+    return `No better window coming up, ${honorific} — now is as good as it gets at ${nowMin} minutes.`;
+  }
+
+  const bestTime = new Date(best.departureTime);
+  const bestTimeStr = bestTime
+    .toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true })
+    .toLowerCase();
+
+  return `Leaving now is ${nowMin} minutes, ${honorific}. If you wait until ${bestTimeStr} it drops to ${bestMin} — that's your best window in the next ${windowLabel}.`;
+}
+
+export const suggestDepartureTimeTool: Tool = {
+  name: "suggest_departure_time",
+  description:
+    "Suggest the best departure time for a route by sampling traffic predictions. " +
+    'Args: from (origin, default "home"), to (destination), mode (car|two_wheeler|transit|bicycle|walk, default car), window_hours (optional, default 3).',
+  run: async (args, ctx) => {
+    const rawOrigin = args.from || args.origin || "home";
+    const rawDestination = args.to || args.destination;
+    const mode: TravelMode = (args.mode as TravelMode) || "car";
+    const window_hours = args.window_hours ? parseInt(args.window_hours, 10) : 3;
+
+    if (!rawDestination) {
+      return { success: false, error: "Missing required args: from and to" };
+    }
+
+    const origin = await resolvePlace(rawOrigin);
+    const destination = await resolvePlace(rawDestination);
+
+    if (!["car", "two_wheeler", "transit", "bicycle", "walk"].includes(mode)) {
+      return { success: false, error: `Invalid mode: ${mode}. Use car, two_wheeler, transit, bicycle, or walk.` };
+    }
+
+    const apiKey = await getGoogleMapsKey();
+    if (!apiKey) {
+      return { success: false, error: "Google Maps API key is not configured. Add one in Settings." };
+    }
+
+    const settings = getResponseSettings();
+    const honorific = settings.honorific || "sir";
+
+    try {
+      const { samples, failures } = await sampleDepartures({
+        origin,
+        destination,
+        mode,
+        apiKey,
+        window_hours,
+        signal: ctx.signal,
+      });
+
+      const okSamples = samples.filter((s) => s.ok);
+      if (okSamples.length === 0) {
+        return { success: false, error: `All departure samples failed, ${honorific}.` };
+      }
+
+      const best = okSamples.reduce((a, b) => (a.duration! < b.duration! ? a : b));
+      const bestWithDuration = best as { departureTime: string; duration: number };
+      const output = formatDepartureOutput(samples, bestWithDuration, window_hours, honorific);
+
+      return {
+        success: true,
+        output,
+        data: {
+          samples: JSON.stringify(samples),
+          failures: String(failures),
+          bestDepartureTime: best.departureTime,
+          bestDuration: String(best.duration!),
+        } as Record<string, string>,
+      };
+    } catch (err) {
+      const errorDetail = err instanceof Error ? err.message : String(err);
+      return {
+        success: false,
+        error: `I couldn't check departure times, ${honorific}.`,
+        data: { errorDetail } as Record<string, string>,
+      };
+    }
+  },
+};
+
 async function getGoogleMapsKey(): Promise<string | null> {
   try {
     return await getSecret("GOOGLE_MAPS_API_KEY");
