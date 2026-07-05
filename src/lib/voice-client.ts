@@ -179,7 +179,19 @@ export async function considerAddSample(
   verifyResult: VoiceVerifyResult,
 ): Promise<boolean> {
   if (!verifyResult.enrolled || !verifyResult.match) return false;
-  if (verifyResult.score < 0.88) return false;
+
+  // Passive gallery growth. The match gate above already confirmed this utterance verifies as
+  // the owner. While the gallery is still MATURING, grow it from any such verified utterance —
+  // the old fixed 0.88 gate exceeds the (~0.85) match threshold, so a small gallery could never
+  // grow from normal conversation (cold-start deadlock: the meter stayed stuck at the enrolled
+  // count). Once mature, require higher confidence (0.88) to keep sample quality high.
+  const addGate = verifyResult.mature ? 0.88 : verifyResult.threshold;
+  if (verifyResult.score < addGate) {
+    console.debug(
+      `[voice-id] passive add skipped: score ${verifyResult.score.toFixed(3)} < gate ${addGate.toFixed(3)} (mature=${verifyResult.mature})`,
+    );
+    return false;
+  }
 
   const state = await getState();
   if (!state) return false;
@@ -213,6 +225,7 @@ export async function considerAddSample(
     threshold_confidence: confidence,
   });
 
+  console.debug(`[voice-id] passive sample added → ${count} samples (score ${verifyResult.score.toFixed(3)}, confidence ${(confidence * 100).toFixed(0)}%)`);
   return true;
 }
 

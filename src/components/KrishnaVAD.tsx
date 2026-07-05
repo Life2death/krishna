@@ -87,6 +87,9 @@ export const KrishnaVAD = () => {
         ]);
 
         if (voiceResult) {
+          console.debug(
+            `[voice-id] verify: score=${voiceResult.score?.toFixed(3)} threshold=${voiceResult.threshold?.toFixed(3)} match=${voiceResult.match} mature=${voiceResult.mature} samples=${voiceResult.sampleCount}`,
+          );
           // Passive learning: on every verified utterance, consider adding a sample
           // regardless of whether Voice ID is enabled (fills the meter from normal use).
           if (voiceResult.enrolled && voiceResult.match) {
