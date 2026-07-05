@@ -220,3 +220,37 @@ Keep the existing `presence-state` listener and the `data-visible` fade — unch
 ## Out of scope
 - The toolbar `KrishnaChakra` (small indicator) — unchanged.
 - Theme tokens, presence window capability, the `presence-state` emit logic — all already correct.
+
+---
+
+## MINI ORB — small-mode spec (owner request 2026-07-05, specs only — do not build until told)
+
+A compact variant of the existing chakra orb for an always-on-top corner presence. Reuses the
+SAME continuous-spin + CSS-custom-property technique and the SAME `presence-state` event — this
+is a size/behavior variant, not a new component tree.
+
+### Size & placement
+- **40–48px** disc (vs the current full-size overlay). Frameless, transparent, always-on-top
+  mini window (Tauri secondary window) dockable to a screen corner; draggable; position persisted.
+- Main-window orb unchanged; mini orb is an additional surface driven by the same state.
+
+### Per-state animation (mini adaptations of the existing table)
+| state | mini behavior |
+|---|---|
+| idle | breathe only (scale 1.00→1.04, ~4s), glow 0.25 — quieter than full-size to not distract |
+| listening | dashed halo ON + mic-level-reactive glow pulse (reuse VAD level if cheap; else fixed 1.6× spin) |
+| processing | spin ramp to ~2.3×, brief shimmer sweep every ~1.2s |
+| speaking | aura ring pulses outward synced to TTS cadence (or fixed 2.8× spin if sync is costly) |
+| unverified speaker | single amber ring flash (0.4s) — maps from voice-ID `match=false` |
+| offline / error | desaturate + dim to 40%, slow amber flicker (2s) — driven by network-state (item 6) when it lands |
+| muted | static, 50% opacity, small slash badge |
+
+### Interactions
+- Click → focus/restore main window. Right-click (or long-press) → mini context menu: Mute,
+  Open Settings, Quit.
+- Honors `prefers-reduced-motion`: spin stops, states map to glow-intensity only.
+
+### Constraints
+- GPU-cheap: transform/opacity only; no layout-triggering properties; one rAF loop max.
+- No new state plumbing — subscribe to the existing `presence-state` Tauri event; the two new
+  states (unverified, offline) are additive and OPTIONAL until their sources exist.
