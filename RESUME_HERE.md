@@ -14,9 +14,10 @@ compiled clean), and the owner smoke-tested **items 12/13/14 + J1 all good**, in
 **G-13 Gmail Connect — ✓ Connected live, real mail returned.** **Both owner gates are now
 CLEARED**: G-13 (Gmail) and H1 (job-hunter token, confirmed live — `GET /api/jobs` returns real
 queue data with the bearer token). **RR-2 and item 10-J2 are both now unblocked.** Design specs
-approved and written (settings reorg, mini orb, Android roadmap). Agent is starting **item 7
-voice-ID P3** next (fixes the "not training on my voice" complaint); J2, RR-2, settings reorg,
-item 9/11 all queued behind it.
+approved and written (settings reorg, mini orb, Android roadmap). **Item 7 voice-ID P3 is now
+DONE + merged** (`c38ecd1`) — fixes the "not training on my voice" complaint (see §3 live caveat:
+needs one initial enrollment to bootstrap). Next agent pick: **item 10-J2** (queue read tool,
+newly unblocked) or **RR-2** (small); then settings reorg / item 9 / item 11.
 
 ---
 
@@ -42,9 +43,16 @@ item 9/11 all queued behind it.
 | **14 · Travel route garble** | Spoke Google's raw slash-joined road chain → TTS garble; now speaks only the first segment before `/` | `1654a0c` |
 | **13 · Recruiter Radar** | `gmail_recruiters` action; two-stage (category:primary→in:inbox fetch + LLM classify w/ heuristic fallback); stateful seen/last-check (migration v19); bare-vs-explicit windowing; spoken briefs + G-6 read hint + G-2 errorDetail | R1–R3 + RR-1/RR-3/RR-4 (`f6f9719`, `63b9afb`, `0f2f342`) |
 | **10 · Job autopilot J1+J3** | J1 = Job Pipeline URL alias (voice-open); J3 = ApplicationProfile store (12 fields, Settings UI, keyed memory row → SQLCipher) | `3500695`, `e910938` |
+| **7 · Voice-ID P3** | Option-A passive background-fill (fixes "not training on my voice"): `verifyVoice` always runs, `considerAddSample` fills gallery from daily use even when Voice ID off, never acting on it; P2-N1 shared `enabled` via `useVoiceStatus`; strict 100% enable-gate in the hook. 15 tests, tsc clean. | `c38ecd1` |
 
 Earlier (pre-session, already merged): item 1 (travel error visibility, `4b9c997`), item 2
-(no-narrated-actions, `3b85777`), item 10-H1 code (job-hunter token — awaits owner deploy above).
+(no-narrated-actions, `3b85777`), item 10-H1 (job-hunter token — deployed + live-verified 2026-07-05).
+
+> **⚠️ P3 live caveat:** passive fill only tops up an EXISTING gallery — `considerAddSample`
+> requires `enrolled && match`, so it can't bootstrap from zero. **The owner must do an initial
+> voice enrollment once** (a few recordings) for daily-use fill to kick in. If the gallery is
+> empty, P3 alone won't start training. Verify live: enroll once → speak normally a few times →
+> Status meter should climb without manual recording.
 
 ---
 
@@ -52,23 +60,15 @@ Earlier (pre-session, already merged): item 1 (travel error visibility, `4b9c997
 
 ### 🟢 Unblocked — agent can start now (owner-reprioritized 2026-07-05)
 1. **RR-2 · Recruiter fetch-fallback tuning** — NOW UNBLOCKED (G-13 live). See §5. Small.
-2. **Item 7 · Voice-ID P3** — **this fixes the owner's live complaint "why isn't it training on
-   my voice":** root cause confirmed at `KrishnaVAD.tsx:72-95` — passive learning
-   (`considerAddSample`, ≥0.88 auto-add) only runs when Voice ID is **enabled**; when disabled,
-   `verifyVoice` is skipped entirely, so zero samples are ever added from daily use. And enabling
-   requires the meter at 100% (~24 manual recordings) → chicken-and-egg. P3's owner-chosen
-   **Option A background-fill** (silently top up samples from normal use while Voice ID is off,
-   never acting on it) is exactly the fix. Plan: `VOICE_ID_STATUS_METER_PLAN.md` (+ P2-N1 shared
-   `enabled`, strict-gate the old Settings toggle).
-3. **Item 10-J2 · Queue read tool** — **NOW UNBLOCKED (H1 live-verified).** Voice-read the
+2. **Item 10-J2 · Queue read tool** — **NOW UNBLOCKED (H1 live-verified).** Voice-read the
    not-applied job queue via `GET /api/jobs?status=not_applied` with the bearer token (store the
    token in `secureStorage`, same pattern as Gmail/Maps keys — see gotcha #1 in §6). Plan:
    `JOB_AUTOPILOT_PLAN.md`. Branch `feat/job-autopilot` off `main` (or continue same branch as
    J1/J3 if still around). Prefix `feat(jobap-j2)`.
-4. **Settings menu reorg** — spec approved (`SETTINGS_REORG_PLAN.md`), P1-P3 ready to code.
-5. **Item 9 · Travel insights P1** — `TRAVEL_INSIGHTS_PLAN.md`, branch `feat/travel-insights`.
-6. **Item 11 · Natural speech V1** — `NATURAL_SPEECH_PLAN.md`, branch `feat/natural-speech`.
-7. **Item 6 · Network resilience P1** — `NETWORK_RESILIENCE_PLAN.md`.
+3. **Settings menu reorg** — spec approved (`SETTINGS_REORG_PLAN.md`), P1-P3 ready to code.
+4. **Item 9 · Travel insights P1** — `TRAVEL_INSIGHTS_PLAN.md`, branch `feat/travel-insights`.
+5. **Item 11 · Natural speech V1** — `NATURAL_SPEECH_PLAN.md`, branch `feat/natural-speech`.
+6. **Item 6 · Network resilience P1** — `NETWORK_RESILIENCE_PLAN.md`.
 
 ### 🔴 Blocked — do NOT start until the gate clears
 - **Item 10-J4** (assisted apply, LinkedIn/Naukri, confirm-gated Submit) — later; needs live CDP
