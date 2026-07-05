@@ -90,7 +90,7 @@ pipeline)" — self-contradictory. The tests missed this because the mock set `r
 imports listings the user hasn't applied to). Speaking "you have 14,408 unapplied jobs" is
 technically right but useless. Decide the framing: (a) speak total + top-3 by fit ("14,408 in your
 pipeline; top 3 by fit: …"); (b) speak only a high-fit subset count ("N jobs above fit X"); or
-(c) a fixed "top matches" view. Recommend (a) for J2, refine later. Agent implements once chosen.
+(c) a fixed "top matches" view. **OWNER CHOSE (a) 2026-07-05:** speak the real total + top 3 by fit. e.g. "You have 14,408 jobs in your pipeline, sir. Top 3 by fit: A, B, C."
 
 **Minor (non-blocking):** (1) no-token error says "add it in Settings under Integrations" but the
 section is its own JobHunterSettings — fix wording. (2) "added today" uses `new Date().toISOString()`
