@@ -24,6 +24,7 @@
         { "url": "https://api.groq.com/**" },
         { "url": "https://api.elevenlabs.io/**" },
         { "url": "https://www.googleapis.com/**" },
+        { "url": "https://gmail.googleapis.com/**" },
         { "url": "https://api.github.com/**" },
         { "url": "https://openrouter.ai/**" },
         { "url": "https://api.openai.com/**" },
