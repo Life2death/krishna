@@ -57,7 +57,9 @@ after J2); then settings reorg / item 9 / item 11.
 | **7 · Voice-ID P3** | Option-A passive background-fill (fixes "not training on my voice"): `verifyVoice` always runs, `considerAddSample` fills gallery from daily use even when Voice ID off, never acting on it; P2-N1 shared `enabled` via `useVoiceStatus`; strict 100% enable-gate in the hook. 15 tests, tsc clean. | `c38ecd1` |
 | **10 · Job autopilot J2** | `get_job_queue` tool (GET /api/jobs, token via secureStorage, getHttpFetch, error taxonomy, G-2); `job_queue` action + KNOWN_SAFE; JobHunterSettings token field; spoken count = API total + top 3 by fit. Live-verified against real API. | `c2bbe5f` (714f0e8 + 698355f) |
 | **15 · Gmail transport scope** | `gmail.googleapis.com` + job-hunter host added to Tauri http allowlist + CSP (were blocked). Live-verified: Gmail search returns real mail. | `e525b60` |
-| **9 · Travel insights P1** | `callGoogleRoutes` departureTime (now+60s floor); `sampleDepartures()` sequential, cap 8, per-sample failure capture, abort-aware. Core only (P2 = tool/action/prompt). 9 tests. | `8dda179` |
+| **9 · Travel insights P1** | `callGoogleRoutes` departureTime (now+60s floor); `sampleDepartures()` sequential, cap 8, per-sample failure capture, abort-aware. 9 tests. | `8dda179` |
+| **9 · Travel insights P2** | `suggest_departure_time` tool (min-duration selection, spoken best-window) + `travel_best` action + prompt + KNOWN_SAFE. 37 tests, 559 green. | `a6e5d89` |
+| **7 · Voice-ID enrollment** | 3 live bugs fixed: ONNX single-thread (Tauri no SharedArrayBuffer), `addSample` missing `created_at`, real-error surfacing; enable gate → ≥3 samples. Owner enrolled + enabled live. | `04905c4`, `fa83f69`, `540213c` |
 
 Earlier (pre-session, already merged): item 1 (travel error visibility, `4b9c997`), item 2
 (no-narrated-actions, `3b85777`), item 10-H1 (job-hunter token — deployed + live-verified 2026-07-05).
@@ -72,7 +74,10 @@ Earlier (pre-session, already merged): item 1 (travel error visibility, `4b9c997
 
 ## 4. PENDING QUEUE — priority order
 
-### 🔴 LIVE BLOCKER (top priority — being debugged 2026-07-05)
+### ✅ RESOLVED LIVE 2026-07-05 — Voice ID fully working
+- Enrollment failed → 3 bugs fixed: ONNX single-thread for Tauri (`04905c4`), `addSample` missing `created_at` (`fa83f69`), + real-error surfacing. Enable gate relaxed to ≥3 samples (`540213c`). **Owner enrolled to 5 samples and ENABLED Voice ID live.** Passive fill (P3) now grows the meter from normal use.
+
+<details><summary>original blocker note</summary>
 0. **Voice enrollment fails** ("Enrollment failed", 0 samples) — WavLM model download/init suspect
    (`src/lib/voice-id/embedding.ts`, `@xenova/transformers` from HF). Need the real error
    (Settings→VoiceID model-status line or in-app console) to root-cause. **Bundle the fix with:**
@@ -80,11 +85,11 @@ Earlier (pre-session, already merged): item 1 (travel error visibility, `4b9c997
    msg-id). See `VOICE_ID_STATUS_REVIEW_FINDINGS.md` + `GMAIL_REVIEW_FINDINGS.md` G-16.
 
 ### 🟢 Unblocked — agent queue
-1. **Item 9 · Travel insights P2** — P1 DONE+merged (`8dda179`). P2 = `suggest_departure_time`
-   tool + `travel_best` action + prompt. `TRAVEL_INSIGHTS_PLAN.md`, branch `feat/travel-insights`.
-2. **RR-2 · Recruiter fetch-fallback tuning** — Gmail now live (G-15). First probe whether
+1. **RR-2 · Recruiter fetch-fallback tuning** — Gmail now live (G-15). First probe whether
    `category:primary` is honored (owner running "search my Gmail for category:primary"); then fix
    the 0-results-triggers-fallback behavior. Small. See §5.
+2. **Item 9 · Travel insights P3** — P1+P2 DONE+merged (`8dda179`, `a6e5d89`). P3 = route-watch
+   storage + arm/cancel (`route_watches` migration). `TRAVEL_INSIGHTS_PLAN.md`, `feat/travel-insights`.
 3. **Settings menu reorg** — spec approved (`SETTINGS_REORG_PLAN.md`), P1-P3 ready.
 4. **Item 11 · Natural speech V1** — `NATURAL_SPEECH_PLAN.md`, branch `feat/natural-speech`.
 5. **Item 6 · Network resilience P1** — `NETWORK_RESILIENCE_PLAN.md`.
