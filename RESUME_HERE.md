@@ -37,12 +37,12 @@ after J2); then settings reorg / item 9 / item 11.
 
 ### 🔴 OWNER SETUP FOR J4 ASSISTED APPLY (do TONIGHT — gates tomorrow morning regardless of code)
 The J4 code can be perfect and still do nothing without this local setup:
-1. **Launch Chrome with remote debugging** so the app can attach via CDP. Close all Chrome first,
-   then start it with:
-   `chrome.exe --remote-debugging-port=9222 --user-data-dir="C:\chrome-krishna"`
-   (a dedicated user-data-dir avoids clobbering your main profile; the app will attach to port
-   9222). Verify it works by opening `http://localhost:9222/json` in any browser → should return
-   JSON of open tabs.
+1. **Launch Chrome with remote debugging + allow-origins** so the app can attach via CDP. Close
+   all Chrome first, then start it with (ALL THREE flags — the allow-origins one is required or
+   Chrome ≥111 rejects the WebView's WebSocket with a 403 Origin error):
+   `chrome.exe --remote-debugging-port=9222 --user-data-dir="C:\chrome-krishna" --remote-allow-origins=*`
+   (dedicated user-data-dir avoids clobbering your main profile + persists the LinkedIn login).
+   Verify: open `http://localhost:9222/json/version` → returns JSON incl. `webSocketDebuggerUrl`.
 2. **Log into LinkedIn** (and Naukri later) in THAT Chrome instance and stay logged in — J4 uses
    the already-logged-in session (no passwords stored in the app, by design).
 3. **Fill + verify the Application Profile** (Settings → Application Profile): name, email, phone,
