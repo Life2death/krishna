@@ -218,47 +218,55 @@ one. See `GMAIL_RECRUITER_RADAR_REVIEW_FINDINGS.md` for the full trail.
 
 ## 7. NEXT AGENT INSTRUCTION (paste this to resume) — updated 2026-07-06
 
-> Read `RESUME_HERE.md` in full first, then `AGENT_NEXT_TASKS.md`. `main` is green at `52d5dfa`.
-> VID-1 (+ SHA-gate) and **Natural Speech V1–V4 (the FULL plan) are now done and merged** —
-> variety engine, LLM-prompt variety + anti-repeat, teach/ban voice actions + Settings UI, and
-> vocabulary-refresh from the owner's own conversation history are all live. Do not re-open
-> `NATURAL_SPEECH_PLAN.md` as a task — it's finished; see §3 for the full commit list. Your
-> worktree (`krishna-m15`, branch `agent/next-off-main`) is reset to exactly `main`'s HEAD;
-> node_modules is healthy (verified: `tsc --noEmit` and `vitest run` both work, 692 tests green).
+> Read `RESUME_HERE.md` in full first, then `WINDOW_CONTROL_PLAN.md` (the full spec — read it
+> before writing any code, don't reconstruct it from this summary). `main` is green at `31ae54f`.
+> VID-1 and Natural Speech V1–V4 are done and merged — do not touch those. Your worktree
+> (`krishna-m15`) is on `agent/next-off-main`; **branch fresh off `main`**
+> (`git checkout -b feat/window-control main`) for this task, don't continue on
+> `agent/next-off-main` itself. node_modules is healthy (verified: `tsc --noEmit` + `vitest run`
+> both pass, 692 tests green) — actually run the checks, don't assume/claim corruption.
 >
-> **Task: pick the next item from §4**, in order: (1) Window control — `WINDOW_CONTROL_PLAN.md`;
-> (2) Naukri saved searches N1–N3 — `NAUKRI_SEARCH_PROFILES_PLAN.md` (N4 is blocked on an owner
-> decision, see queue item 3 in §4); (3) JC-1 fix (small, `JOB_AUTOPILOT_REVIEW_FINDINGS.md`); (4)
-> J3-A test (small). Confirm with the owner which to start if it's not obvious from context.
+> **Task: build Window Control** — voice-driven "move Chrome to the other monitor" / "bring File
+> Explorer to the front", Windows-only v1. Nothing exists yet: `computer_focus_window` in
+> `src-tauri/src/automation.rs:169` is still a stub that just returns an error, and the `windows`
+> crate is not yet a dependency (only the narrower `windows-registry` is). Build in 3 phases,
+> exactly per the plan:
 >
-> **Process, non-negotiable (these were violated at least once each in earlier rounds — the last
-> Natural Speech submission needed 4 real bug fixes in review before merge: a ban that silently
-> no-op'd, a spoken promise for a voice command that didn't exist, a weak validation check, and
-> zero tests for an entire phase):**
-> 1. Branch fresh off `main` — do NOT continue on an old branch.
-> 2. Import DB actions via the `@krishna/core/database` barrel (`import { x } from
->    "@krishna/core/database"`), NOT a deep path like `@krishna/core/database/whatever.action` —
->    the vite config only aliases specific deep paths and a bare deep import silently fails to
->    resolve in the real app even though it may typecheck in isolation.
-> 3. New tests go in `src/__tests__/` (root vitest scope). Anything under `apps/**` is EXCLUDED by
->    `vite.config.ts`'s test include list and will silently never run.
-> 4. Don't use a real `@libsql/client(":memory:")` in tests — its native binding hangs vitest's
->    worker threads. Use a hand-rolled in-memory fake driver matching the SQL your function
->    actually issues (see `src/__tests__/speech-v4-refresh.test.ts` for the pattern: one driver
->    that answers every real query — conversations/messages/voice_lines/banned_phrases — rather
->    than mocking the module surface with `vi.mock`/`importOriginal`, which proved unreliable
->    across multiple tests in one file when combined with `vi.resetModules()`).
-> 5. **Actually run `tsc --noEmit` and `vitest run` before reporting a phase done.** If you hit a
->    real, reproducible tool failure, paste the exact error in your report; do not report "done"
->    with unverified/unrun checks, and do not claim "node_modules corruption" without first
->    verifying `node -e "require('lightningcss')"` actually throws.
-> 6. **Every spoken reply must describe something that actually works.** If a response tells the
->    owner to say a phrase to trigger a capability, that capability must have a real parser entry,
->    action handler, and prompt instruction wired end-to-end — not just a plausible-sounding
->    sentence. Verify this by tracing the promised phrase through to an actual implementation
->    before considering the phase done.
-> 7. Every DB write path (ban/teach/insert) needs to actually persist what it claims to, even in
->    the common no-match/empty case — a confirmation message is not itself evidence of persistence.
-> 8. ONE phase per commit, STOP and report after each. If a phase adds a dependency, commit
->    `package.json` + `package-lock.json` together and confirm before anyone else installs/builds
->    (§6 node_modules rule).
+> - **Phase 1 — window enumeration + a pure, unit-testable matcher.** Add the `windows` crate to
+>   the existing `[target.'cfg(target_os = "windows")'.dependencies]` block in `src-tauri/Cargo.toml`
+>   (commit `Cargo.toml`+`Cargo.lock` together, confirm before anyone else builds — §6). Use
+>   `EnumWindows`+`IsWindowVisible`+`GetWindowTextW`+`GetWindowThreadProcessId`→
+>   `QueryFullProcessImageNameW` to list candidate windows (skip `WS_EX_TOOLWINDOW`), and
+>   `EnumDisplayMonitors`+`GetMonitorInfoW` to list monitors. Separately, write a **pure matching
+>   function with zero Win32 in it** — given a candidate-window list + a spoken query, rank by
+>   exact title > title substring > process-name alias (`file explorer`→explorer.exe,
+>   `chrome`/`browser`→chrome.exe, `edge`→msedge.exe); zero matches → return the top few window
+>   titles for a disambiguation reply. `cargo test` this matcher against a fixture list — this is
+>   the part that must be genuinely tested, not the thin Win32 harvest layer.
+> - **Phase 2 — Tauri commands, replacing the stub.** `window_focus(query)` (restore-if-minimized
+>   → the standard foreground-lock workaround, since `SetForegroundWindow` alone is throttled when
+>   a background process calls it — test this specifically, it's the common case: user talking to
+>   Krishna, wants another window raised) and `window_move(query, monitor, maximize?)`
+>   ("left"/"right"/"primary"/"next"; a **maximized** window must be `SW_RESTORE`d, moved, then
+>   `SW_MAXIMIZE`d again — moving a maximized window directly is a no-op/glitch). Also
+>   `window_list_summary()`. All gated on the existing `ensure_enabled`/Computer Control toggle,
+>   same as every other `computer_*` command. Replace the stub body, keep the command name
+>   (`computer_focus_window` is already registered in `lib.rs`).
+> - **Phase 3 — LLM tool + voice wiring.** One new tool `control_window` (`action: "focus"|"move"`,
+>   `target`, `monitor?`), wired the same way the existing `computer_*` tools are exposed in
+>   `src/lib/actions.ts`. `kind: "status"`, spoken confirmation on success, honest disambiguation
+>   reply ("I can see X, Y, Z — which one?") on zero/ambiguous match — **never guess**. NOT
+>   confirm-gated (reversible), but hard-refused when Computer Control is off. Unit tests: tool-arg
+>   → command-arg mapping, disambiguation path, disabled-toggle error surfaced as a spoken message
+>   — drive the real `executeAction` seam with a mocked `invoke`, not a reimplementation.
+>
+> **Process, non-negotiable (from the last 2 rounds of review — do not repeat these):**
+> 1. ONE phase per commit, `cargo test` (Phase 1) / `tsc --noEmit` + `vitest run` (Phases 2-3) all
+>    green, STOP and report after each — don't bundle phases.
+> 2. **Actually run the checks before reporting done.** Don't claim a tool/environment failure
+>    without first reproducing it (e.g. `node -e "require('lightningcss')"` to check node_modules).
+> 3. **Every spoken reply must describe something that actually works.** If `window_focus`/
+>    `window_move` claims success, the window must actually have moved/raised — trace it, don't
+>    assume the Win32 call succeeded just because it didn't throw.
+> 4. Windows-only v1 is correct — the existing stub's "not implemented on this platform" message
+>    stays for non-Windows; don't build a cross-platform abstraction nobody asked for.
