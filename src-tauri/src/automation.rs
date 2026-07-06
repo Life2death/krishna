@@ -213,9 +213,13 @@ pub fn window_move(
         match match_window(&windows, &query) {
             MatchResult::Single(info) => {
                 let monitors = win::list_monitors();
-                let resolution = parse_monitor(&monitor, &monitors)?;
+                let current_idx = win::window_monitor_index(info.hwnd, &monitors);
+                let resolution = parse_monitor(&monitor, &monitors, current_idx)?;
                 let target = &monitors[resolution.index as usize];
-                let was_max = maximize.unwrap_or(true) | win::is_window_maximized(info.hwnd);
+                // Default (maximize not specified): preserve whatever state the window is
+                // ACTUALLY in right now. An explicit true/false is a deliberate override.
+                let is_currently_maximized = win::is_window_maximized(info.hwnd);
+                let was_max = maximize.unwrap_or(is_currently_maximized);
                 win::move_hwnd(info.hwnd, target.rect, was_max)?;
                 win::focus_hwnd(info.hwnd)?;
                 let label = if resolution.is_primary { "primary" } else { &monitor };
@@ -380,7 +384,7 @@ fn build_alias_map() -> HashMap<&'static str, Vec<&'static str>> {
 
 // ── Monitor resolution helper ─────────────────────────────────────
 
-pub fn parse_monitor(monitor: &str, monitors: &[MonitorInfo]) -> Result<MonitorResolution, String> {
+pub fn parse_monitor(monitor: &str, monitors: &[MonitorInfo], current_index: Option<u32>) -> Result<MonitorResolution, String> {
     match monitor.to_lowercase().trim() {
         "primary" | "main" => {
             let idx = monitors.iter().position(|m| m.is_primary)
@@ -400,8 +404,14 @@ pub fn parse_monitor(monitor: &str, monitors: &[MonitorInfo]) -> Result<MonitorR
                 .ok_or_else(|| "No monitors found.".to_string())
         }
         "next" => {
-            // "next" = cycle: if focused window is on monitor N, move to N+1 (wrap)
-            Ok(MonitorResolution { index: 1, is_primary: false }) // caller overrides this
+            // Cycle relative to the window's ACTUAL current monitor (current_index), not a
+            // hardcoded slot — a single connected monitor has nothing to cycle to.
+            if monitors.len() < 2 {
+                return Err("Only one monitor is connected — nothing to move to.".to_string());
+            }
+            let cur = (current_index.unwrap_or(0) as usize) % monitors.len();
+            let next = (cur + 1) % monitors.len();
+            Ok(MonitorResolution { index: next as u32, is_primary: monitors[next].is_primary })
         }
         n => {
             // Try numeric index
@@ -429,7 +439,7 @@ pub mod windows_impl {
     use windows::Win32::System::Threading::{OpenProcess, PROCESS_QUERY_INFORMATION};
     use windows::Win32::UI::Input::KeyboardAndMouse::{keybd_event, KEYBD_EVENT_FLAGS, KEYEVENTF_KEYUP};
     use windows::Win32::UI::WindowsAndMessaging::{
-        EnumWindows, GetWindowLongW, GetWindowPlacement, GetWindowTextLengthW, GetWindowTextW,
+        EnumWindows, GetWindowLongW, GetWindowPlacement, GetWindowRect, GetWindowTextLengthW, GetWindowTextW,
         GetWindowThreadProcessId, GWL_EXSTYLE, IsWindowVisible, SetForegroundWindow, SetWindowPos,
         ShowWindow, SW_MAXIMIZE, SW_RESTORE, WS_EX_TOOLWINDOW, HWND_TOP, SET_WINDOW_POS_FLAGS,
         WINDOWPLACEMENT,
@@ -572,6 +582,23 @@ pub mod windows_impl {
         }
         placement.showCmd == SW_MAXIMIZE.0 as u32
     }
+
+    // Which monitor (by index into `monitors`) the window's center point currently sits on —
+    // needed for "next" to actually cycle relative to where the window is, not a hardcoded slot.
+    pub fn window_monitor_index(hwnd: isize, monitors: &[MonitorInfo]) -> Option<u32> {
+        let target = HWND(hwnd as *mut _);
+        let mut rect: RECT = unsafe { std::mem::zeroed() };
+        let ok = unsafe { GetWindowRect(target, &mut rect) };
+        if ok.is_err() {
+            return None;
+        }
+        let cx = (rect.left + rect.right) / 2;
+        let cy = (rect.top + rect.bottom) / 2;
+        monitors
+            .iter()
+            .position(|m| cx >= m.rect.0 && cx < m.rect.2 && cy >= m.rect.1 && cy < m.rect.3)
+            .map(|i| i as u32)
+    }
 }
 
 // Stub for non-Windows: no-op compile-time safe stand-ins
@@ -584,6 +611,7 @@ pub mod windows_impl {
     pub fn move_hwnd(_hwnd: isize, _rect: (i32,i32,i32,i32), _max: bool) -> Result<(), String> { Ok(()) }
     pub fn is_window_maximized(_hwnd: isize) -> bool { false }
     pub fn get_window_text(_hwnd: isize) -> String { String::new() }
+    pub fn window_monitor_index(_hwnd: isize, _monitors: &[MonitorInfo]) -> Option<u32> { None }
 }
 
 // ── Tests ─────────────────────────────────────────────────────────
@@ -735,5 +763,58 @@ mod tests {
             MatchResult::Single(win) => assert!(win.title.contains("Edge")),
             _ => panic!("Expected Edge match"),
         }
+    }
+
+    fn two_monitors() -> Vec<MonitorInfo> {
+        vec![
+            MonitorInfo { is_primary: true, rect: (0, 0, 1920, 1080) },
+            MonitorInfo { is_primary: false, rect: (1920, 0, 3840, 1080) },
+        ]
+    }
+
+    #[test]
+    fn parse_monitor_primary() {
+        let monitors = two_monitors();
+        let r = parse_monitor("primary", &monitors, None).unwrap();
+        assert_eq!(r.index, 0);
+        assert!(r.is_primary);
+    }
+
+    #[test]
+    fn parse_monitor_numeric() {
+        let monitors = two_monitors();
+        let r = parse_monitor("2", &monitors, None).unwrap();
+        assert_eq!(r.index, 1);
+    }
+
+    #[test]
+    fn parse_monitor_numeric_out_of_range_errs() {
+        let monitors = two_monitors();
+        assert!(parse_monitor("5", &monitors, None).is_err());
+    }
+
+    #[test]
+    fn parse_monitor_next_cycles_from_current() {
+        let monitors = two_monitors();
+        // Window is currently on monitor 0 -> next should be monitor 1
+        let r = parse_monitor("next", &monitors, Some(0)).unwrap();
+        assert_eq!(r.index, 1);
+        // Window is currently on monitor 1 -> next should wrap to monitor 0
+        let r = parse_monitor("next", &monitors, Some(1)).unwrap();
+        assert_eq!(r.index, 0);
+    }
+
+    #[test]
+    fn parse_monitor_next_defaults_to_monitor_0_when_current_unknown() {
+        let monitors = two_monitors();
+        let r = parse_monitor("next", &monitors, None).unwrap();
+        assert_eq!(r.index, 1);
+    }
+
+    #[test]
+    fn parse_monitor_next_errs_on_single_monitor() {
+        let monitors = vec![MonitorInfo { is_primary: true, rect: (0, 0, 1920, 1080) }];
+        let result = parse_monitor("next", &monitors, Some(0));
+        assert!(result.is_err());
     }
 }
