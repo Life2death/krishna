@@ -29,6 +29,7 @@ import { createConversation, appendMessages, generateConversationTitle, getMostR
 import { isLookCommand, isUndoCommand, isJobExtractionCommand, isJobStatusCommand } from "@/lib/perception";
 import { triggerJobExtractionWorkflow, getJobExtractionStatus } from "@/lib/integrations/github-workflow";
 import { createAuditEntry, getLastReversible, logCommand, insertPendingCommand, updateCommandOutcome, updateCommandTiming, logSpeech } from "@/lib/database";
+import { pickLine } from "@/lib/voice-lines";
 import type { CommandOutcome, FailureReason, SpeechSource } from "@/lib/database";
 import { setConfirmAction, setVerbatimConfirm } from "@krishna/core/tools/mcp-bridge";
 import type { AssistantStatus, StepAction } from "@/types/assistant";
@@ -769,9 +770,10 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
         };
         reAskRef.current = false;
         clearConfirmTimeout();
-        confirmTimeoutRef.current = setTimeout(() => {
+        confirmTimeoutRef.current = setTimeout(async () => {
           if (pendingConfirmationRef.current?.type === "mcp_tool") {
-            void handleConfirmDecline(pendingConfirmationRef.current, "I'll take that as a no.", "MCP tool confirmation timed out (15s)");
+            const declineMsg = await pickLine("decline_ack", "en", getResponseSettings().honorific || "sir");
+            void handleConfirmDecline(pendingConfirmationRef.current, declineMsg, "MCP tool confirmation timed out (15s)");
           }
         }, 15000);
         setKrishnaSpeaking(true);
@@ -791,9 +793,10 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
         };
         reAskRef.current = false;
         clearConfirmTimeout();
-        confirmTimeoutRef.current = setTimeout(() => {
+        confirmTimeoutRef.current = setTimeout(async () => {
           if (pendingConfirmationRef.current?.type === "mcp_tool") {
-            void handleConfirmDecline(pendingConfirmationRef.current, "I'll take that as a no.", "Gmail confirmation timed out (15s)");
+            const declineMsg = await pickLine("decline_ack", "en", getResponseSettings().honorific || "sir");
+            void handleConfirmDecline(pendingConfirmationRef.current, declineMsg, "Gmail confirmation timed out (15s)");
           }
         }, 15000);
         setKrishnaSpeaking(true);
@@ -1161,7 +1164,8 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
               setStatus("speaking");
               setKrishnaSpeaking(true);
               try {
-                await speakLogged("I had trouble: " + msg, "error", pending.captureId);
+                const errPrefix = (await pickLine("error_generic", "en", getResponseSettings().honorific || "sir")).replace(/\.+$/, "");
+                await speakLogged(errPrefix + ": " + msg, "error", pending.captureId);
               } finally {
                 setKrishnaSpeaking(false);
               }
@@ -1216,7 +1220,8 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
               setStatus("speaking");
               setKrishnaSpeaking(true);
               try {
-                await speakLogged("I had trouble: " + msg, "error", pending.captureId);
+                const errPrefix = (await pickLine("error_generic", "en", getResponseSettings().honorific || "sir")).replace(/\.+$/, "");
+                await speakLogged(errPrefix + ": " + msg, "error", pending.captureId);
               } finally {
                 setKrishnaSpeaking(false);
               }
@@ -1266,7 +1271,8 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
               setStatus("speaking");
               setKrishnaSpeaking(true);
               try {
-                await speakLogged("I had trouble: " + msg, "error", pending.captureId);
+                const errPrefix = (await pickLine("error_generic", "en", getResponseSettings().honorific || "sir")).replace(/\.+$/, "");
+                await speakLogged(errPrefix + ": " + msg, "error", pending.captureId);
               } finally {
                 setKrishnaSpeaking(false);
               }
@@ -1315,7 +1321,8 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
               setStatus("speaking");
               setKrishnaSpeaking(true);
               try {
-                await speakLogged("I had trouble: " + msg, "error", pending.captureId);
+                const errPrefix = (await pickLine("error_generic", "en", getResponseSettings().honorific || "sir")).replace(/\.+$/, "");
+                await speakLogged(errPrefix + ": " + msg, "error", pending.captureId);
               } finally {
                 setKrishnaSpeaking(false);
               }
@@ -1427,7 +1434,7 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
 
       // Phase 2: zero-LLM fast path for greetings/thanks/acknowledgments
       const cannedHonorific = getResponseSettings().honorific || "sir";
-      const canned = matchCannedResponse(command, cannedHonorific);
+      const canned = await matchCannedResponse(command, cannedHonorific);
       if (canned) {
         const speak = canned.response;
         await recordTurn(pendingUserTextRef.current, speak);
@@ -1695,7 +1702,8 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
           setStatus("speaking");
           setKrishnaSpeaking(true);
           try {
-            await speakLogged("I had trouble looking at your screen: " + msg, "error");
+            const screenErrPrefix = (await pickLine("error_generic", "en", getResponseSettings().honorific || "sir")).replace(/\.+$/, "");
+            await speakLogged(screenErrPrefix + " looking at your screen: " + msg, "error");
           } finally {
             setKrishnaSpeaking(false);
           }
@@ -1714,7 +1722,7 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
               setStatus("speaking");
               setKrishnaSpeaking(true);
               try {
-                await speakLogged("There's nothing to undo.", "answer");
+                await speakLogged(await pickLine("decline_ack", "en", getResponseSettings().honorific || "sir"), "answer");
               } finally {
                 setKrishnaSpeaking(false);
               }
@@ -1743,7 +1751,8 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
             setStatus("speaking");
             setKrishnaSpeaking(true);
             try {
-              await speakLogged("I had trouble undoing that.", "error");
+              const undoErrPrefix = (await pickLine("error_generic", "en", getResponseSettings().honorific || "sir")).replace(/\.+$/, "");
+              await speakLogged(undoErrPrefix + " undoing that.", "error");
             } finally {
               setKrishnaSpeaking(false);
             }
@@ -1785,7 +1794,7 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
         fillerTimerRef.current = setTimeout(() => {
           if (!fillerSpokenRef.current) {
             fillerSpokenRef.current = true;
-            fillerPromiseRef.current = speakLogged("One moment, " + honorific, "filler").then(() => {
+            fillerPromiseRef.current = pickLine("filler_wait", "en", honorific).then(line => speakLogged(line, "filler")).then(() => {
               fillerPromiseRef.current = null;
             }).catch(() => {
               fillerPromiseRef.current = null;

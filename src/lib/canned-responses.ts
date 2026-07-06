@@ -1,9 +1,6 @@
-type CannedIntent = "greeting" | "thanks" | "acknowledgment";
+import { pickLine } from "@/lib/voice-lines";
 
-interface CannedEntry {
-  patterns: RegExp[];
-  responses: Record<string, string[]>;
-}
+type CannedIntent = "greeting" | "thanks" | "acknowledgment";
 
 const LANG_DETECT = [
   { lang: "mr", test: /(?:^|\s)(कसं|आहे|नाहीत|होय|नमस्कार)/ui },
@@ -29,10 +26,6 @@ function wordCount(s: string): number {
   return cleaned.split(/\s+/).length;
 }
 
-/**
- * Return true only if the ENTIRE utterance (trimmed, ≤4 words) is
- * the greeting/thanks/ack. Prevents substring hijack of real commands.
- */
 function isShortUtterance(text: string): boolean {
   const wc = wordCount(text);
   return wc >= 1 && wc <= 4;
@@ -56,7 +49,6 @@ const GREETING_EN = new RegExp(
 );
 
 const GREETING_HI = /^(?:नमस्ते|नमस्कार|सुप्रभात|शुभ\s*प्रभात)\s*$/u;
-const GREETING_MR = /^(?:नमस्कार|सुप्रभात)\s*$/u;
 
 const THANKS_EN = /^(?:thank\s*(?:you|s)|thanks)\s*$/i;
 const THANKS_HI = /^धन्यवाद\s*$/u;
@@ -65,105 +57,50 @@ const ACK_EN = /^(?:yes|yeah|yep|sure|okay|ok|alright|got\s*it|on\s*it)\s*$/i;
 const ACK_HI = /^(?:हाँ|हां|ठीक\s*है|अच्छा)\s*$/u;
 const ACK_MR = /^(?:होय|ठीक\s*आहे)\s*$/u;
 
-function matchGreeting(text: string, lang: string): string | null {
+async function matchGreeting(text: string, lang: string): Promise<string | null> {
   if (!isShortUtterance(text)) return null;
   const cleaned = stripPunctuation(text);
   if (GREETING_EN.test(cleaned)) {
-    const pool: Record<string, string[]> = {
-      en: [
-        "Good morning, {honorific}!",
-        "Hello {honorific}, how can I help?",
-        "Hey {honorific}, what can I do for you?",
-        "Good to see you, {honorific}!",
-      ],
-      hi: [
-        "नमस्ते {honorific}! कैसे हैं आप?",
-        "नमस्कार {honorific}!",
-        "सुप्रभात {honorific}!",
-        "हैलो {honorific}! क्या कर सकता हूँ आपके लिए?",
-      ],
-      mr: [
-        "नमस्कार {honorific}! कसं आहात?",
-        "नमस्ते {honorific}!",
-        "सुप्रभात {honorific}!",
-      ],
-    };
-    const p = pool[lang] ?? pool["en"];
-    return p[Math.floor(Math.random() * p.length)];
+    return await pickLine("greeting", lang, "{honorific}");
   }
   if (GREETING_HI.test(cleaned)) {
-    const p: Record<string, string[]> = {
-      hi: [
-        "नमस्ते {honorific}! कैसे हैं आप?",
-        "नमस्कार {honorific}!",
-        "सुप्रभात {honorific}!",
-      ],
-    };
-    return (p[lang] ?? p["hi"])[Math.floor(Math.random() * p[lang in p ? lang : "hi"].length)];
+    return await pickLine("greeting", "hi", "{honorific}");
   }
   return null;
 }
 
-function matchThanks(text: string, lang: string): string | null {
+async function matchThanks(text: string, lang: string): Promise<string | null> {
   if (!isShortUtterance(text)) return null;
   const cleaned = stripPunctuation(text);
-  if (!THANKS_EN.test(cleaned) && !THANKS_HI.test(cleaned)) return null;
-  const pool: Record<string, string[]> = {
-    en: [
-      "You're welcome, {honorific}!",
-      "My pleasure, {honorific}!",
-      "Anytime, {honorific}!",
-      "Happy to help, {honorific}!",
-    ],
-    hi: [
-      "आपका स्वागत है {honorific}!",
-      "मेरी खुशी है {honorific}!",
-    ],
-    mr: [
-      "तुमचं स्वागत आहे {honorific}!",
-    ],
-  };
-  const p = pool[lang] ?? pool["en"];
-  return p[Math.floor(Math.random() * p.length)];
+  if (THANKS_EN.test(cleaned) || THANKS_HI.test(cleaned)) {
+    return await pickLine("thanks_reply", lang, "{honorific}");
+  }
+  return null;
 }
 
-function matchAcknowledgment(text: string, lang: string): string | null {
+async function matchAcknowledgment(text: string, lang: string): Promise<string | null> {
   if (!isShortUtterance(text)) return null;
   const cleaned = stripPunctuation(text);
   const matched = ACK_EN.test(cleaned) || ACK_HI.test(cleaned) || ACK_MR.test(cleaned);
   if (!matched) return null;
-  const pool: Record<string, string[]> = {
-    en: [
-      "Yes, {honorific}?",
-      "I'm listening, {honorific}.",
-    ],
-    hi: [
-      "हाँ {honorific}?",
-      "सुन रहा हूँ {honorific}।",
-    ],
-    mr: [
-      "होय {honorific}?",
-    ],
-  };
-  const p = pool[lang] ?? pool["en"];
-  return p[Math.floor(Math.random() * p.length)];
+  return await pickLine("wake_ack", lang, "{honorific}");
 }
 
-export function matchCannedResponse(
+export async function matchCannedResponse(
   text: string,
   honorific: string,
-): { response: string; intent: CannedIntent } | null {
+): Promise<{ response: string; intent: CannedIntent } | null> {
   const lang = detectLanguage(text);
   let reply: string | null;
   let intent: CannedIntent;
 
-  reply = matchGreeting(text, lang);
+  reply = await matchGreeting(text, lang);
   if (reply) { intent = "greeting"; }
   else {
-    reply = matchThanks(text, lang);
+    reply = await matchThanks(text, lang);
     if (reply) { intent = "thanks"; }
     else {
-      reply = matchAcknowledgment(text, lang);
+      reply = await matchAcknowledgment(text, lang);
       if (reply) { intent = "acknowledgment"; }
       else return null;
     }
