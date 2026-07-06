@@ -208,12 +208,51 @@ one. See `GMAIL_RECRUITER_RADAR_REVIEW_FINDINGS.md` for the full trail.
 
 ---
 
-## 7. NEXT AGENT INSTRUCTION (paste this to resume)
+## 7. NEXT AGENT INSTRUCTION (paste this to resume) — updated 2026-07-06
 
-> Read `RESUME_HERE.md` in full first. `main` is green and the full job-autopilot + travel-insights
-> + recruiter-radar tracks are complete. Pick the next item from §4 (recommended: J3-A test, then
-> JC-1, then whichever of settings-reorg/natural-speech/network the owner prefers). Branch fresh off
-> `main`. ONE phase per commit, `tsc --noEmit` clean + full `vitest run` green, **actually run `git
-> commit`**, STOP and report. If your phase adds a new npm/cargo dependency, commit the lockfile
-> together with it and do NOT run `npm install`/`cargo build` while the reviewer might be building
-> from `main` at the same time — confirm with the owner first (see §6 node_modules rule).
+> Read `RESUME_HERE.md` in full first, then `AGENT_NEXT_TASKS.md`. `main` is green at `581afca`.
+> VID-1 (+ its SHA-gate follow-up) and Natural Speech **V1** (the variety engine) are done and
+> merged. Stale branches from the completed job-autopilot/gmail/travel/recruiter-radar/old-phase
+> work have been deleted — `git branch -vv` now only shows active tracks. Your worktree
+> (`krishna-m15`, branch `agent/next-off-main`) is reset to exactly `main`'s HEAD; node_modules
+> there is healthy (verified: `tsc --noEmit` and `vitest run` both work).
+>
+> **Task: build Natural Speech V2, then V3, then V4** — `NATURAL_SPEECH_PLAN.md` phase map at the
+> bottom of that file. Read the ALREADY-MERGED V1 code first as your foundation, not the plan's V1
+> section as if unbuilt: `src/lib/voice-lines.ts` (picker), `packages/core/database/voice-lines.action.ts`
+> (DB layer, exported via the `@krishna/core/database` barrel — see below), `src/lib/canned-responses.ts`,
+> and the 9 `pickLine(...)` call sites in `src/contexts/krishna.context.tsx`.
+>
+> - **V2** (do first — cheap, prompt-only, zero runtime cost): give the ACKNOWLEDGE-THEN-ACT rule
+>   and `seed-personas.ts` 4-5 stylistically different example acks instead of one, add the
+>   "these are style examples, not scripts — never reuse your previous acknowledgment's wording"
+>   line, and inject the last 3 spoken acks from `speech_log` into context so the model has a
+>   concrete anti-repeat signal. This is the part of the LLM's OWN acks that still repeats — V1
+>   only fixed the fixed/canned lines, not free-form LLM phrasing.
+> - **V3** (the owner's "learn from me" ask, part 1): "stop saying X" / "sometimes say Y" by voice
+>   → `speech_ban` / `speech_teach` actions. The DB already supports this — `disableLine(id)` and
+>   `insertLine({..., source: "owner"})` exist in `voice-lines.action.ts`; this phase is the voice
+>   intent + a Settings "Voice & phrases" list view, not new DB plumbing.
+> - **V4** (the owner's "learn from me" ask, part 2): "refresh your vocabulary" — one LLM call
+>   mining the owner's own conversation history into proposed new lines (`enabled:false` until
+>   approved). See the plan for the exact proposal/approve flow.
+>
+> **Process, non-negotiable (fix the mistakes from last round):**
+> 1. Branch fresh off `main` (`git checkout -b feat/natural-speech-v2 main` in `krishna-m15`) — do
+>    NOT continue on an old branch.
+> 2. Import DB actions via the `@krishna/core/database` barrel (`import { x } from
+>    "@krishna/core/database"`), NOT a deep path like `@krishna/core/database/whatever.action` —
+>    the vite config only aliases specific deep paths and a bare deep import silently fails to
+>    resolve in the real app even though it may typecheck in isolation.
+> 3. New tests go in `src/__tests__/` (root vitest scope). Anything under `apps/**` is EXCLUDED by
+>    `vite.config.ts`'s test include list and will silently never run.
+> 4. Don't use a real `@libsql/client(":memory:")` in tests — its native binding hangs vitest's
+>    worker threads. Use a hand-rolled in-memory fake driver (see
+>    `src/__tests__/support/voice-lines-fake-driver.ts`, already built for exactly this and
+>    reusable/extendable for new tables).
+> 5. **Actually run `tsc --noEmit` and `vitest run` before reporting a phase done — node_modules is
+>    healthy in every worktree right now.** If you hit a real, reproducible tool failure, paste the
+>    exact error in your report; do not report "done" with unverified/unrun checks.
+> 6. ONE phase per commit, STOP and report after each. If a phase adds a dependency, commit
+>    `package.json` + `package-lock.json` together and confirm before anyone else installs/builds
+>    (§6 node_modules rule).
