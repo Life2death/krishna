@@ -39,7 +39,7 @@ import type { VoiceVerifyResult } from "@/lib/voice-client";
 import { MAX_FILES } from "@/config";
 import { TurnTiming } from "@/lib/turn-timing";
 import { getResponseSettings } from "@krishna/core/settings";
-import { getRecentSpeech } from "@krishna/core/database";
+import { getRecentSpeech, getDisabledLines } from "@krishna/core/database";
 import { matchCannedResponse } from "@/lib/canned-responses";
 
 export interface ConversationTurn {
@@ -203,6 +203,19 @@ export const BASE_SYSTEM_PROMPT = [
   '- gmail_send requires explicit user confirmation before sending (recipient + subject are spoken back).',
   '- Read tools (search, read, list labels) are safe and execute without confirmation.',
   '- Results are spoken concisely: search shows count + newest subject, read shows sender/subject/gist.',
+  '',
+  'TEACH & BAN PHRASES:',
+  '- You can learn new phrases from the user or stop using existing ones.',
+  '- "stop saying \'one minute sir\'" / "don\'t say that phrase" →',
+  '```action',
+  '{"action":"speech_ban","phrase":"one minute sir"}',
+  '```',
+  '- "sometimes say \'ek minute boss\'" / "add \'sure thing\' to your vocabulary" →',
+  '```action',
+  '{"action":"speech_teach","phrase":"Ek minute, boss.","category":"filler_wait"}',
+  '```',
+  '- `category` is optional — if you\'re uncertain which category it belongs to, omit it and the handler will ask.',
+  '- Available categories: filler_wait, ack_quick, ack_multistep, confirm_yes_ack, decline_ack, reask, error_generic, error_network, reminder_intro, greeting, thanks_reply, wake_ack.',
   '',
   'JOB QUEUE:',
   '- "how is my job queue?" / "any new jobs?" / "check my pipeline" →',
@@ -1805,7 +1818,14 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
         const ackRepeatNote = lastAcks
           ? `\n\nYour last acknowledgments were: ${lastAcks} — phrase this one differently.`
           : "";
-        const volatilePrompt = timeContext + memoryBlock + ackRepeatNote;
+        const disabledPhrases = await getDisabledLines().catch(() => []);
+        const bannedPhraseList = disabledPhrases
+          .map(l => `"${l.text}"`)
+          .join(", ");
+        const bannedNote = bannedPhraseList
+          ? `\n\nBanned phrases the user has asked you to avoid: ${bannedPhraseList}. Do not use these exact phrases.`
+          : "";
+        const volatilePrompt = timeContext + memoryBlock + ackRepeatNote + bannedNote;
         let fullResponse = "";
         fillerSpokenRef.current = false;
         turnTiming.mark("request_sent");

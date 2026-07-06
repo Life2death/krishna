@@ -12,7 +12,7 @@ import { getResponseSettings } from "@krishna/core/settings";
 import { runRecruiterRadar, formatRecruiterOutput, COLD_START_DAYS } from "@krishna/core/tools/recruiter-radar";
 import type { Candidate, Classification } from "@krishna/core/tools/recruiter-radar";
 import { getLastCheckAt } from "@krishna/core/tools/recruiter-radar-state";
-import { createRouteWatch, getActiveRouteWatch, cancelRouteWatch } from "@krishna/core/database";
+import { createRouteWatch, getActiveRouteWatch, cancelRouteWatch, disableLine, getLinesByText, insertLine, getAllLines, getAllLinesByCategory } from "@krishna/core/database";
 import { resolvePlace } from "@krishna/core/tools/place-resolver";
 
 const ACTION_REGEX = /```action\n([\s\S]*?)```/g;
@@ -104,6 +104,12 @@ export function parseActions(reply: string): ParsedReply {
         }
         if (parsed && parsed.action === "route_watch_cancel") {
           actions.push({ action: "route_watch_cancel" });
+        }
+        if (parsed && parsed.action === "speech_ban" && parsed.phrase) {
+          actions.push({ action: "speech_ban", phrase: parsed.phrase });
+        }
+        if (parsed && parsed.action === "speech_teach" && parsed.phrase) {
+          actions.push({ action: "speech_teach", phrase: parsed.phrase, category: parsed.category });
         }
       } catch {
         // Not valid JSON, ignore
@@ -594,6 +600,47 @@ export async function executeAction(
     }
 
     return { kind: "status", ok: false, spokenResponse: "I couldn't find an app named \"" + rawTarget + "\"" };
+  }
+
+  if (action.action === "speech_ban") {
+    const lines = await getLinesByText(action.phrase);
+    if (lines.length === 0) {
+      return { kind: "status", spokenResponse: `No existing phrases match "${action.phrase}", but I'll keep it in mind to avoid saying it.` };
+    }
+    for (const line of lines) {
+      await disableLine(line.id);
+    }
+    return { kind: "status", spokenResponse: `I've stopped saying ${lines.length} phrase${lines.length > 1 ? "s" : ""} like "${action.phrase}".` };
+  }
+
+  if (action.action === "speech_teach") {
+    let cat: string | null = action.category || null;
+    if (cat) {
+      const known = ["filler_wait","ack_quick","ack_multistep","confirm_yes_ack","decline_ack","reask","error_generic","error_network","reminder_intro","greeting","thanks_reply","wake_ack"];
+      if (!known.includes(cat)) cat = null;
+    }
+    if (!cat) {
+      return { kind: "answer", spokenResponse: `What category should "${action.phrase}" go under? Options are: filler, acknowledgment, greeting, thanks, error, reminder, decline, confirmation, reask, or wake.`, needsConfirmation: false };
+    }
+    const existing = await getAllLinesByCategory(cat as any);
+    const dup = existing.find(l => l.text.toLowerCase() === action.phrase.toLowerCase());
+    if (dup) {
+      return { kind: "status", spokenResponse: `I already have "${action.phrase}" in my vocabulary.` };
+    }
+    await insertLine({
+      id: crypto.randomUUID(),
+      category: cat as any,
+      lang: "en",
+      text: action.phrase,
+      source: "owner",
+      enabled: 1,
+      weight: 1.5,
+      lastUsedAt: null,
+      useCount: 0,
+      createdAt: Date.now(),
+      tod: null,
+    });
+    return { kind: "status", spokenResponse: `I've added "${action.phrase}" to my vocabulary — I'll use it often.` };
   }
 
   return { spokenResponse: "Unknown action" };

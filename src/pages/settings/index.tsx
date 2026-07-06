@@ -14,6 +14,7 @@ import {
   GmailSettings,
   ApplicationProfileSettings,
   JobHunterSettings,
+  VoicePhrasesSettings,
 } from "./components";
 import {
   ResponseLength,
@@ -118,6 +119,9 @@ const Settings = () => {
 
       {/* Brain Connection */}
       <BrainConnection />
+
+      {/* Voice & Phrases */}
+      <VoicePhrasesSettings />
 
       {/* Voice ID */}
       <VoiceIdSettings />

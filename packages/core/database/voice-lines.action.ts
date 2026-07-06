@@ -106,6 +106,34 @@ export async function disableLine(id: string): Promise<void> {
   await db.execute(`UPDATE voice_lines SET enabled = 0 WHERE id = ?`, [id]);
 }
 
+export async function getDisabledLines(): Promise<VoiceLineRow[]> {
+  await ensureVoiceLinesTable();
+  const db = getDatabase();
+  const rows = await db.select<DbVoiceLine[]>(
+    `SELECT * FROM voice_lines WHERE enabled = 0 ORDER BY created_at DESC`
+  );
+  return rows.map(toRow);
+}
+
+export async function getLinesByText(substring: string): Promise<VoiceLineRow[]> {
+  await ensureVoiceLinesTable();
+  const db = getDatabase();
+  const rows = await db.select<DbVoiceLine[]>(
+    `SELECT * FROM voice_lines WHERE text LIKE ? ORDER BY category, lang`,
+    [`%${substring}%`]
+  );
+  return rows.map(toRow);
+}
+
+export async function getAllLines(): Promise<VoiceLineRow[]> {
+  await ensureVoiceLinesTable();
+  const db = getDatabase();
+  const rows = await db.select<DbVoiceLine[]>(
+    `SELECT * FROM voice_lines ORDER BY category, lang, weight DESC`
+  );
+  return rows.map(toRow);
+}
+
 export async function getRecentUsedIds(category: VoiceCategory, limit: number): Promise<string[]> {
   const db = getDatabase();
   const rows = await db.select<{ id: string }[]>(

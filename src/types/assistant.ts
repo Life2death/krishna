@@ -20,7 +20,9 @@ export type Action =
   | { action: "route_watch"; from?: string; to?: string; mode?: string; threshold_minutes?: number; interval_minutes?: number; window_hours?: number }
   | { action: "route_watch_cancel" }
   | { action: "job_apply" }
-  | { action: "job_apply_submit"; url: string; jobId: string; title: string; company: string };
+  | { action: "job_apply_submit"; url: string; jobId: string; title: string; company: string }
+  | { action: "speech_ban"; phrase: string }
+  | { action: "speech_teach"; phrase: string; category?: string };
 
 export interface StepAction {
   tool: string;
