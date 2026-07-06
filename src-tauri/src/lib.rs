@@ -204,6 +204,10 @@ pub fn run() {
             automation::computer_move,
             #[cfg(desktop)]
             automation::computer_focus_window,
+            #[cfg(desktop)]
+            automation::window_move,
+            #[cfg(desktop)]
+            automation::window_list_summary,
         ])
         .setup(|app| {
             // Phase 0: brain spawning is removed. The app runs fully in local

@@ -197,6 +197,74 @@ pub fn computer_focus_window(
     }
 }
 
+#[tauri::command]
+pub fn window_move(
+    state: tauri::State<'_, ComputerControlState>,
+    query: String,
+    monitor: String,
+    maximize: Option<bool>,
+) -> Result<String, String> {
+    ensure_enabled(&state)?;
+    #[cfg(target_os = "windows")]
+    {
+        use windows_impl as win;
+
+        let windows = win::list_windows();
+        match match_window(&windows, &query) {
+            MatchResult::Single(info) => {
+                let monitors = win::list_monitors();
+                let resolution = parse_monitor(&monitor, &monitors)?;
+                let target = &monitors[resolution.index as usize];
+                let was_max = maximize.unwrap_or(true) | win::is_window_maximized(info.hwnd);
+                win::move_hwnd(info.hwnd, target.rect, was_max)?;
+                win::focus_hwnd(info.hwnd)?;
+                let label = if resolution.is_primary { "primary" } else { &monitor };
+                Ok(format!("Moved \"{}\" to the {} monitor.", info.title, label))
+            }
+            MatchResult::Ambiguous(candidates) => {
+                if candidates.is_empty() {
+                    Err(format!("I don't see any window matching \"{}\".", query))
+                } else {
+                    Err(format!("I can see {} — which one?", candidates.join(", ")))
+                }
+            }
+        }
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = (query, monitor, maximize);
+        Err("window_move is not yet implemented on this platform.".into())
+    }
+}
+
+#[tauri::command]
+pub fn window_list_summary(
+    state: tauri::State<'_, ComputerControlState>,
+    n: Option<usize>,
+) -> Result<String, String> {
+    ensure_enabled(&state)?;
+    #[cfg(target_os = "windows")]
+    {
+        let windows = windows_impl::list_windows();
+        let count = n.unwrap_or(10);
+        let titles: Vec<String> = windows
+            .iter()
+            .take(count)
+            .map(|w| format!("\"{}\"", w.title))
+            .collect();
+        if titles.is_empty() {
+            Ok("No visible windows found.".into())
+        } else {
+            Ok(format!("{} windows visible. Top: {}", windows.len(), titles.join(", ")))
+        }
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = n;
+        Err("window_list_summary is not yet implemented on this platform.".into())
+    }
+}
+
 // ── Window control types ──────────────────────────────────────────
 
 #[derive(Debug, Clone)]
