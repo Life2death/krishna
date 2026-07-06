@@ -45,12 +45,13 @@ async function getModel(onProgress?: ProgressCallback): Promise<ModelSingleton> 
     try {
       const { AutoProcessor, AutoModel, env } = await import("@xenova/transformers");
 
-      // Fetch the model from the Hugging Face CDN, not a local /models path.
-      // transformers.js defaults to allowLocalModels=true → it first requests
-      // /models/Xenova/wavlm-base-plus-sv/... which the Vite/Tauri dev server
-      // answers with index.html (SPA fallback), producing
-      // "Unexpected token '<', "<!DOCTYPE"..." when parsed as JSON.
-      env.allowLocalModels = false;
+      // Local model path: scripts/fetch-voiceid-model.ts downloads files into
+      // public/models/. transformers.js default localModelPath=/models/ resolves
+      // to the right place. allowRemoteModels=true is the fallback for dev setups
+      // that haven't run the fetch script. useBrowserCache is harmless and helps
+      // the remote-fallback path. See VOICE_ID_MODEL_BUNDLE_PLAN.md.
+      env.allowLocalModels = true;
+      env.allowRemoteModels = true;
       env.useBrowserCache = true;
 
       // Tauri's WebView (production especially) does NOT expose SharedArrayBuffer, so ONNX

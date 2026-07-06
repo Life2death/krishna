@@ -36,6 +36,9 @@ jobs:
       - name: Install frontend deps
         run: npm ci
 
+      - name: Fetch voice-ID model
+        run: npm run fetch:voiceid
+
       # ── Rust ─────────────────────────────────────────────────────────────────
       - name: Setup Rust stable
         uses: dtolnay/rust-toolchain@stable

@@ -39,6 +39,9 @@ src-tauri/gen/android/buildSrc/.kotlin/
 src-tauri/gen/android/app/src/main/assets/
 src-tauri/gen/android/keystore.properties
 
+# Voice-ID model files (downloaded by fetch-voiceid-model.ts at build time)
+public/models/
+
 # Brain bundled runtime outputs (produced by bundle-brain.ts / fetch-node.ts at build time)
 src-tauri/resources/brain/brain.js
 src-tauri/resources/brain/node_modules/

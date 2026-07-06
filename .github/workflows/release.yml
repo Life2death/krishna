@@ -41,6 +41,9 @@ jobs:
       - name: Frontend tests
         run: npm test
 
+      - name: Fetch voice-ID model
+        run: npm run fetch:voiceid
+
       # Windows code-signing: import .pfx certificate into the store when available.
       # Requires WINDOWS_CERTIFICATE and WINDOWS_CERTIFICATE_PASSWORD secrets.
       # See CODE_SIGNING_PLAN.md for setup instructions.
