@@ -100,11 +100,26 @@ actions, `3b85777`), item 10-H1 (job-hunter bearer-token auth, deployed + live-v
 2. **JC-1** (medium, `JOB_AUTOPILOT_REVIEW_FINDINGS.md`) — the "applied" status POST in
    `job_apply_submit` fires unconditionally; should gate on `verification.success` so an ambiguous
    submit doesn't falsely remove the job from the not-applied queue.
-3. **J4b-Naukri** — repeat the J4-a/b/c pattern for Naukri once LinkedIn has been live-used for a
-   while (plan explicitly sequences this after LinkedIn proves out).
-4. **Settings menu reorg** — spec approved (`SETTINGS_REORG_PLAN.md`), P1–P3 ready to code.
-5. **Item 11 · Natural speech V1** — `NATURAL_SPEECH_PLAN.md`, branch `feat/natural-speech`.
-6. **Item 6 · Network resilience P1** — `NETWORK_RESILIENCE_PLAN.md`.
+3. **J4b-Naukri** — now spec'd as phase N4 of `NAUKRI_SEARCH_PROFILES_PLAN.md` (2026-07-06),
+   profile-aware; still sequenced after LinkedIn proves out, and blocked on the D4 owner
+   decision in that plan (one shared ApplicationProfile + per-search resume override vs
+   per-role profiles). Phases N1–N3 (saved searches + Chrome-profile launch) are unblocked.
+4. **Item 11 · Natural speech V1 (owner-highlighted 2026-07-06)** — `NATURAL_SPEECH_PLAN.md`,
+   branch `feat/natural-speech`. This IS the "learn from me + varied greeting words" feature the
+   owner asked about: a variety engine (anti-repeat greeting/thanks/filler pools) plus V3 (teach/ban
+   words by voice) and V4 ("refresh your vocabulary" — mine the owner's phrasing). Owner wants this;
+   recommended next build.
+5. **Window control** — `WINDOW_CONTROL_PLAN.md` (design-complete, 2026-07-06): move/focus other
+   apps' windows across monitors by voice; Win32 via `windows` crate, extends `automation.rs`,
+   replaces the `computer_focus_window` stub. Windows-only v1.
+6. **Naukri saved searches + Chrome profiles** — `NAUKRI_SEARCH_PROFILES_PLAN.md`
+   (design-complete, 2026-07-06): N1 store → N2 Settings UI + profile picker → N3 launch/voice
+   tool (all unblocked); N4 = the profile-aware J4b-Naukri assisted apply (blocked on D4 owner
+   decision, see queue item 3).
+7. **Settings menu reorg** — spec approved (`SETTINGS_REORG_PLAN.md`), P1–P3 ready to code.
+8. **Item 6 · Network resilience P1** — `NETWORK_RESILIENCE_PLAN.md`.
+
+_(VID-1 model-bundle is now DONE + merged to main `236cba8` — see §5.)_
 
 ### 🎨 Design-first (owner+reviewer specs exist; agent codes only after go-ahead)
 - Settings menu reorg (see #4 above).
@@ -119,14 +134,18 @@ releases.
 
 ## 5. OPEN ISSUES (non-blocking, tracked)
 
-**VID-1 · WavLM model re-downloads every app load.** Every speech event re-triggers
-`from_pretrained` fetching the model from Hugging Face (`embedding.ts`); a `Ctrl+R` reload restarts
-the slow (no content-length) download mid-flight, so `verifyVoice` often never completes and
-passive-fill stalls. `env.useBrowserCache=true` isn't persisting across reloads in the dev WebView.
-**Fix options:** (a) check if a PRODUCTION build persists the cache — cheapest; (b) bundle the
-model + serve via a Tauri asset/custom protocol; (c) persist to a Tauri-controlled cacheDir.
-Workaround meanwhile: after launch, let the model finish loading once (no reload) before relying
-on voice-ID.
+**VID-1 · DONE + merged to main (`236cba8`, 2026-07-06).** Was: WavLM model re-downloaded from
+Hugging Face on every app load; a `Ctrl+R` mid-download lost progress so `verifyVoice` stalled.
+Fix (per `VOICE_ID_MODEL_BUNDLE_PLAN.md`): model now bundled locally under `public/models/`
+(gitignored, SHA-verified ~97 MiB, fetched build-time by `scripts/fetch-voiceid-model.ts`;
+`predev`/`prebuild` run it automatically); `embedding.ts` sets `allowLocalModels=true` with a
+remote fallback. **Verified by reviewer:** tsc clean, 658/658 tests green, full `tauri dev` built +
+launched, Vite serves `/models/` as real bytes, **zero huggingface.co requests at startup**.
+**One owner step left to fully close it (and unblock VID-2):** speak to Krishna once, confirm the
+model loads fast with no re-download even after a `Ctrl+R`, and capture one
+`[voice-id] verify: score=… threshold=… match=…` console line. Follow-up (not blocking): the fetch
+script's skip-if-exists check runs before SHA verification — an interrupted partial download can be
+skipped unverified; SHA should also gate the skip path (`scripts/fetch-voiceid-model.ts:141`).
 
 **VID-2 · Voice ID meter stuck at 5 samples.** DB shows `count=5, mature=0, adaptive_threshold=
 0.85, confidence=17%`. The bootstrap add-gate fix (`59e8d6d`) IS active (mature=0 → gate=0.85), so
