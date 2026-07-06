@@ -139,8 +139,19 @@ async function main(): Promise<void> {
   for (const file of FILES) {
     const destPath = resolve(DEST, file);
     if (existsSync(destPath) && readFileSync(destPath).length > 0) {
-      console.log(`  ${file} — already exists, skipping`);
-      continue;
+      if (file === ONNX_FILE && expectedSha) {
+        const actual = sha256(destPath);
+        if (actual !== expectedSha) {
+          console.log(`  ${file} — exists but SHA-256 mismatch (expected ${expectedSha}, actual ${actual}), re-downloading`);
+          rmSync(destPath, { force: true });
+        } else {
+          console.log(`  ${file} — already exists, SHA-256 OK, skipping`);
+          continue;
+        }
+      } else {
+        console.log(`  ${file} — already exists, skipping`);
+        continue;
+      }
     }
 
     const url = `${HF_BASE}/${file}`;
