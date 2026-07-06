@@ -4,43 +4,42 @@
 > coding agent: what just landed, the current worktree state, and what to build next.
 
 ## What just landed on `main` (do NOT redo)
-- **VID-1 is DONE + merged to `main` (`236cba8`).** WavLM voice-ID model now bundled locally
-  under `public/models/` (gitignored, SHA-verified ~97 MiB), fetched build-time by
-  `scripts/fetch-voiceid-model.ts`; `predev`/`prebuild` run it automatically; `embedding.ts`
-  loads locally with a remote fallback. Reviewer verified: tsc clean, 658/658 tests, full
-  `tauri dev` built + launched, zero huggingface.co requests at startup.
+- **VID-1 is DONE + merged (`236cba8`).** WavLM voice-ID model bundled locally under
+  `public/models/` (gitignored, SHA-verified ~97 MiB); `predev`/`prebuild` fetch it; `embedding.ts`
+  loads locally with a remote fallback. Verified: tsc clean, tests green, full `tauri dev` built +
+  launched, zero huggingface.co requests at startup.
+- **VID-1 SHA-gate follow-up DONE + merged (`4e0ac79`).** The fetch skip-path now SHA-verifies the
+  existing ONNX and re-downloads on mismatch (was: any non-empty file silently accepted).
+- **Natural Speech V1 (variety engine) DONE + merged (`fee4e61`).** The owner-highlighted "varied
+  greeting words" part is built: `pickLine()` variety engine (anti-repeat last-3, TOD boost,
+  mr→hi→en fallback, {honorific} slots, ~140 seed lines × 12 categories × en/hi/mr), wired into
+  `canned-responses.ts` (now async) and 9 spoken literals in `krishna.context.tsx`. tsc clean, full
+  suite 665 tests green. **Reviewer had to fix what the agent shipped:** it did NOT typecheck (broke
+  `canned-responses.test.ts`), its own test was orphaned outside vitest scope + used an unresolvable
+  deep import + real `@libsql/client` that hangs vitest, and it falsely claimed "node_modules
+  corruption" blocked verification. All fixed before merge. **Lesson: actually run `tsc --noEmit` +
+  `vitest run` before reporting done — node_modules is healthy.**
 
 ## ⚠️ Worktree state — read before you touch anything
-- The reviewer built + verified VID-1 in the `krishna-m15` worktree, then **repaired a polluted
-  `package.json` + `package-lock.json` + reinstalled `node_modules` there** (the agent's earlier
-  `npm install` had added ~8 phantom transitive deps incl. the CI-breaking
-  `lightningcss-win32-x64-msvc`, silently bumped vite/vitest, and broke the lightningcss native
-  module so Vite wouldn't start). The clean version is what got merged to `main`.
-- The reviewer then applied the same VID-1 change directly on the `main` checkout
-  (`D:\Learning\krishna`), ran `npm install` there (healthy tree), and committed.
-- **`krishna-m15` still has the old uncommitted VID-1 changes on `feat/job-autopilot`** — they are
-  now redundant (superseded by `236cba8` on main). Before starting new work: reset that worktree
-  (`git checkout -- . && git clean -fd -e node_modules -e public/models` in `krishna-m15`), then
-  **branch fresh off `main`** for your next task (`git checkout -b <name> main`). Do NOT stack new
-  work on `feat/job-autopilot`.
-- **§6 node_modules rule still applies:** only one party touches node_modules/builds at a time. If
-  your next phase adds a dep, commit `package.json` + `package-lock.json` together and confirm
-  before anyone else installs/builds.
+- `main` (`D:\Learning\krishna`) has everything above; `node_modules` there is healthy.
+- **`krishna-m15` is now on a clean branch `agent/next-off-main` at main's HEAD** — the reviewer
+  discarded the old uncommitted work (now on main) and **deleted the obsolete `fix/vid1-sha-gate`
+  branch** (it carried a DUPLICATE vid1 commit + stacked two tracks — do not recreate it).
+- **Branch fresh off `main` per track** (`git checkout -b <name> main`). One track per branch.
+- **`tsc --noEmit` + `vitest run` both WORK in every worktree** — node_modules is not corrupted.
+  Run them before claiming done. If a dep is added, commit `package.json` + `package-lock.json`
+  together and coordinate before anyone else installs (§6).
 
 ## Pending work — priority order (details in `RESUME_HERE.md` §4)
 
-### 1. 🟢 Natural speech V1 — OWNER-HIGHLIGHTED, recommended next build
-`NATURAL_SPEECH_PLAN.md`, branch `feat/natural-speech`. **This is the "learn from me and create
-varied greeting words" feature the owner asked about on 2026-07-06** — it already has a full spec:
-- A **variety engine**: anti-repeat pools for greeting/thanks/filler/wake-ack etc. (today
-  `canned-responses.ts` uses tiny pools + plain `Math.random()` that can repeat the same line
-  twice in a row; `src/lib/seed-personas.ts` + `canned-responses.ts` are the seams).
-- **V3 — teach/ban by voice:** owner explicitly adds or forbids words/lines.
+### 1. 🟢 Natural Speech V3/V4 — the "learn from ME" part the owner actually wants next
+Variety (V1) is merged; the **owner-learning** half of `NATURAL_SPEECH_PLAN.md` is NOT built yet:
+- **V3 — teach/ban by voice:** owner says "say X instead" / "stop saying Y" → insert an `owner`
+  source line or `disableLine()` it. The DB layer already supports this (`insertLine` with
+  `source:"owner"`, `disableLine`) — needs the voice-command wiring + intent detection.
 - **V4 — implicit learning:** on "refresh your vocabulary" / "learn how I talk", mine the owner's
   own phrasing into the pools.
-- Multi-language (en full; hi/mr at least for greeting/thanks/filler).
-Build per the plan's phased order, one phase per commit, `tsc --noEmit` + `vitest run` green, STOP
-per phase and report. Owner wants this — start here unless he says otherwise.
+Build per the plan, one phase per commit, `tsc --noEmit` + `vitest run` green, STOP per phase.
 
 ### 2. 🟢 Window control (move/focus windows across monitors by voice)
 `WINDOW_CONTROL_PLAN.md`. Win32 via the `windows` crate; extends `src-tauri/src/automation.rs`,

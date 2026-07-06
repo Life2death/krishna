@@ -104,11 +104,11 @@ actions, `3b85777`), item 10-H1 (job-hunter bearer-token auth, deployed + live-v
    profile-aware; still sequenced after LinkedIn proves out, and blocked on the D4 owner
    decision in that plan (one shared ApplicationProfile + per-search resume override vs
    per-role profiles). Phases N1–N3 (saved searches + Chrome-profile launch) are unblocked.
-4. **Item 11 · Natural speech V1 (owner-highlighted 2026-07-06)** — `NATURAL_SPEECH_PLAN.md`,
-   branch `feat/natural-speech`. This IS the "learn from me + varied greeting words" feature the
-   owner asked about: a variety engine (anti-repeat greeting/thanks/filler pools) plus V3 (teach/ban
-   words by voice) and V4 ("refresh your vocabulary" — mine the owner's phrasing). Owner wants this;
-   recommended next build.
+4. **Item 11 · Natural Speech V3/V4 (owner-learning half)** — `NATURAL_SPEECH_PLAN.md`. **V1 variety
+   engine is DONE + merged (`fee4e61`)** — varied greetings/thanks/fillers now work. Remaining: V3
+   (teach/ban words by voice) and V4 ("refresh your vocabulary" — mine the owner's phrasing). The DB
+   layer already supports owner lines (`insertLine source:"owner"`, `disableLine`); needs the
+   voice-command wiring. This is the "learn from ME" part the owner asked about.
 5. **Window control** — `WINDOW_CONTROL_PLAN.md` (design-complete, 2026-07-06): move/focus other
    apps' windows across monitors by voice; Win32 via `windows` crate, extends `automation.rs`,
    replaces the `computer_focus_window` stub. Windows-only v1.
