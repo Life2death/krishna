@@ -12,7 +12,7 @@ import { getResponseSettings } from "@krishna/core/settings";
 import { runRecruiterRadar, formatRecruiterOutput, COLD_START_DAYS } from "@krishna/core/tools/recruiter-radar";
 import type { Candidate, Classification } from "@krishna/core/tools/recruiter-radar";
 import { getLastCheckAt } from "@krishna/core/tools/recruiter-radar-state";
-import { createRouteWatch, getActiveRouteWatch, cancelRouteWatch, disableLine, getLinesByText, insertLine, getAllLines, getAllLinesByCategory } from "@krishna/core/database";
+import { createRouteWatch, getActiveRouteWatch, cancelRouteWatch, disableLine, getLinesByText, insertLine, getAllLines, getAllLinesByCategory, banPhrase, enableAllPendingLlmLines } from "@krishna/core/database";
 import { resolvePlace } from "@krishna/core/tools/place-resolver";
 
 const ACTION_REGEX = /```action\n([\s\S]*?)```/g;
@@ -113,6 +113,9 @@ export function parseActions(reply: string): ParsedReply {
         }
         if (parsed && parsed.action === "speech_refresh") {
           actions.push({ action: "speech_refresh" });
+        }
+        if (parsed && parsed.action === "speech_accept_vocabulary") {
+          actions.push({ action: "speech_accept_vocabulary" });
         }
       } catch {
         // Not valid JSON, ignore
@@ -277,11 +280,12 @@ async function getOwnerUtterances(limit = 20): Promise<string[]> {
 export async function vocabularyRefresh(
   llmFallback: LlmFallbackFn,
 ): Promise<{ total: number; categories: string[] }> {
-  const { getAllLines, getDisabledLines, insertLine, getAllLinesByCategory } = await import("@krishna/core/database");
+  const { getAllLines, getDisabledLines, insertLine, getAllLinesByCategory, getBannedPhrases } = await import("@krishna/core/database");
 
   const utterances = await getOwnerUtterances(20);
   const allLines = await getAllLines();
   const disabled = await getDisabledLines();
+  const rawBanned = await getBannedPhrases();
 
   const currentByCategory: Record<string, string[]> = {};
   for (const line of allLines) {
@@ -289,7 +293,10 @@ export async function vocabularyRefresh(
     currentByCategory[line.category].push(line.text);
   }
 
-  const bannedTexts = disabled.map(l => l.text);
+  // Includes raw owner-banned phrases (which may not correspond to any voice_lines row),
+  // not just disabled seeded/taught lines — otherwise a refresh could re-propose the exact
+  // thing the owner already banned via speech_ban.
+  const bannedTexts = [...disabled.map(l => l.text), ...rawBanned];
 
   const categories = ["filler_wait", "ack_quick", "ack_multistep", "confirm_yes_ack", "decline_ack", "reask", "error_generic", "greeting", "thanks_reply", "wake_ack"];
 
@@ -345,11 +352,13 @@ Respond with ONLY a valid JSON object (no other text):
     const isDup = existing.some(l => l.text.toLowerCase() === p.text.toLowerCase());
     if (isDup) continue;
 
-    if (!p.text.includes("{honorific}") && !p.text.includes("honorific")) {
-      const honorificVariants = ["{honorific}", "sir", "boss"];
-      const hasAny = honorificVariants.some(v => p.text.toLowerCase().includes(v.toLowerCase()));
-      if (!hasAny) continue;
-    }
+    // A phrase may legitimately omit the honorific slot entirely (the seeded lines mix
+    // both), but it must NEVER hardcode a literal honorific word ("sir"/"boss"/etc.)
+    // instead of the {honorific} template — that would permanently ignore the owner's
+    // actual honorific setting once approved.
+    const hasSlot = p.text.includes("{honorific}");
+    const hasHardcodedHonorific = !hasSlot && /\b(sir|boss|ma'?am|madam)\b/i.test(p.text);
+    if (hasHardcodedHonorific) continue;
 
     await insertLine({
       id: crypto.randomUUID(),
@@ -723,12 +732,16 @@ export async function executeAction(
   }
 
   if (action.action === "speech_ban") {
+    // Persist the raw phrase regardless of whether it matches a seeded/taught voice_lines
+    // row — the owner is usually banning ad-hoc LLM free-form phrasing (V2), not a canned
+    // line, so a match-only ban would silently do nothing on the next turn.
+    await banPhrase(action.phrase);
     const lines = await getLinesByText(action.phrase);
-    if (lines.length === 0) {
-      return { kind: "status", spokenResponse: `No existing phrases match "${action.phrase}", but I'll keep it in mind to avoid saying it.` };
-    }
     for (const line of lines) {
       await disableLine(line.id);
+    }
+    if (lines.length === 0) {
+      return { kind: "status", spokenResponse: `Got it — I'll avoid saying "${action.phrase}" from now on.` };
     }
     return { kind: "status", spokenResponse: `I've stopped saying ${lines.length} phrase${lines.length > 1 ? "s" : ""} like "${action.phrase}".` };
   }
@@ -777,6 +790,14 @@ export async function executeAction(
     } catch (err) {
       return { kind: "status", spokenResponse: `Vocabulary refresh failed: ${err instanceof Error ? err.message : "unknown error"}` };
     }
+  }
+
+  if (action.action === "speech_accept_vocabulary") {
+    const count = await enableAllPendingLlmLines();
+    if (count === 0) {
+      return { kind: "status", spokenResponse: "There's nothing pending to accept right now." };
+    }
+    return { kind: "status", spokenResponse: `Enabled ${count} new phrase${count > 1 ? "s" : ""}, {honorific} — I'll start using them.` };
   }
 
   return { spokenResponse: "Unknown action" };

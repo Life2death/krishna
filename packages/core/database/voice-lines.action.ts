@@ -134,6 +134,52 @@ export async function getAllLines(): Promise<VoiceLineRow[]> {
   return rows.map(toRow);
 }
 
+export async function ensureBannedPhrasesTable(): Promise<void> {
+  const db = getDatabase();
+  await db.execute(`CREATE TABLE IF NOT EXISTS banned_phrases (
+    id TEXT PRIMARY KEY,
+    phrase TEXT NOT NULL,
+    created_at INTEGER NOT NULL
+  )`);
+}
+
+// Persists a banned phrase independent of voice_lines — a ban must stick even when the
+// phrase doesn't match any existing seeded/taught line (the common case: the owner is
+// usually banning ad-hoc LLM free-form phrasing, not a canned line).
+export async function banPhrase(phrase: string): Promise<void> {
+  await ensureBannedPhrasesTable();
+  const db = getDatabase();
+  const existing = await db.select<{ id: string }[]>(
+    `SELECT id FROM banned_phrases WHERE lower(phrase) = lower(?)`,
+    [phrase]
+  );
+  if (existing.length > 0) return;
+  await db.execute(
+    `INSERT INTO banned_phrases (id, phrase, created_at) VALUES (?, ?, ?)`,
+    [crypto.randomUUID(), phrase, Date.now()]
+  );
+}
+
+export async function getBannedPhrases(): Promise<string[]> {
+  await ensureBannedPhrasesTable();
+  const db = getDatabase();
+  const rows = await db.select<{ phrase: string }[]>(
+    `SELECT phrase FROM banned_phrases ORDER BY created_at DESC`
+  );
+  return rows.map((r) => r.phrase);
+}
+
+// Bulk-enable all pending LLM-proposed lines (V4 "accept them" voice path). Owner retains
+// full granular control afterward via the Voice & Phrases Settings toggle/delete.
+export async function enableAllPendingLlmLines(): Promise<number> {
+  await ensureVoiceLinesTable();
+  const db = getDatabase();
+  const result = await db.execute(
+    `UPDATE voice_lines SET enabled = 1 WHERE enabled = 0 AND source = 'llm'`
+  );
+  return result.rowsAffected;
+}
+
 export async function getRecentUsedIds(category: VoiceCategory, limit: number): Promise<string[]> {
   const db = getDatabase();
   const rows = await db.select<{ id: string }[]>(

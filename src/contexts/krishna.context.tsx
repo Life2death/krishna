@@ -39,7 +39,7 @@ import type { VoiceVerifyResult } from "@/lib/voice-client";
 import { MAX_FILES } from "@/config";
 import { TurnTiming } from "@/lib/turn-timing";
 import { getResponseSettings } from "@krishna/core/settings";
-import { getRecentSpeech, getDisabledLines } from "@krishna/core/database";
+import { getRecentSpeech, getDisabledLines, getBannedPhrases } from "@krishna/core/database";
 import { matchCannedResponse } from "@/lib/canned-responses";
 
 export interface ConversationTurn {
@@ -219,6 +219,10 @@ export const BASE_SYSTEM_PROMPT = [
   '- "refresh your vocabulary" / "learn how I talk" → I\'ll mine the user\'s conversation style and propose new phrases:',
   '```action',
   '{"action":"speech_refresh"}',
+  '```',
+  '- "accept them" / "accept those phrases" / "enable the new phrases" (after a vocabulary refresh) →',
+  '```action',
+  '{"action":"speech_accept_vocabulary"}',
   '```',
   '',
   'JOB QUEUE:',
@@ -1823,9 +1827,11 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
           ? `\n\nYour last acknowledgments were: ${lastAcks} — phrase this one differently.`
           : "";
         const disabledPhrases = await getDisabledLines().catch(() => []);
-        const bannedPhraseList = disabledPhrases
-          .map(l => `"${l.text}"`)
-          .join(", ");
+        const rawBannedPhrases = await getBannedPhrases().catch(() => []);
+        const bannedPhraseList = [
+          ...disabledPhrases.map(l => `"${l.text}"`),
+          ...rawBannedPhrases.map(p => `"${p}"`),
+        ].join(", ");
         const bannedNote = bannedPhraseList
           ? `\n\nBanned phrases the user has asked you to avoid: ${bannedPhraseList}. Do not use these exact phrases.`
           : "";
