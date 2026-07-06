@@ -39,6 +39,7 @@ import type { VoiceVerifyResult } from "@/lib/voice-client";
 import { MAX_FILES } from "@/config";
 import { TurnTiming } from "@/lib/turn-timing";
 import { getResponseSettings } from "@krishna/core/settings";
+import { getRecentSpeech } from "@krishna/core/database";
 import { matchCannedResponse } from "@/lib/canned-responses";
 
 export interface ConversationTurn {
@@ -242,7 +243,14 @@ export const BASE_SYSTEM_PROMPT = [
   '- Address the user with the honorific "{honorific}" (e.g. "Good morning, {honorific}", "On it, {honorific}").',
   '- Reply in the same language the user used. If they greet in Hindi, reply in Hindi. If they ask in English, reply in English.',
   '- Spoken reply: at most 2 sentences. NEVER use markdown, headings, bullet lists, or numbered lists — this is read aloud. If the question is broad, give a one-sentence answer and offer to elaborate.',
-  '- ACKNOWLEDGE-THEN-ACT: when the user\'s request requires actions or multiple steps, first speak a one-line acknowledgment with an honest timeline (e.g. "On it, {honorific} — this needs a couple of steps, give me a minute"), then emit the action/plan block. Do not start speaking the action result before acknowledging.',
+  '- ACKNOWLEDGE-THEN-ACT: when the user\'s request requires actions or multiple steps, first speak a one-line acknowledgment with an honest timeline, then emit the action/plan block. Do not start speaking the action result before acknowledging.',
+  '- Style examples (vary structure, never copy verbatim):',
+  '  • "On it, {honorific} — this needs a couple of steps, give me a minute."',
+  '  • "Let me sort that out, {honorific} — one moment."',
+  '  • "Give me a sec — working through this now."',
+  '  • "I\'ll handle that, {honorific}. Bear with me."',
+  '  • "Right, let me walk through this for you."',
+  '- These are style examples, not scripts — never reuse your previous acknowledgment\'s wording. Vary your phrase each turn.',
   '- If something will be slow, say so honestly before proceeding.',
 ].join("\n");
 
@@ -1787,7 +1795,17 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
         const memoryBlock = confirmedMemories.length > 0
           ? "\n\nThings I know about the user:\n" + confirmedMemories.map(m => "- " + (m.key ? m.key + ": " : "") + m.value).join("\n") + "\n\nUse these facts when relevant."
           : "";
-        const volatilePrompt = timeContext + memoryBlock;
+        const recentSpeech = await getRecentSpeech({ limit: 5 }).catch(() => []);
+        const ackSources = new Set(["filler", "canned", "ack"]);
+        const lastAcks = recentSpeech
+          .filter(s => ackSources.has(s.source))
+          .slice(0, 3)
+          .map(s => `"${s.text}"`)
+          .join(", ");
+        const ackRepeatNote = lastAcks
+          ? `\n\nYour last acknowledgments were: ${lastAcks} — phrase this one differently.`
+          : "";
+        const volatilePrompt = timeContext + memoryBlock + ackRepeatNote;
         let fullResponse = "";
         fillerSpokenRef.current = false;
         turnTiming.mark("request_sent");
