@@ -152,9 +152,8 @@ remote fallback. **Verified by reviewer:** tsc clean, 658/658 tests green, full 
 launched, Vite serves `/models/` as real bytes, **zero huggingface.co requests at startup**.
 **One owner step left to fully close it (and unblock VID-2):** speak to Krishna once, confirm the
 model loads fast with no re-download even after a `Ctrl+R`, and capture one
-`[voice-id] verify: score=… threshold=… match=…` console line. Follow-up (not blocking): the fetch
-script's skip-if-exists check runs before SHA verification — an interrupted partial download can be
-skipped unverified; SHA should also gate the skip path (`scripts/fetch-voiceid-model.ts:141`).
+`[voice-id] verify: score=… threshold=… match=…` console line. (The fetch script's SHA-gate-skip
+follow-up is DONE — merged `4e0ac79`, see §3 Voice ID table — no code follow-up remains here.)
 
 **VID-2 · Voice ID meter stuck at 5 samples.** DB shows `count=5, mature=0, adaptive_threshold=
 0.85, confidence=17%`. The bootstrap add-gate fix (`59e8d6d`) IS active (mature=0 → gate=0.85), so
