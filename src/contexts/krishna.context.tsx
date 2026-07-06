@@ -290,6 +290,7 @@ const SYSTEM_PROMPT_RULES = [
   '8. "Open VS Code at path X" or "open my repo in VS Code" → open_target with target "code" and args path (opens VS Code directly at that folder).',
   '9. "Open a terminal" or "open command prompt" → open_target with target "cmd". Then use computer_type and computer_key to type commands into it.',
   '10. Only use computer_* tools when the user explicitly asks you to type/click/control something. Never use them to fill passwords or payment fields.',
+  '11. For "move Chrome to the other monitor" / "bring File Explorer to the front", use the control_window tool with action "focus" or "move", target as the window name (title or app name), and optionally monitor for moves.',
 ].join("\n");
 
 function buildToolsSection(query?: string): string {

@@ -12,6 +12,7 @@ import {
   computerClickTool,
   computerMoveTool,
   computerFocusWindowTool,
+  controlWindowTool,
 } from "./computer";
 
 export interface Tool {

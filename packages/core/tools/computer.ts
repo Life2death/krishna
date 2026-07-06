@@ -98,7 +98,7 @@ export const computerMoveTool: Tool = {
 
 export const computerFocusWindowTool: Tool = {
   name: "computer_focus_window",
-  description: "Bring a window to the foreground by matching its title. NOTE: not yet implemented on most platforms — please focus the target window manually.",
+  description: "Bring a window to the foreground by matching its title (Windows).",
   run: async (args) => {
     const title = args.title;
     if (!title) return { success: false, error: "Missing required arg: title" };
@@ -114,10 +114,36 @@ export const computerFocusWindowTool: Tool = {
   },
 };
 
+export const controlWindowTool: Tool = {
+  name: "control_window",
+  description: "Move or focus a window by its title. Action 'focus' brings the window to the front. Action 'move' moves it to another monitor (specify monitor: primary, left, right, next, or a number).",
+  run: async (args) => {
+    const action = args.action;
+    const target = args.target;
+    if (!action || !target) return { success: false, error: "Missing required args: action (focus|move), target" };
+    if (action !== "focus" && action !== "move") return { success: false, error: "action must be 'focus' or 'move'" };
+    try {
+      if (action === "focus") {
+        const result = await invoke<string>("computer_focus_window", { titleSubstring: target });
+        audit("control_window", `Focused "${target}"`);
+        return { success: true, output: result };
+      } else {
+        const monitor = args.monitor || "next";
+        const result = await invoke<string>("window_move", { query: target, monitor, maximize: null });
+        audit("control_window", `Moved "${target}" to ${monitor}`);
+        return { success: true, output: result };
+      }
+    } catch (err) {
+      return { success: false, error: String(err) };
+    }
+  },
+};
+
 COMPUTER_TOOLS.push(
   computerTypeTool,
   computerKeyTool,
   computerClickTool,
   computerMoveTool,
   computerFocusWindowTool,
+  controlWindowTool,
 );
