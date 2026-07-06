@@ -22,7 +22,8 @@ export type Action =
   | { action: "job_apply" }
   | { action: "job_apply_submit"; url: string; jobId: string; title: string; company: string }
   | { action: "speech_ban"; phrase: string }
-  | { action: "speech_teach"; phrase: string; category?: string };
+  | { action: "speech_teach"; phrase: string; category?: string }
+  | { action: "speech_refresh" };
 
 export interface StepAction {
   tool: string;

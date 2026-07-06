@@ -111,6 +111,9 @@ export function parseActions(reply: string): ParsedReply {
         if (parsed && parsed.action === "speech_teach" && parsed.phrase) {
           actions.push({ action: "speech_teach", phrase: parsed.phrase, category: parsed.category });
         }
+        if (parsed && parsed.action === "speech_refresh") {
+          actions.push({ action: "speech_refresh" });
+        }
       } catch {
         // Not valid JSON, ignore
       }
@@ -249,6 +252,123 @@ ${JSON.stringify(candidates.map((c) => ({ id: c.id, from: c.from, subject: c.sub
 
     return parsed as Classification[];
   };
+}
+
+async function getOwnerUtterances(limit = 20): Promise<string[]> {
+  try {
+    const { getAllConversations } = await import("@krishna/core/database");
+    const conversations = await getAllConversations();
+    const utterances: string[] = [];
+    for (const conv of conversations) {
+      for (const msg of conv.messages) {
+        if (msg.role === "user" && msg.content.trim()) {
+          utterances.push(msg.content.trim());
+          if (utterances.length >= limit) break;
+        }
+      }
+      if (utterances.length >= limit) break;
+    }
+    return utterances;
+  } catch {
+    return [];
+  }
+}
+
+export async function vocabularyRefresh(
+  llmFallback: LlmFallbackFn,
+): Promise<{ total: number; categories: string[] }> {
+  const { getAllLines, getDisabledLines, insertLine, getAllLinesByCategory } = await import("@krishna/core/database");
+
+  const utterances = await getOwnerUtterances(20);
+  const allLines = await getAllLines();
+  const disabled = await getDisabledLines();
+
+  const currentByCategory: Record<string, string[]> = {};
+  for (const line of allLines) {
+    if (!currentByCategory[line.category]) currentByCategory[line.category] = [];
+    currentByCategory[line.category].push(line.text);
+  }
+
+  const bannedTexts = disabled.map(l => l.text);
+
+  const categories = ["filler_wait", "ack_quick", "ack_multistep", "confirm_yes_ack", "decline_ack", "reask", "error_generic", "greeting", "thanks_reply", "wake_ack"];
+
+  const prompt = `You are helping Krishna learn the user's speaking style.
+
+The user's recent utterances (their words, mix of English/Hindi/Marathi, formality level):
+"""
+${utterances.slice(0, 15).join("\n")}
+"""
+
+Current phrases Krishna uses per category (the user wants NEW variants in their style):
+${categories.map(c => `[${c}]: ${(currentByCategory[c] || []).join(" | ")}`).join("\n")}
+
+Banned phrases (never use these):
+${bannedTexts.map(t => `- ${t}`).join("\n")}
+
+For each category above, propose exactly 2 new phrases in the user's register (matching their language mix, formality, and style).
+Rules:
+- Each phrase must be 2-12 words.
+- Each phrase MUST include {honorific} naturally OR work without it.
+- Never use any banned phrase or close variant.
+- Vary structure: not all should start the same way.
+- If the user mixes Hindi/English/Marathi, mirror that mix.
+- If the user is formal, be formal; if casual, be casual.
+
+Respond with ONLY a valid JSON object (no other text):
+{"proposals": [{"category": "filler_wait", "text": "Just a moment, {honorific}."}, ...]}`;
+
+  const raw = await llmFallback(prompt);
+  if (!raw) return { total: 0, categories: [] };
+
+  let parsed: any;
+  try {
+    const cleaned = raw.replace(/```(?:json)?\s*/gi, "").replace(/```/g, "").trim();
+    const start = cleaned.indexOf("{");
+    const end = cleaned.lastIndexOf("}");
+    if (start === -1 || end === -1) return { total: 0, categories: [] };
+    parsed = JSON.parse(cleaned.slice(start, end + 1));
+  } catch {
+    return { total: 0, categories: [] };
+  }
+
+  const proposals: Array<{ category: string; text: string }> = Array.isArray(parsed?.proposals) ? parsed.proposals : [];
+  let inserted = 0;
+  const insertedCategories = new Set<string>();
+
+  for (const p of proposals) {
+    if (!categories.includes(p.category)) continue;
+    if (!p.text || p.text.length < 3) continue;
+    if (bannedTexts.some(b => p.text.toLowerCase().includes(b.toLowerCase()))) continue;
+
+    const existing = await getAllLinesByCategory(p.category as any);
+    const isDup = existing.some(l => l.text.toLowerCase() === p.text.toLowerCase());
+    if (isDup) continue;
+
+    if (!p.text.includes("{honorific}") && !p.text.includes("honorific")) {
+      const honorificVariants = ["{honorific}", "sir", "boss"];
+      const hasAny = honorificVariants.some(v => p.text.toLowerCase().includes(v.toLowerCase()));
+      if (!hasAny) continue;
+    }
+
+    await insertLine({
+      id: crypto.randomUUID(),
+      category: p.category as any,
+      lang: "en",
+      text: p.text,
+      source: "llm",
+      enabled: 0,
+      weight: 1,
+      lastUsedAt: null,
+      useCount: 0,
+      createdAt: Date.now(),
+      tod: null,
+    });
+    inserted++;
+    insertedCategories.add(p.category);
+  }
+
+  return { total: inserted, categories: Array.from(insertedCategories) };
 }
 
 export async function executeAction(
@@ -641,6 +761,22 @@ export async function executeAction(
       tod: null,
     });
     return { kind: "status", spokenResponse: `I've added "${action.phrase}" to my vocabulary — I'll use it often.` };
+  }
+
+  if (action.action === "speech_refresh") {
+    if (!llmFallback) {
+      return { kind: "status", spokenResponse: "Can't refresh vocabulary right now — no AI provider configured." };
+    }
+    try {
+      const result = await vocabularyRefresh(llmFallback);
+      if (result.total === 0) {
+        return { kind: "status", spokenResponse: `I reviewed your conversation style but couldn't generate new phrases that passed quality checks, {honorific}.` };
+      }
+      const catCount = result.categories.length;
+      return { kind: "status", spokenResponse: `I've drafted ${result.total} new phrases from how you talk, across ${catCount} categories. Review them in Settings under Voice & Phrases, or say "accept them" to enable them.` };
+    } catch (err) {
+      return { kind: "status", spokenResponse: `Vocabulary refresh failed: ${err instanceof Error ? err.message : "unknown error"}` };
+    }
   }
 
   return { spokenResponse: "Unknown action" };
