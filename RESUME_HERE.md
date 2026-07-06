@@ -84,11 +84,23 @@ Full history: `TRAVEL_INSIGHTS_REVIEW_FINDINGS.md`.
 | Enable gate relaxed 100%→≥3 samples (owner decision) — **owner enrolled to 5 samples and enabled it live** | `540213c` |
 | Passive-fill bootstrap gate fix (add-gate was stricter than match threshold, deadlocking growth) | `59e8d6d` |
 
-Still open: **VID-1** (model re-downloads every reload) and **VID-2** (meter stuck at 5, needs one
-more data point) — see §5. Non-blocking for everything else.
+**VID-1 is DONE** (bundled model + SHA-gate, see §5). Still open: **VID-2** (meter stuck at 5,
+needs one live data point) — non-blocking for everything else.
 
 **Earlier (pre-2026-07-05):** item 1 (travel error visibility, `4b9c997`), item 2 (no-narrated-
 actions, `3b85777`), item 10-H1 (job-hunter bearer-token auth, deployed + live-verified).
+
+### Natural Speech (item 11) — FULLY COMPLETE, V1–V4 all merged
+| Phase | What | Commit |
+|---|---|---|
+| V1 | Variety engine: `pickLine()` anti-repeat + TOD boost + mr→hi→en fallback + {honorific} slots, ~140 seed lines × 12 categories × en/hi/mr; wired into `canned-responses.ts` (async) + 9 spoken literals in `krishna.context.tsx` | `fee4e61` |
+| V2 | LLM-side prompt variety: 5 style examples + "never reuse your previous acknowledgment" instruction in `BASE_SYSTEM_PROMPT` + `seed-personas.ts`; last-3-acks from `speech_log` injected into context as a concrete anti-repeat signal | `875d7a4` |
+| V3 | `speech_ban` / `speech_teach` voice actions; Settings "Voice & Phrases" page (toggle/delete/view) | `c508e18` |
+| V4 | `speech_refresh` — LLM mines the owner's own conversation history into proposed new lines (`enabled:false`, source `llm`) with quality filters (banned/dup/honorific-slot/length) | `11df913` |
+| Fix | Reviewer fixes: `speech_ban` now persists the raw phrase in a new `banned_phrases` table even when it doesn't match a seeded/taught line (was silently a no-op in the common case); real `speech_accept_vocabulary` voice action added (the spoken "say 'accept them'" promise was previously a dead end — nothing implemented it); honorific-slot validation tightened (was accepting hardcoded "sir"/"boss" instead of the `{honorific}` template, risking a permanently-wrong-honorific approved line); 14 new tests covering V4's previously-untested quality filters and the ban/accept fixes | `52d5dfa` |
+
+This is the "learn from me + varied greeting words" feature the owner asked about (2026-07-06) —
+fully built end to end. Full history/spec: `NATURAL_SPEECH_PLAN.md`.
 
 ---
 
@@ -104,20 +116,17 @@ actions, `3b85777`), item 10-H1 (job-hunter bearer-token auth, deployed + live-v
    profile-aware; still sequenced after LinkedIn proves out, and blocked on the D4 owner
    decision in that plan (one shared ApplicationProfile + per-search resume override vs
    per-role profiles). Phases N1–N3 (saved searches + Chrome-profile launch) are unblocked.
-4. **Item 11 · Natural Speech V3/V4 (owner-learning half)** — `NATURAL_SPEECH_PLAN.md`. **V1 variety
-   engine is DONE + merged (`fee4e61`)** — varied greetings/thanks/fillers now work. Remaining: V3
-   (teach/ban words by voice) and V4 ("refresh your vocabulary" — mine the owner's phrasing). The DB
-   layer already supports owner lines (`insertLine source:"owner"`, `disableLine`); needs the
-   voice-command wiring. This is the "learn from ME" part the owner asked about.
-5. **Window control** — `WINDOW_CONTROL_PLAN.md` (design-complete, 2026-07-06): move/focus other
+4. **Window control** — `WINDOW_CONTROL_PLAN.md` (design-complete, 2026-07-06): move/focus other
    apps' windows across monitors by voice; Win32 via `windows` crate, extends `automation.rs`,
    replaces the `computer_focus_window` stub. Windows-only v1.
-6. **Naukri saved searches + Chrome profiles** — `NAUKRI_SEARCH_PROFILES_PLAN.md`
+5. **Naukri saved searches + Chrome profiles** — `NAUKRI_SEARCH_PROFILES_PLAN.md`
    (design-complete, 2026-07-06): N1 store → N2 Settings UI + profile picker → N3 launch/voice
    tool (all unblocked); N4 = the profile-aware J4b-Naukri assisted apply (blocked on D4 owner
    decision, see queue item 3).
-7. **Settings menu reorg** — spec approved (`SETTINGS_REORG_PLAN.md`), P1–P3 ready to code.
-8. **Item 6 · Network resilience P1** — `NETWORK_RESILIENCE_PLAN.md`.
+6. **Settings menu reorg** — spec approved (`SETTINGS_REORG_PLAN.md`), P1–P3 ready to code.
+7. **Item 6 · Network resilience P1** — `NETWORK_RESILIENCE_PLAN.md`.
+
+_(Item 11 · Natural Speech V1–V4 is now FULLY DONE + merged to main `52d5dfa` — see §3.)_
 
 _(VID-1 model-bundle is now DONE + merged to main `236cba8` — see §5.)_
 
@@ -210,36 +219,24 @@ one. See `GMAIL_RECRUITER_RADAR_REVIEW_FINDINGS.md` for the full trail.
 
 ## 7. NEXT AGENT INSTRUCTION (paste this to resume) — updated 2026-07-06
 
-> Read `RESUME_HERE.md` in full first, then `AGENT_NEXT_TASKS.md`. `main` is green at `581afca`.
-> VID-1 (+ its SHA-gate follow-up) and Natural Speech **V1** (the variety engine) are done and
-> merged. Stale branches from the completed job-autopilot/gmail/travel/recruiter-radar/old-phase
-> work have been deleted — `git branch -vv` now only shows active tracks. Your worktree
-> (`krishna-m15`, branch `agent/next-off-main`) is reset to exactly `main`'s HEAD; node_modules
-> there is healthy (verified: `tsc --noEmit` and `vitest run` both work).
+> Read `RESUME_HERE.md` in full first, then `AGENT_NEXT_TASKS.md`. `main` is green at `52d5dfa`.
+> VID-1 (+ SHA-gate) and **Natural Speech V1–V4 (the FULL plan) are now done and merged** —
+> variety engine, LLM-prompt variety + anti-repeat, teach/ban voice actions + Settings UI, and
+> vocabulary-refresh from the owner's own conversation history are all live. Do not re-open
+> `NATURAL_SPEECH_PLAN.md` as a task — it's finished; see §3 for the full commit list. Your
+> worktree (`krishna-m15`, branch `agent/next-off-main`) is reset to exactly `main`'s HEAD;
+> node_modules is healthy (verified: `tsc --noEmit` and `vitest run` both work, 692 tests green).
 >
-> **Task: build Natural Speech V2, then V3, then V4** — `NATURAL_SPEECH_PLAN.md` phase map at the
-> bottom of that file. Read the ALREADY-MERGED V1 code first as your foundation, not the plan's V1
-> section as if unbuilt: `src/lib/voice-lines.ts` (picker), `packages/core/database/voice-lines.action.ts`
-> (DB layer, exported via the `@krishna/core/database` barrel — see below), `src/lib/canned-responses.ts`,
-> and the 9 `pickLine(...)` call sites in `src/contexts/krishna.context.tsx`.
+> **Task: pick the next item from §4**, in order: (1) Window control — `WINDOW_CONTROL_PLAN.md`;
+> (2) Naukri saved searches N1–N3 — `NAUKRI_SEARCH_PROFILES_PLAN.md` (N4 is blocked on an owner
+> decision, see queue item 3 in §4); (3) JC-1 fix (small, `JOB_AUTOPILOT_REVIEW_FINDINGS.md`); (4)
+> J3-A test (small). Confirm with the owner which to start if it's not obvious from context.
 >
-> - **V2** (do first — cheap, prompt-only, zero runtime cost): give the ACKNOWLEDGE-THEN-ACT rule
->   and `seed-personas.ts` 4-5 stylistically different example acks instead of one, add the
->   "these are style examples, not scripts — never reuse your previous acknowledgment's wording"
->   line, and inject the last 3 spoken acks from `speech_log` into context so the model has a
->   concrete anti-repeat signal. This is the part of the LLM's OWN acks that still repeats — V1
->   only fixed the fixed/canned lines, not free-form LLM phrasing.
-> - **V3** (the owner's "learn from me" ask, part 1): "stop saying X" / "sometimes say Y" by voice
->   → `speech_ban` / `speech_teach` actions. The DB already supports this — `disableLine(id)` and
->   `insertLine({..., source: "owner"})` exist in `voice-lines.action.ts`; this phase is the voice
->   intent + a Settings "Voice & phrases" list view, not new DB plumbing.
-> - **V4** (the owner's "learn from me" ask, part 2): "refresh your vocabulary" — one LLM call
->   mining the owner's own conversation history into proposed new lines (`enabled:false` until
->   approved). See the plan for the exact proposal/approve flow.
->
-> **Process, non-negotiable (fix the mistakes from last round):**
-> 1. Branch fresh off `main` (`git checkout -b feat/natural-speech-v2 main` in `krishna-m15`) — do
->    NOT continue on an old branch.
+> **Process, non-negotiable (these were violated at least once each in earlier rounds — the last
+> Natural Speech submission needed 4 real bug fixes in review before merge: a ban that silently
+> no-op'd, a spoken promise for a voice command that didn't exist, a weak validation check, and
+> zero tests for an entire phase):**
+> 1. Branch fresh off `main` — do NOT continue on an old branch.
 > 2. Import DB actions via the `@krishna/core/database` barrel (`import { x } from
 >    "@krishna/core/database"`), NOT a deep path like `@krishna/core/database/whatever.action` —
 >    the vite config only aliases specific deep paths and a bare deep import silently fails to
@@ -247,12 +244,22 @@ one. See `GMAIL_RECRUITER_RADAR_REVIEW_FINDINGS.md` for the full trail.
 > 3. New tests go in `src/__tests__/` (root vitest scope). Anything under `apps/**` is EXCLUDED by
 >    `vite.config.ts`'s test include list and will silently never run.
 > 4. Don't use a real `@libsql/client(":memory:")` in tests — its native binding hangs vitest's
->    worker threads. Use a hand-rolled in-memory fake driver (see
->    `src/__tests__/support/voice-lines-fake-driver.ts`, already built for exactly this and
->    reusable/extendable for new tables).
-> 5. **Actually run `tsc --noEmit` and `vitest run` before reporting a phase done — node_modules is
->    healthy in every worktree right now.** If you hit a real, reproducible tool failure, paste the
->    exact error in your report; do not report "done" with unverified/unrun checks.
-> 6. ONE phase per commit, STOP and report after each. If a phase adds a dependency, commit
+>    worker threads. Use a hand-rolled in-memory fake driver matching the SQL your function
+>    actually issues (see `src/__tests__/speech-v4-refresh.test.ts` for the pattern: one driver
+>    that answers every real query — conversations/messages/voice_lines/banned_phrases — rather
+>    than mocking the module surface with `vi.mock`/`importOriginal`, which proved unreliable
+>    across multiple tests in one file when combined with `vi.resetModules()`).
+> 5. **Actually run `tsc --noEmit` and `vitest run` before reporting a phase done.** If you hit a
+>    real, reproducible tool failure, paste the exact error in your report; do not report "done"
+>    with unverified/unrun checks, and do not claim "node_modules corruption" without first
+>    verifying `node -e "require('lightningcss')"` actually throws.
+> 6. **Every spoken reply must describe something that actually works.** If a response tells the
+>    owner to say a phrase to trigger a capability, that capability must have a real parser entry,
+>    action handler, and prompt instruction wired end-to-end — not just a plausible-sounding
+>    sentence. Verify this by tracing the promised phrase through to an actual implementation
+>    before considering the phase done.
+> 7. Every DB write path (ban/teach/insert) needs to actually persist what it claims to, even in
+>    the common no-match/empty case — a confirmation message is not itself evidence of persistence.
+> 8. ONE phase per commit, STOP and report after each. If a phase adds a dependency, commit
 >    `package.json` + `package-lock.json` together and confirm before anyone else installs/builds
 >    (§6 node_modules rule).
