@@ -138,5 +138,12 @@ pub fn migrations() -> Vec<Migration> {
             sql: include_str!("migrations/route-watches-v1.sql"),
             kind: MigrationKind::Up,
         },
+        // Migration 21: Saved searches for Naukri/LinkedIn job searches
+        Migration {
+            version: 21,
+            description: "create_saved_searches_table",
+            sql: include_str!("migrations/saved-searches-v21.sql"),
+            kind: MigrationKind::Up,
+        },
     ]
 }
