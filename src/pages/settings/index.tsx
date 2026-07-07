@@ -15,6 +15,7 @@ import {
   ApplicationProfileSettings,
   JobHunterSettings,
   VoicePhrasesSettings,
+  NaukriSearchesSettings,
 } from "./components";
 import {
   ResponseLength,
@@ -110,6 +111,9 @@ const Settings = () => {
 
       {/* Application Profile */}
       <ApplicationProfileSettings />
+
+      {/* Job Searches (Naukri/LinkedIn saved searches) */}
+      <NaukriSearchesSettings />
 
       {/* Job Hunter */}
       <JobHunterSettings />

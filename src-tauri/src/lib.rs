@@ -4,6 +4,7 @@ mod assistant;
 #[cfg(desktop)]
 mod automation;
 mod capture;
+mod chrome_profiles;
 mod db;
 mod gmail_oauth;
 #[cfg(target_os = "android")]
@@ -208,6 +209,7 @@ pub fn run() {
             automation::window_move,
             #[cfg(desktop)]
             automation::window_list_summary,
+            chrome_profiles::list_chrome_profiles,
         ])
         .setup(|app| {
             // Phase 0: brain spawning is removed. The app runs fully in local

@@ -14,3 +14,4 @@ export * from "./GmailSettings";
 export * from "./ApplicationProfileSettings";
 export * from "./JobHunterSettings";
 export * from "./VoicePhrasesSettings";
+export * from "./NaukriSearchesSettings";
