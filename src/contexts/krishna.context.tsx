@@ -41,6 +41,8 @@ import { TurnTiming } from "@/lib/turn-timing";
 import { getResponseSettings } from "@krishna/core/settings";
 import { getRecentSpeech, getDisabledLines, getBannedPhrases } from "@krishna/core/database";
 import { matchCannedResponse } from "@/lib/canned-responses";
+import { SentenceStream } from "@/lib/sentence-stream";
+import { SpeechQueue } from "@/lib/speech-queue";
 
 export interface ConversationTurn {
   id: string;
@@ -415,6 +417,12 @@ function matchSkillPattern(command: string, skill: Skill): Record<string, string
 export function KrishnaProvider({ children }: { children: ReactNode }) {
   const { selectedAIProvider, allAiProviders, systemPrompt: selectedSystemPrompt } = useApp();
   const ttsRef = useRef<TTSProvider>(getTTS());
+  const speechQueueRef = useRef<SpeechQueue | null>(
+    new SpeechQueue(
+      (text) => ttsRef.current.speak(text),
+      () => ttsRef.current.stop(),
+    ),
+  );
 
   useMcpTools();
   useDevicePresence();
@@ -431,6 +439,7 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
   const fillerTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const fillerSpokenRef = useRef(false);
   const fillerPromiseRef = useRef<Promise<void> | null>(null);
+  const sentenceStreamRef = useRef<SentenceStream | null>(null);
   const [voice, setVoiceState] = useState<string>(() => {
     return safeLocalStorage.getItem(STORAGE_KEYS.KRISHNA_VOICE) || "";
   });
@@ -941,7 +950,7 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
     let unlisten: (() => void) | undefined;
     const setup = async () => {
       unlisten = await listen("plan-abort", () => {
-        ttsRef.current.stop();
+        speechQueueRef.current?.stop();
         if (abortRef.current) {
           abortRef.current.abort();
           abortRef.current = null;
@@ -1089,7 +1098,7 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const stopSpeaking = useCallback(() => {
-    ttsRef.current.stop();
+    speechQueueRef.current?.stop();
     if (abortRef.current) {
       abortRef.current.abort();
       abortRef.current = null;
@@ -1873,6 +1882,19 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
           }
         }, 1500);
         let firstChunk = true;
+        sentenceStreamRef.current = new SentenceStream();
+        speechQueueRef.current!.reset();
+        speechQueueRef.current!.onFirstAudio = () => {
+          turnTiming.mark("first_audio");
+          if (fillerTimerRef.current) {
+            clearTimeout(fillerTimerRef.current);
+            fillerTimerRef.current = null;
+          }
+          if (fillerPromiseRef.current) {
+            fillerPromiseRef.current.catch(() => {});
+            fillerPromiseRef.current = null;
+          }
+        };
         const voiceSettings = getResponseSettings();
         for await (const chunk of fetchAIResponse({
           provider,
@@ -1893,18 +1915,40 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
             if (u.cache_creation_input_tokens !== undefined) usageData.cache_creation_input_tokens = u.cache_creation_input_tokens;
           },
         })) {
-          if (signal.aborted) break;
+          if (signal.aborted) {
+            speechQueueRef.current!.stop();
+            break;
+          }
           if (firstChunk) {
             firstChunk = false;
             turnTiming.mark("first_token");
           }
           fullResponse += chunk;
+
+          const sentences = sentenceStreamRef.current.addChunk(chunk);
+          if (sentences.length > 0) {
+            if (!fillerSpokenRef.current && fillerTimerRef.current) {
+              clearTimeout(fillerTimerRef.current);
+              fillerTimerRef.current = null;
+            }
+            for (const s of sentences) {
+              speechQueueRef.current!.enqueue(s);
+            }
+          }
         }
         turnTiming.mark("last_token");
 
         if (!fullResponse || signal.aborted) {
+          speechQueueRef.current?.stop();
           setStatus("idle");
           return;
+        }
+
+        const remaining = sentenceStreamRef.current.flush();
+        if (remaining.length > 0) {
+          for (const s of remaining) {
+            speechQueueRef.current!.enqueue(s);
+          }
         }
 
         const { spokenText, actions, plan } = parseActions(fullResponse);
@@ -1965,14 +2009,14 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
           setLastSpoken(spokenText);
           setKrishnaSpeaking(true);
           try {
-            // Wait for filler to finish naturally (rare with 1500ms threshold)
-            clearTimeout(fillerTimerRef.current!);
-            fillerTimerRef.current = null;
-            if (fillerPromiseRef.current) {
-              await fillerPromiseRef.current;
-            }
-            turnTiming.mark("first_audio");
-            await speakLogged(spokenText, "answer");
+            logSpeech({
+              id: crypto.randomUUID(),
+              text: spokenText,
+              source: "answer",
+              relatedCommandId: currentCaptureIdRef.current ?? null,
+              createdAt: Date.now(),
+            }).catch((err: unknown) => console.error("Failed to log speech:", err));
+            await speechQueueRef.current!.waitUntilDrained();
           } finally {
             turnTiming.mark("last_audio");
             setKrishnaSpeaking(false);
