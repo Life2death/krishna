@@ -1,39 +1,36 @@
-# Agent — next tasks (written by reviewer, 2026-07-07 — updated evening, both merges landed)
+# Agent — next tasks (written by reviewer, 2026-07-07 night — L1 latency merged)
 
-## ✅ Both branches from the afternoon session are MERGED to `main`
-1. **`fix/window-control-wiring`** merged as `22c6168`. `cargo test` (automation module) verified
-   green by the reviewer before merge — do not redo.
-2. **`feat/naukri-searches` (N1-N3)** — rebased onto `e14c10d` by the agent, one review round (a
-   rebase conflict left the `Action` type union malformed — caught by `tsc`, NOT `vitest`; fixed
-   in `5346d4d`), then merged as `669c6ce`. `tsc`/`vitest` (731/731)/`cargo test` all independently
-   reverified green by the reviewer before merge. Non-blocking follow-ups filed for
-   `chrome_profiles.rs` (see `RESUME_HERE.md` §4 item 1) — not urgent, pick up opportunistically.
-3. **`feat/live-transcript` (P1-P3) is still UNMERGED and NOT to be touched** — it was built on
-   `origin/main` (121 commits stale) and must be rebuilt from scratch. See the queue below for
-   when.
-4. **Three branches were pushed to origin in error** (incl. `fix/window-control-wiring`) —
-   [[no-push-release-pipeline]] violation, `release.yml` fired 3x and failed in 0s each time
-   (benign, nothing released). **Never push, ever, any branch. Never branch from `origin/main` —
-   always local `main`.** This is now the second time this class of mistake has happened; treat it
-   as a hard rule with zero exceptions, not a judgment call.
-5. **🔴 Separate incident, now resolved:** `D:\Learning\krishna`'s `.git\config` was found with
-   `core.bare = true` (blocking every git command in both the main checkout and `krishna-m15` —
-   worktrees share the parent's `core.*` config). Fixed by the reviewer (`git config core.bare
-   false`). If you ever see "this operation must be run in a work tree" from a command that should
-   obviously work, check `git config --get core.bare` first before assuming something else broke.
+## ✅ Three branches now MERGED to `main` (window-control-wiring, naukri N1-N3, latency L1)
+1. **`fix/window-control-wiring`** merged as `22c6168`.
+2. **`feat/naukri-searches` (N1-N3)** merged as `669c6ce`. One review round (a rebase conflict left
+   the `Action` type union malformed — caught by `tsc`, NOT `vitest`). Non-blocking follow-ups
+   filed for `chrome_profiles.rs` (see below) — pick up opportunistically.
+3. **`feat/first-word-latency` (L1 only)** merged as `5097b66`. Sentence-streaming speech —
+   Krishna speaks sentence-by-sentence as the reply streams instead of waiting for the full
+   generation. One review round: a cross-chunk sentence-boundary bug (period at the exact end of a
+   stream chunk mis-split decimal/time values — "...at 3." | "5pm sharp.") was found, reproduced,
+   and fixed before merge (`dfc2b3b`). **Known, accepted gap:** no test drives the real
+   `krishna.context.tsx` wiring directly (verified correct by manual review only; no test harness
+   exists for that file in this codebase — pre-existing gap, not new). `tsc`/`vitest` (773/773)
+   independently reverified by the reviewer, twice.
+4. **Never push, ever, any branch. Never branch from `origin/main` — always local `main`.** Three
+   branches were pushed in error earlier this session (`release.yml` fired, failed 0s each time,
+   nothing released, but still a violation). Zero-exception rule from here on.
+5. **Resolved incident:** `D:\Learning\krishna`'s `.git\config` briefly had `core.bare = true`
+   (blocked all git commands in both worktrees — they share the parent's `core.*` config). Fixed
+   via `git config core.bare false`. If "must be run in a work tree" shows up from an obviously-
+   fine command, check `git config --get core.bare` before assuming something else broke.
 
-## Queue (revised order — owner explicitly reordered this on 2026-07-07 evening)
-1. **`LATENCY_FIRST_WORD_PLAN.md` — build this NOW, first.** Owner's explicit priority: "I want
-   Krishna to speak the 1st word ASAP." Branch `feat/first-word-latency` off current local `main`
-   (both merges above are already in it). L1 (sentence-streaming speech) → L2 (EL streaming
-   endpoint) → L3 (end-of-speech earcon + earlier filler) → L4 (STT watchdog+retry) → L5 (latency
-   panel column-label fix). Read the plan's own sequencing note at the top — it explains why this
-   goes before item 2 below (both touch the same `krishna.context.tsx` stream loop; doing them
-   serially avoids a two-branches-one-seam conflict).
-2. **Rebuild `feat/live-transcript` — only after item 1 merges.** Fresh branch off local `main`
-   (post-latency-merge). Re-read `LIVE_TRANSCRIPT_PANEL_PLAN.md`'s Phase 1 at that point — it has
-   an updated note explaining Phase 1 changes once L1 exists (reuse L1's sentence/fence utilities
-   from `src/lib/sentence-stream.ts` instead of writing a second fence parser).
+## Queue — next up
+1. **L2-L5 of `LATENCY_FIRST_WORD_PLAN.md`** (owner hasn't said whether to continue immediately or
+   pivot to the transcript panel first — ask, or default to finishing the latency track since it's
+   mid-flight): L2 ElevenLabs streaming endpoint, L3 end-of-speech earcon + earlier filler, L4 STT
+   watchdog+retry, L5 latency-panel column-label fix. Branch fresh off current local `main` (L1 is
+   already in it).
+2. **`feat/live-transcript` rebuild — now unblocked** (L1 merged). Fresh branch off local `main`.
+   Re-read `LIVE_TRANSCRIPT_PANEL_PLAN.md`'s Phase 1 — it has an L1-exists branch that supersedes
+   the from-scratch version: reuse `src/lib/sentence-stream.ts`'s exported
+   `stripActionFences`/`isInsideFence` instead of writing a second fence parser.
 
 > Read `RESUME_HERE.md` §4/§5/§6/§7 in full first. This file is the short "start here" for the
 > coding agent: what just landed, the current worktree state, and what to build next.
@@ -42,18 +39,22 @@
 - VID-1 (bundled WavLM model + SHA-gate) — done, merged.
 - Natural Speech V1–V4 (variety engine, prompt variety, ban/teach actions, vocabulary refresh) —
   done, merged.
-- Window Control + Naukri N1-N3 — see the "✅ Both branches" section above.
+- Window Control + Naukri N1-N3 + first-word-latency L1 — see the "✅ Three branches" section above.
 
 ## ⚠️ Worktree state — read before you touch anything
-- `main` (`D:\Learning\krishna`) is at `e14c10d`+ (both merges above); `node_modules` healthy.
+- `main` (`D:\Learning\krishna`) is at `5097b66`; `node_modules` healthy.
 - **`krishna-m15`** should be fast-forwarded to main's current HEAD before branching off for new
-  work (`git fetch main-checkout && git checkout main && git merge --ff-only main-checkout/main`,
-  or simplest: `git checkout -b <name> main` directly names main's current tip regardless of what
-  branch `krishna-m15` was last left on).
+  work — simplest: `git checkout -b <name> main` directly names main's current tip regardless of
+  what branch `krishna-m15` was last left on.
 - **Branch fresh off LOCAL `main` per track** (`git checkout -b <name> main`). One track per
-  branch. **Never `origin/main`** — see item 4 above.
+  branch. **Never `origin/main`.**
 - `tsc --noEmit` + `vitest run` + (`cargo test` when Rust changes) all green before every commit —
-  run all of them, not just the fast ones. `tsc` catches things `vitest` doesn't (see item 2 above).
+  run all of them, not just the fast ones. `tsc` catches things `vitest` doesn't (naukri N3 hit
+  this exact gap).
+- **Test the real seam, not just the new module in isolation.** L1's `SentenceStream`/`SpeechQueue`
+  unit tests were excellent, but initially nothing exercised the two working *together*, and
+  nothing exercises the real `krishna.context.tsx` wiring at all (deferred as a known gap this
+  round — see item 3 above). When in doubt, add one test that drives the actual composed/live path.
 
 ## Smaller queued items (not urgent, pick up opportunistically — see `RESUME_HERE.md` §4 / findings docs)
 - **JC-1** — `job_apply_submit` fires the "applied" status POST unconditionally; gate it on
@@ -72,3 +73,5 @@
   Explorer/Teams to the front", a query that matches nothing, Computer Control toggled off.
 - Live-test Naukri N2/N3 (merged `669c6ce`): Settings → Naukri Searches UI + Chrome profile picker,
   and the `open_saved_search` voice command.
+- Live-test first-word latency (merged `5097b66`): ask a question with a long answer and listen for
+  whether the first word arrives noticeably faster — speech should start before generation finishes.

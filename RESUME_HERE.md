@@ -160,23 +160,35 @@ fully built end to end. Full history/spec: `NATURAL_SPEECH_PLAN.md`.
    profile-aware; still sequenced after LinkedIn proves out, and blocked on the D4 owner
    decision in that plan (one shared ApplicationProfile + per-search resume override vs
    per-role profiles).
-5. **🔴 TOP PRIORITY (owner decision, 2026-07-07 evening) · First-word latency** —
-   `LATENCY_FIRST_WORD_PLAN.md` (design-complete): "I want Krishna to speak the 1st word ASAP."
-   Measured 10-35s end-of-speech→first-audio on the dev latency panel. Root cause: 3 full-completion
-   waits in series (full LLM generation before any speech; full TTS synthesis+download before
-   playback starts; a silent window during STT with no earcon/filler). L1 = sentence-streaming
-   speech (speak sentence 1 while generation continues) — the big win, build this first. **This
-   branch must merge BEFORE the live-transcript panel below** (both touch the same
-   `krishna.context.tsx` stream loop; L1 builds the fence-aware sentence splitter that
-   live-transcript will then reuse instead of duplicating). See the plan's own sequencing note.
-6. **Live transcript panel** — `LIVE_TRANSCRIPT_PANEL_PLAN.md` (design-complete, 2026-07-07;
-   **updated to sequence after item 5**): real-time panel showing the current utterance +
-   Krishna's reply **streaming token-by-token** + live status. Owner asked for it (2026-07-07)
-   after expecting the ▦ Dashboard icon to be live. v1 = inline panel reading `useKrishna()` (D1
-   recommends inline over a separate window); live word-by-word STT is explicitly out of v1 (needs
-   a streaming STT provider). One owner decision remains (D2 toggle default) — D1 is settled.
-   **Do not start until item 5 is merged** — re-read Phase 1 in the plan file at that point, it
-   changes once L1 exists.
+5. **First-word latency L1 — DONE + merged (`5097b66`, 2026-07-07 night).** Sentence-streaming
+   speech: Krishna now speaks sentence-by-sentence as the reply streams instead of waiting for full
+   generation + one TTS call. `SentenceStream` (fence-aware incremental splitter) +
+   `SpeechQueue` (serializes playback, atomic `stop()`, `waitUntilDrained()` gates
+   `setKrishnaSpeaking(false)`/`last_audio` on real completion, `onFirstAudio` fires at true first
+   dequeue). `plan-abort`/`stopSpeaking` now route through `speechQueue.stop()` — single choke
+   point, replacing two direct `ttsRef.current.stop()` calls. **One review round:** a cross-chunk
+   sentence-boundary bug (a period landing at the exact end of a stream chunk — e.g. "...at 3." |
+   "5pm sharp." — was mis-split before the digit continuing it arrived) was found, reproduced,
+   fixed, and independently reverified by the reviewer before merge — `tsc` clean, `vitest`
+   773/773, confirmed twice (pre- and post-fix). **Known, accepted gap (not silently covered):**
+   no test exercises the real `krishna.context.tsx` wiring directly — `first-word-latency-
+   integration.test.ts` composes `SentenceStream`+`SpeechQueue` together (good, catches real
+   composition bugs) but doesn't drive the actual stream loop / `onFirstAudio` closure / drain
+   sequencing inside the context file. Verified correct by manual review only. There is no
+   existing test harness for `krishna.context.tsx` in this codebase (pre-existing gap, not new).
+   **L2-L5 (EL streaming endpoint, end-of-speech earcon, STT watchdog, latency-panel column fix)
+   remain unbuilt** — see `LATENCY_FIRST_WORD_PLAN.md`. **Not yet owner-live-tested** — talk to
+   Krishna and listen for whether the first word now arrives noticeably faster, especially on a
+   long reply.
+6. **Live transcript panel** — `LIVE_TRANSCRIPT_PANEL_PLAN.md` (design-complete, 2026-07-07):
+   real-time panel showing the current utterance + Krishna's reply **streaming token-by-token** +
+   live status. Owner asked for it (2026-07-07) after expecting the ▦ Dashboard icon to be live.
+   v1 = inline panel reading `useKrishna()` (D1 recommends inline over a separate window); live
+   word-by-word STT is explicitly out of v1 (needs a streaming STT provider). One owner decision
+   remains (D2 toggle default) — D1 is settled. **Now unblocked** (item 5's L1 is merged) — re-read
+   the plan's Phase 1 before starting, it has an L1-exists branch that supersedes the from-scratch
+   version (reuse `src/lib/sentence-stream.ts`'s exported `stripActionFences`/`isInsideFence`
+   instead of writing a second fence parser).
 7. **Settings menu reorg** — spec approved (`SETTINGS_REORG_PLAN.md`), P1–P3 ready to code.
 8. **Item 6 · Network resilience P1** — `NETWORK_RESILIENCE_PLAN.md`.
 
