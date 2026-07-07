@@ -3,8 +3,17 @@
 > Owner's ask: "I want Krishna to speak the 1st word ASAP." Measured reality (dev latency panel,
 > 2026-07-07): total end-of-speech → first audio routinely 10-35s. Written by reviewer (Claude)
 > for the coding agent. Read `RESUME_HERE.md` §6 first. **Branch off LOCAL `main`
-> (`git checkout -b feat/first-word-latency main`) — NEVER `origin/main` (it is ~121 commits
-> stale; this exact mistake just burned the live-transcript build) and NEVER `git push`.**
+> (`git checkout -b feat/first-word-latency main`) — NEVER `origin/main` (it is stale relative to
+> local `main`; this exact mistake already burned one build this week) and NEVER `git push`.**
+>
+> **Sequencing note (owner decision, 2026-07-07 evening): this ships BEFORE the live-transcript
+> panel**, reversing the original queue order. Practical effect: L1 below is now the FIRST thing
+> to touch the streaming loop in `krishna.context.tsx`, so it builds its own fence-aware sentence
+> splitter from scratch (self-contained — do not wait on or reference a live-transcript helper
+> that doesn't exist yet). When `feat/live-transcript` is rebuilt afterward, IT should reuse L1's
+> sentence/fence utilities (see the updated note in `LIVE_TRANSCRIPT_PANEL_PLAN.md`) rather than
+> duplicating fence-parsing a second time. This also removes the risk flagged earlier of two
+> features editing the same stream loop on parallel branches — now it's strictly sequential.
 
 ---
 
@@ -29,15 +38,20 @@ provider-side.
 ### L1 — Sentence-streaming speech (the big win; do this first)
 Speak the first complete sentence as soon as it exists in the stream, while generation continues.
 
-- **New pure module `src/lib/sentence-stream.ts`:**
+- **New pure module `src/lib/sentence-stream.ts`** (this is now the FIRST fence/sentence parser in
+  the codebase — build it self-contained; `feat/live-transcript` will import from it later, not
+  the other way around):
   - An incremental splitter: feed it raw stream chunks, it emits complete speakable sentences.
   - **Fence-aware:** must suspend emission inside ``` ```action ``` / ``` ```json ``` / ``` ```plan ```
     blocks (fences can open in one chunk and close in a later one — handle the split-across-chunks
-    case). Reuse/extend the fence-strip helper the live-transcript work introduced
-    (`src/lib/live-transcript.ts`) rather than writing a second fence parser.
+    case).
   - Sentence boundary = `.` `!` `?` `।` followed by whitespace/end — but do NOT split on
     abbreviations/decimals ("3.5pm", "Mr. Sharma", "e.g."). Keep the heuristic small and tested,
     not clever.
+  - Export the fence-detection piece as its own named function (e.g. `stripActionFences`/
+    `isInsideFence`) alongside the sentence splitter, even though only the splitter is needed here
+    — the live-transcript rebuild needs exactly that fence-stripping primitive for its streamed
+    display and should import it from this module instead of re-implementing it.
 - **New `SpeechQueue` (in `tts.ts` or a sibling):** serializes chunk playback through the existing
   `TTSProvider.speak()` (each call is one utterance; the queue plays sentences back-to-back).
   - `stop()` clears the queue AND stops current playback — **wire to the existing barge-in /
@@ -101,8 +115,11 @@ Speak the first complete sentence as soon as it exists in the stream, while gene
 5. No double-speak: filler/earcon never overlaps the first real sentence.
 
 ## 4. Process (non-negotiable)
-- Branch `feat/first-word-latency` off **local `main`** AFTER the pending window-control-wiring
-  merge lands. ONE phase per commit; `tsc --noEmit` + `vitest run` green each; STOP and report.
-- **NEVER `git push`** — three branches were pushed today; do not repeat it.
+- Branch `feat/first-word-latency` off **local `main`** (window-control-wiring `22c6168` and
+  naukri N1-N3 `669c6ce` are both already merged — main is current, base off it directly).
+  ONE phase per commit; `tsc --noEmit` + `vitest run` green each; STOP and report.
+- **NEVER `git push`** — three branches were pushed in error on 2026-07-07; do not repeat it.
 - At least one test per phase must drive the seam the live app actually uses (the context wiring /
   the registered provider), not the new module in isolation — the window-control lesson.
+- This branch must merge to `main` BEFORE `feat/live-transcript` is rebuilt (see the sequencing
+  note at the top of this file and `LIVE_TRANSCRIPT_PANEL_PLAN.md`'s updated Phase 1).

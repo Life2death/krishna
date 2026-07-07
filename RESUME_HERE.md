@@ -8,19 +8,22 @@
 
 ## 1. STATUS IN ONE PARAGRAPH
 
-`main` is **GREEN** — `tsc --noEmit` clean, `vitest run` 700/700, `cargo test` (automation module)
-17/17, all reverified 2026-07-07. The **entire job-autopilot track (items 1–4 of the plan) is
-code-complete and merged**: J1 (voice-open pipeline), J2 (queue read), J3 (profile store) + J3-A
-(native resume file picker), and the full **J4 assisted-apply pipeline** (J4-a open+Easy-Apply,
-J4-b auto-fill from profile, J4-c confirm-gated submit). Both owner gates (G-13 Gmail, H1
-job-hunter token) are cleared and live-verified. Item 9 (travel insights, P1–P4), item 13
+`main` is **GREEN** — `tsc --noEmit` clean, `vitest run` 731/731, `cargo test` compiles clean, all
+independently reverified 2026-07-07 night. The **entire job-autopilot track (items 1–4 of the
+plan) is code-complete and merged**: J1 (voice-open pipeline), J2 (queue read), J3 (profile store)
++ J3-A (native resume file picker), and the full **J4 assisted-apply pipeline** (J4-a
+open+Easy-Apply, J4-b auto-fill from profile, J4-c confirm-gated submit). Both owner gates (G-13
+Gmail, H1 job-hunter token) are cleared and live-verified. Item 9 (travel insights, P1–P4), item 13
 (recruiter radar + all RR/G follow-ups), and item 11 (Natural Speech V1–V4) are also fully
-complete. **NEW since last update: Window Control (item 14) is now FULLY COMPLETE + merged** — all
-3 phases (Win32 enumeration + pure matcher, Tauri commands, LLM tool + voice wiring) plus a
-same-day review-fix commit (real next-monitor cycling, honest maximize-default), see §3a. This
-was the queue's #1 item as of 2026-07-06 and is now done — **not yet live-tested by the owner**
-(see §2). **Next: owner live-verifies Window Control**, then pick from the queue in §4 (Naukri
-saved searches is now the top unblocked coding item).
+complete. **Window Control (item 14)** shipped, **failed its first live test** (a real wiring gap —
+see §3a), was diagnosed and fixed same-day, and is now merged (`22c6168`) — **awaiting owner
+retest**. **Naukri saved searches N1–N3 (`NAUKRI_SEARCH_PROFILES_PLAN.md`) is also now DONE +
+merged** (`669c6ce`) — awaiting owner live-test of the Settings UI + voice command. Mid-review, a
+`.git` config corruption (`core.bare=true`, likely from concurrent git operations across
+worktrees) briefly blocked all git commands in both `main` and `krishna-m15` — diagnosed and fixed
+(§6). **Owner has explicitly reordered the queue tonight: first-word latency
+(`LATENCY_FIRST_WORD_PLAN.md`) is now the top priority, ahead of the live-transcript panel** (both
+touch the same stream loop — sequenced deliberately, see §4 item 5 and §7).
 
 ---
 
@@ -134,11 +137,19 @@ fully built end to end. Full history/spec: `NATURAL_SPEECH_PLAN.md`.
 ## 4. PENDING QUEUE — priority order
 
 ### 🟢 Unblocked, ready to pick
-1. **Naukri saved searches + Chrome profiles** — `NAUKRI_SEARCH_PROFILES_PLAN.md`
-   (design-complete, 2026-07-06): N1 store → N2 Settings UI + profile picker → N3 launch/voice
-   tool (all unblocked); N4 = the profile-aware J4b-Naukri assisted apply (blocked on D4 owner
-   decision, see queue item 3). **Now the top unblocked coding item** (Window Control, formerly
-   #4 here, is done — see §3a).
+1. **Naukri saved searches + Chrome profiles — N1–N3 DONE + merged (`669c6ce`, 2026-07-07
+   evening).** `saved_searches` table (migration v21) + CRUD + hostname-validated URL guard,
+   Settings UI + Chrome-profile picker (`list_chrome_profiles`), `open_saved_search` voice action
+   (exact→fuzzy→disambiguate) + `open_in_chrome_profile`. `tsc` clean, `vitest` 731/731, `cargo
+   test` compiles clean — independently reverified before merge. One review round: a rebase
+   conflict left the `Action` type union malformed (orphaned `open_saved_search` member) — caught
+   by `tsc`, NOT by `vitest` (esbuild strips types without checking them — always run both).
+   **Non-blocking follow-ups filed** (see `chrome_profiles.rs`): hardcoded `chrome.exe` path should
+   read `%LOCALAPPDATA%`; `open_in_chrome_profile`'s URL check is a weak prefix match (N1's
+   store-side `hostname` parse is the real gate, so low risk); macOS/Linux
+   `get_default_user_data_dir` has a latent `Option<Option<>>` mismatch (dead code on Windows).
+   **N4** (profile-aware J4b-Naukri assisted apply) still blocked on the D4 owner decision — not
+   started. **Not yet owner-live-tested.**
 2. **J3-A test** (small) — the Browse-button/file-picker wiring has no unit test yet. Mock
    `@tauri-apps/plugin-dialog`'s `open()`, assert it writes `resumePath`.
 3. **JC-1** (medium, `JOB_AUTOPILOT_REVIEW_FINDINGS.md`) — the "applied" status POST in
@@ -149,15 +160,25 @@ fully built end to end. Full history/spec: `NATURAL_SPEECH_PLAN.md`.
    profile-aware; still sequenced after LinkedIn proves out, and blocked on the D4 owner
    decision in that plan (one shared ApplicationProfile + per-search resume override vs
    per-role profiles).
-5. **Live transcript panel** — `LIVE_TRANSCRIPT_PANEL_PLAN.md` (design-complete, 2026-07-07):
-   real-time panel showing the current utterance + Krishna's reply **streaming token-by-token** +
-   live status. Owner asked for it (2026-07-07) after expecting the ▦ Dashboard icon to be live.
-   Core hook already exists (the reply is streamed at `krishna.context.tsx:1866-1891` but the
-   deltas are only accumulated, never surfaced). v1 = inline panel reading `useKrishna()` (D1
-   recommends inline over a separate window); live word-by-word STT is explicitly out of v1
-   (needs a streaming STT provider). One owner decision (D1 inline vs window, D2 toggle default).
-6. **Settings menu reorg** — spec approved (`SETTINGS_REORG_PLAN.md`), P1–P3 ready to code.
-7. **Item 6 · Network resilience P1** — `NETWORK_RESILIENCE_PLAN.md`.
+5. **🔴 TOP PRIORITY (owner decision, 2026-07-07 evening) · First-word latency** —
+   `LATENCY_FIRST_WORD_PLAN.md` (design-complete): "I want Krishna to speak the 1st word ASAP."
+   Measured 10-35s end-of-speech→first-audio on the dev latency panel. Root cause: 3 full-completion
+   waits in series (full LLM generation before any speech; full TTS synthesis+download before
+   playback starts; a silent window during STT with no earcon/filler). L1 = sentence-streaming
+   speech (speak sentence 1 while generation continues) — the big win, build this first. **This
+   branch must merge BEFORE the live-transcript panel below** (both touch the same
+   `krishna.context.tsx` stream loop; L1 builds the fence-aware sentence splitter that
+   live-transcript will then reuse instead of duplicating). See the plan's own sequencing note.
+6. **Live transcript panel** — `LIVE_TRANSCRIPT_PANEL_PLAN.md` (design-complete, 2026-07-07;
+   **updated to sequence after item 5**): real-time panel showing the current utterance +
+   Krishna's reply **streaming token-by-token** + live status. Owner asked for it (2026-07-07)
+   after expecting the ▦ Dashboard icon to be live. v1 = inline panel reading `useKrishna()` (D1
+   recommends inline over a separate window); live word-by-word STT is explicitly out of v1 (needs
+   a streaming STT provider). One owner decision remains (D2 toggle default) — D1 is settled.
+   **Do not start until item 5 is merged** — re-read Phase 1 in the plan file at that point, it
+   changes once L1 exists.
+7. **Settings menu reorg** — spec approved (`SETTINGS_REORG_PLAN.md`), P1–P3 ready to code.
+8. **Item 6 · Network resilience P1** — `NETWORK_RESILIENCE_PLAN.md`.
 
 _(Item 11 · Natural Speech V1–V4 is now FULLY DONE + merged to main `52d5dfa` — see §3.)_
 
@@ -213,6 +234,18 @@ one. See `GMAIL_RECRUITER_RADAR_REVIEW_FINDINGS.md` for the full trail.
 
 ## 6. HOW WE WORK (don't relearn this the hard way)
 
+- **🔴 `core.bare` corruption incident (new, 2026-07-07 evening):** mid-review of the naukri merge,
+  `D:\Learning\krishna`'s `.git\config` was found with `core.bare = true` (plus a self-referential
+  `remote "main-checkout"` pointing at its own path) — every git command failed with "this
+  operation must be run in a work tree", in BOTH the main checkout and `krishna-m15` (worktrees
+  share the parent's `core.*` config). Nobody ran this deliberately; likely a race between two
+  processes touching shared worktree metadata concurrently (same family of issue as the
+  [[one-party-npm-install-rule]] node_modules incident, this time hitting `.git` plumbing instead).
+  **Fix:** `git config core.bare false` in `D:\Learning\krishna` (the actual `.git`, shared by all
+  worktrees — fixing it there fixes every worktree at once). **If you ever see "must be run in a
+  work tree" from a command that should obviously work, check `git config --get core.bare` before
+  assuming something else is broken.**
+
 - **Roles:** Owner decides priorities, live-tests, holds keys/setup (Chrome debug flags, LinkedIn
   login). Agent writes ALL app code in the `D:\Learning\krishna-m15` worktree. Reviewer (Claude)
   plans/reviews/merges + writes docs from `D:\Learning\krishna` (main checkout).
@@ -252,75 +285,52 @@ one. See `GMAIL_RECRUITER_RADAR_REVIEW_FINDINGS.md` for the full trail.
 
 ---
 
-## 7. NEXT AGENT INSTRUCTION (paste this to resume) — updated 2026-07-07 (evening)
+## 7. NEXT AGENT INSTRUCTION (paste this to resume) — updated 2026-07-07 (night)
 
-> **Do these in order. Do not skip ahead to Naukri — there is uncommitted work on top of `main`
-> that must land first.**
+> Read `RESUME_HERE.md` in full first, then `LATENCY_FIRST_WORD_PLAN.md` (the full spec — read
+> before writing any code). `main` is green at `e14c10d`+ the two merges below —
+> `tsc --noEmit` clean, `vitest run` 731/731, `cargo test` compiles clean, all independently
+> reverified. Window Control (§3a) and Naukri N1-N3 (§4 item 1) are **DONE + MERGED** — do not
+> touch those files except via the follow-ups explicitly listed in §4. `feat/live-transcript`
+> (P1-P3) is **UNMERGED and stale** — do not touch it yet, see below for when.
 
-### Step 0 — read, in this order
-1. `RESUME_HERE.md` (this file) in full — current status, open issues, the how-we-work rules (§6).
-2. §3a below (Window Control) — what broke on the *first* owner live test and why, before touching
-   any of those files.
-3. Only once you're committing Step 1 below: skim the diff yourself first (`git diff` in
-   `D:\Learning\krishna`) rather than re-deriving the fix from prose — the prose is a summary, the
-   diff is the truth.
-4. `NAUKRI_SEARCH_PROFILES_PLAN.md` — but only after Steps 1–2 are committed and confirmed green.
-   Don't read it first and start coding N1 before the window-control fix is safely on `main`.
+### Do this now: `LATENCY_FIRST_WORD_PLAN.md` (owner's explicit top priority, reordered ahead of the transcript panel tonight)
+Branch fresh off local `main` (`git checkout -b feat/first-word-latency main` — **never
+`origin/main`**, it is stale relative to local `main`; **never `git push`**, any branch, ever —
+three branches were pushed in error earlier tonight, treat this as a zero-exception rule now).
+Build phases in order, per the plan: **L1** sentence-streaming speech (the big win — speak the
+first sentence while generation continues; new fence-aware splitter in
+`src/lib/sentence-stream.ts` + a `SpeechQueue`) → **L2** ElevenLabs streaming endpoint → **L3**
+end-of-speech earcon + earlier filler → **L4** STT watchdog+retry → **L5** latency-panel column
+label fix. Read the plan's full root-cause section (three full-completion waits in series) before
+touching `krishna.context.tsx` — don't reconstruct it from this summary.
 
-### Step 1 — commit the uncommitted window-control fix (do this FIRST, nothing else)
-`main` at `D:\Learning\krishna` currently has **uncommitted changes on top of `3296a84`** — the
-reviewer (Claude) diagnosed and fixed a real bug live with the owner tonight (2026-07-07): the
-Phase 3 "voice wiring" claimed done in §3a was never actually reachable from a live conversation.
-Full root-cause + fix description is in §3a. Files touched (verify with `git status`/`git diff` in
-`D:\Learning\krishna`, don't trust this list going stale):
-`packages/core/tools/index.ts`, `src/types/assistant.ts`, `src/lib/actions.ts`,
-`src/contexts/krishna.context.tsx`, `src-tauri/src/automation.rs`, plus new/updated tests in
-`src/__tests__/actions.test.ts` and `src/__tests__/window-control.test.ts`.
-- **Your job:** in `krishna-m15`, branch fresh off `main` (`git checkout -b fix/window-control-wiring main`
-  — main already has the uncommitted diff physically in the files at `D:\Learning\krishna`; coordinate
-  with the reviewer on how that diff reaches your worktree, since it's sitting uncommitted in the
-  *other* checkout — don't just re-implement it blind from the prose above).
-  Re-run and confirm green yourself: `tsc --noEmit`, `vitest run` (expect the new registry +
-  action-wiring tests to pass), `cargo test` (automation module, expect 17/17 including the
-  rewritten `focus_hwnd`).
-- Commit as **one commit** (this is a bundled bugfix already reviewed live, not a multi-phase build)
-  with a message describing the three real defects fixed (see §3a) — then STOP and report. Reviewer
-  merges to `main` after confirming the owner's live retest passed.
-- **Do NOT start Naukri or the live-transcript panel until this is committed and the owner has
-  confirmed "bring Teams to the front" actually works live.**
+**Only after this branch merges:** rebuild `feat/live-transcript` from scratch off the new `main`
+(`LIVE_TRANSCRIPT_PANEL_PLAN.md` — its Phase 1 has an updated note for once L1 exists: reuse L1's
+sentence/fence utilities instead of writing a second fence parser). Do not start it before then —
+both plans touch the same stream loop in series specifically to avoid two branches on one seam.
 
-### Step 2 — after Step 1 is merged and owner-confirmed: pick ONE of these two
-Both are design-complete and unblocked; ask the owner which to prioritize, or default to Naukri
-(it's been queued longer).
-
-**2a. Naukri saved searches + Chrome profiles** (`NAUKRI_SEARCH_PROFILES_PLAN.md`) — phases N1–N3
-only (N4 is blocked on the D4 owner decision — do not start it):
-- **N1** — saved-search store (schema/migration, LF-normalized per §6).
-- **N2** — Settings UI + Chrome-profile picker.
-- **N3** — launch + voice tool, wired the same way existing tools are exposed.
-
-**2b. Live transcript panel** (`LIVE_TRANSCRIPT_PANEL_PLAN.md`, new 2026-07-07) — real-time panel
-showing the current utterance + Krishna's reply streaming token-by-token + live status; owner asked
-for it after expecting the ▦ Dashboard icon to be live. Read the whole plan first — it already
-resolves the inline-vs-window question (recommends inline) and scopes out live word-by-word STT.
-Phases: P1 surface `streamingReply` in `krishna.context.tsx` (+ fence-stripping helper, with tests)
-→ P2 `LiveTranscript.tsx` → P3 bar toggle + `resizeWindow`.
-
-> **A caution baked into this queue, from tonight's incident:** the previous Window Control session
-> reported "done" on green `tsc`/`vitest`/`cargo test`, but the feature was completely unreachable
-> in the live app because the tests drove the tool object directly instead of the real
-> registry-lookup and action-dispatch seams the app actually uses. Before reporting either 2a or 2b
-> done, ask yourself: *does at least one test call the function the live app actually calls* (the
-> registered tool via `getTool()`, the parsed action via `executeAction()` — not the tool export
-> imported directly)? If not, add one before reporting done.
+### The lesson driving every check below (from tonight, twice)
+1. **A tool "passing its own unit tests" is not the same as "reachable from the live app."**
+   Window Control's Phase 3 shipped with green `tsc`/`vitest`/`cargo test` but was completely
+   unreachable — the tests called the tool object directly, never the registry (`getTool()`) or
+   the action dispatch (`parseActions`/`executeAction`) the live app actually uses. Before
+   reporting any phase done: does at least one test drive the real seam, not a reimplementation?
+2. **`vitest` passing does not mean `tsc` passes.** The naukri rebase left the `Action` type union
+   syntactically broken (an orphaned member after a stray semicolon) — `vitest` (esbuild, strips
+   types) reported 731/731 green on code that didn't typecheck. Both checks, every commit, no
+   exceptions — and if you see a `.git` "must be run in a work tree" error from an obviously-fine
+   command, check `git config --get core.bare` before assuming something else broke (see §4 item 5
+   in `AGENT_NEXT_TASKS.md` — this hit both worktrees tonight from a race between concurrent git
+   operations, now fixed).
 
 ### Process, non-negotiable (from prior rounds of review — do not repeat these)
-1. ONE phase per commit (Step 1 is the exception — it's one already-reviewed bugfix), `tsc --noEmit`
-   + `vitest run` (and `cargo test` if the phase touches Rust) all green, STOP and report after each.
-2. **Actually run the checks before reporting done.** Don't claim a tool/environment failure without
-   first reproducing it.
-3. **Every spoken reply must describe something that actually works.** Trace claimed success to the
-   real implementation and the real integration seam (see the caution above) — don't assume a call
+1. ONE phase per commit, `tsc --noEmit` + `vitest run` (and `cargo test` if the phase touches Rust)
+   all green, STOP and report after each — don't bundle phases.
+2. **Actually run the checks before reporting done.** Don't claim a tool/environment failure
+   without first reproducing it.
+3. **Every spoken reply must describe something that actually works.** Trace claimed success to
+   the real implementation and the real integration seam (see above) — don't assume a call
    succeeded just because it didn't throw, and don't assume a tool is reachable just because its
    isolated unit test passes.
 4. New external host (if any) → allowlist + CSP in the **same commit** (§6 — hit 3 times already:

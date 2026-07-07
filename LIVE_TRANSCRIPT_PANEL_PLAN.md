@@ -5,6 +5,16 @@
 > asked for "a real-time window of what I'm speaking and what it's replying — like the dashboard
 > log, but live." Written by reviewer (Claude) for the coding agent; read `RESUME_HERE.md` §6
 > (how-we-work) first.
+>
+> **Sequencing note (owner decision, 2026-07-07 evening): `LATENCY_FIRST_WORD_PLAN.md` ships
+> BEFORE this.** Do not start this plan until that one is merged to `main`. That plan's L1 phase
+> adds a fence-aware sentence splitter + a `SpeechQueue` directly into the `krishna.context.tsx`
+> stream loop this plan also touches — building both in parallel would mean two branches editing
+> the same seam. Once L1 is merged, **Phase 1 below changes**: reuse L1's exported fence/sentence
+> utilities (`src/lib/sentence-stream.ts`) instead of writing a second fence parser, and hook the
+> panel's live text off whatever surfaces sentences as they're enqueued for speech (not a raw
+> chunk-accumulator) — re-read the actual `krishna.context.tsx` stream loop at that point rather
+> than assuming it still looks like the snapshot described in §2 below.
 
 ---
 
@@ -69,6 +79,14 @@ the bar isn't permanently tall. Persist the toggle like other bar prefs.
 ## 4. Design — phases (build + commit one at a time, per §6)
 
 ### Phase 1 — surface the streaming reply in the context (the core, no UI yet)
+> **This phase is written assuming `LATENCY_FIRST_WORD_PLAN.md` L1 has NOT yet merged.** If it
+> has (the expected/sequenced case — see the note at the top of this file), re-derive Phase 1
+> from the real code instead of following this verbatim: L1 will have already added a fence-aware
+> sentence splitter and a `SpeechQueue` to the stream loop. In that world, Phase 1 becomes: add
+> `streamingReply` state fed from the SAME sentence-emission point L1 uses to enqueue speech (so
+> the panel shows exactly what's about to be/being spoken, not a raw token accumulator), and
+> import the fence-detection helper from `src/lib/sentence-stream.ts` rather than writing a new
+> one. Everything below this note describes the fallback (streaming loop untouched by L1):
 - In `krishna.context.tsx`, add state `const [streamingReply, setStreamingReply] = useState("")`.
 - In the stream loop (`:1884-1891`): on first chunk `setStreamingReply("")`; each chunk
   `setStreamingReply(prev => prev + chunk)`. **Throttle** UI updates (e.g. `requestAnimationFrame`
