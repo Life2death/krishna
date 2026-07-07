@@ -21,6 +21,7 @@ const mockCreateRouteWatch = vi.hoisted(() => vi.fn());
 const mockGetActiveRouteWatch = vi.hoisted(() => vi.fn());
 const mockCancelRouteWatch = vi.hoisted(() => vi.fn());
 const mockResolvePlace = vi.hoisted(() => vi.fn());
+const mockControlWindowRun = vi.hoisted(() => vi.fn());
 
 vi.mock("@krishna/core/tools/get-travel-time", () => ({
   getTravelTimeTool: {
@@ -69,6 +70,10 @@ vi.mock("@krishna/core/database", () => ({
 
 vi.mock("@krishna/core/tools/place-resolver", () => ({
   resolvePlace: mockResolvePlace,
+}));
+
+vi.mock("@krishna/core/tools/computer", () => ({
+  controlWindowTool: { run: mockControlWindowRun },
 }));
 
 describe("parseActions", () => {
@@ -195,6 +200,26 @@ describe("parseActions", () => {
   it("parses route_watch_cancel action", () => {
     const result = parseActions('```action\n{"action":"route_watch_cancel"}\n```');
     expect(result.actions[0]).toEqual({ action: "route_watch_cancel" });
+  });
+
+  // Regression: control_window was registered as a plan-executor tool but never
+  // recognized as an action, so "bring Teams to the front" was silently dropped
+  // and the LLM's spoken "done" had no tool behind it (audit_log stayed empty).
+  it("parses control_window focus action", () => {
+    const result = parseActions('On it, sir.\n```action\n{"action":"control_window","mode":"focus","target":"Teams"}\n```');
+    expect(result.spokenText).toBe("On it, sir.");
+    expect(result.actions[0]).toEqual({ action: "control_window", mode: "focus", target: "Teams", monitor: undefined });
+  });
+
+  it("parses control_window move action with monitor", () => {
+    const result = parseActions('```action\n{"action":"control_window","mode":"move","target":"Chrome","monitor":"next"}\n```');
+    expect(result.actions[0]).toEqual({ action: "control_window", mode: "move", target: "Chrome", monitor: "next" });
+  });
+
+  it("defaults control_window mode to focus and ignores when target missing", () => {
+    expect(parseActions('```action\n{"action":"control_window","target":"Teams"}\n```').actions[0])
+      .toEqual({ action: "control_window", mode: "focus", target: "Teams", monitor: undefined });
+    expect(parseActions('```action\n{"action":"control_window","mode":"move"}\n```').actions).toHaveLength(0);
   });
 });
 
@@ -660,6 +685,48 @@ describe("executeAction — open", () => {
     });
     expect(result.kind).toBe("status");
     expect(result.spokenResponse).toBe("Opening Job Pipeline");
+  });
+});
+
+describe("executeAction — control_window", () => {
+  beforeEach(() => {
+    mockControlWindowRun.mockReset();
+  });
+
+  it("routes focus to controlWindowTool and speaks the real result (not confirm-gated)", async () => {
+    mockControlWindowRun.mockResolvedValue({ success: true, output: 'Brought "Teams" to the front.' });
+
+    const result = await executeAction({ action: "control_window", mode: "focus", target: "Teams", monitor: undefined });
+
+    expect(mockControlWindowRun).toHaveBeenCalledWith(
+      { action: "focus", target: "Teams" },
+      { vars: {} },
+    );
+    expect(result.needsConfirmation).toBeUndefined();
+    expect(result.kind).toBe("status");
+    expect(result.ok).toBe(true);
+    expect(result.spokenResponse).toBe('Brought "Teams" to the front.');
+  });
+
+  it("passes monitor through for move", async () => {
+    mockControlWindowRun.mockResolvedValue({ success: true, output: 'Moved "Chrome" to the next monitor.' });
+
+    await executeAction({ action: "control_window", mode: "move", target: "Chrome", monitor: "next" });
+
+    expect(mockControlWindowRun).toHaveBeenCalledWith(
+      { action: "move", target: "Chrome", monitor: "next" },
+      { vars: {} },
+    );
+  });
+
+  it("surfaces a failed/ambiguous result honestly instead of claiming success", async () => {
+    mockControlWindowRun.mockResolvedValue({ success: false, error: 'I can see "Settings", "File Explorer" - which one?' });
+
+    const result = await executeAction({ action: "control_window", mode: "focus", target: "Photoshop", monitor: undefined });
+
+    expect(result.ok).toBe(false);
+    expect(result.spokenResponse).toContain("which one?");
+    expect(result.errorDetail).toContain("which one?");
   });
 });
 

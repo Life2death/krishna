@@ -14,6 +14,7 @@ import type { Candidate, Classification } from "@krishna/core/tools/recruiter-ra
 import { getLastCheckAt } from "@krishna/core/tools/recruiter-radar-state";
 import { createRouteWatch, getActiveRouteWatch, cancelRouteWatch, disableLine, getLinesByText, insertLine, getAllLines, getAllLinesByCategory, banPhrase, enableAllPendingLlmLines } from "@krishna/core/database";
 import { resolvePlace } from "@krishna/core/tools/place-resolver";
+import { controlWindowTool } from "@krishna/core/tools/computer";
 
 const ACTION_REGEX = /```action\n([\s\S]*?)```/g;
 const JSON_BLOCK_REGEX = /```json\n([\s\S]*?)```/g;
@@ -116,6 +117,10 @@ export function parseActions(reply: string): ParsedReply {
         }
         if (parsed && parsed.action === "speech_accept_vocabulary") {
           actions.push({ action: "speech_accept_vocabulary" });
+        }
+        if (parsed && parsed.action === "control_window" && parsed.target) {
+          const mode = parsed.mode === "move" ? "move" : "focus";
+          actions.push({ action: "control_window", mode, target: parsed.target, monitor: parsed.monitor });
         }
       } catch {
         // Not valid JSON, ignore
@@ -798,6 +803,25 @@ export async function executeAction(
       return { kind: "status", spokenResponse: "There's nothing pending to accept right now." };
     }
     return { kind: "status", spokenResponse: `Enabled ${count} new phrase${count > 1 ? "s" : ""}, {honorific} — I'll start using them.` };
+  }
+
+  if (action.action === "control_window") {
+    // Not confirm-gated (reversible), but the Rust side hard-refuses when the
+    // Computer Control toggle is off. The tool's spoken output is the real
+    // Win32 result — a zero/ambiguous match returns a disambiguation string,
+    // never a fabricated success.
+    const result = await controlWindowTool.run(
+      { action: action.mode, target: action.target, ...(action.monitor ? { monitor: action.monitor } : {}) },
+      { vars: {} },
+    );
+    return {
+      kind: "status",
+      spokenResponse: result.success
+        ? (result.output || `Done, {honorific}.`)
+        : (result.error || "I couldn't do that with the window, sir."),
+      ok: result.success,
+      errorDetail: result.success ? undefined : result.error,
+    };
   }
 
   return { spokenResponse: "Unknown action" };

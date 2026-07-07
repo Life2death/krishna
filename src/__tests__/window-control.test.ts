@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { controlWindowTool, computerFocusWindowTool } from "@krishna/core/tools/computer";
+import { getTool } from "@krishna/core/tools";
 import type { ToolContext } from "@krishna/core/tools";
 import { setConfirmAction } from "@krishna/core/tools/mcp-bridge";
 
@@ -8,6 +9,23 @@ vi.mock("@tauri-apps/api/core", () => ({
 }));
 
 const mockCtx: ToolContext = { vars: {} };
+
+describe("computer_*/control_window tool registry wiring", () => {
+  // Regression test: these tools were previously imported into index.ts but never
+  // register()-ed, so getTool() returned undefined and the executor's step lookup
+  // (executePlan -> getTool(step.tool)) failed with "Unknown tool" for every real
+  // invocation, even though calling the Tool object directly (as the tests below do)
+  // worked fine. Drive the actual registry lookup, not the exported object.
+  it("registers control_window so the plan executor can find it by name", () => {
+    expect(getTool("control_window")).toBe(controlWindowTool);
+  });
+
+  it("registers all computer_* tools so the plan executor can find them by name", () => {
+    for (const name of ["computer_type", "computer_key", "computer_click", "computer_move", "computer_focus_window"]) {
+      expect(getTool(name)).toBeDefined();
+    }
+  });
+});
 
 describe("control_window tool", () => {
   beforeEach(() => {

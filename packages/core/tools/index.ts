@@ -65,6 +65,12 @@ register(gmailSearchMessagesTool);
 register(gmailReadMessageTool);
 register(gmailListLabelsTool);
 register(gmailSendEmailTool);
+register(computerTypeTool);
+register(computerKeyTool);
+register(computerClickTool);
+register(computerMoveTool);
+register(computerFocusWindowTool);
+register(controlWindowTool);
 
 export function getTool(name: string): Tool | undefined {
   return tools.get(name);

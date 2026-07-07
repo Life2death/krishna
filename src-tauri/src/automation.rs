@@ -436,13 +436,15 @@ pub mod windows_impl {
         EnumDisplayMonitors, GetMonitorInfoW, HDC, HMONITOR, MONITORINFO,
     };
     use windows::Win32::System::ProcessStatus::GetProcessImageFileNameW;
-    use windows::Win32::System::Threading::{OpenProcess, PROCESS_QUERY_INFORMATION};
+    use windows::Win32::System::Threading::{
+        AttachThreadInput, GetCurrentThreadId, OpenProcess, PROCESS_QUERY_INFORMATION,
+    };
     use windows::Win32::UI::Input::KeyboardAndMouse::{keybd_event, KEYBD_EVENT_FLAGS, KEYEVENTF_KEYUP};
     use windows::Win32::UI::WindowsAndMessaging::{
-        EnumWindows, GetWindowLongW, GetWindowPlacement, GetWindowRect, GetWindowTextLengthW, GetWindowTextW,
-        GetWindowThreadProcessId, GWL_EXSTYLE, IsWindowVisible, SetForegroundWindow, SetWindowPos,
-        ShowWindow, SW_MAXIMIZE, SW_RESTORE, WS_EX_TOOLWINDOW, HWND_TOP, SET_WINDOW_POS_FLAGS,
-        WINDOWPLACEMENT,
+        BringWindowToTop, EnumWindows, GetForegroundWindow, GetWindowLongW, GetWindowPlacement,
+        GetWindowRect, GetWindowTextLengthW, GetWindowTextW, GetWindowThreadProcessId, GWL_EXSTYLE,
+        IsIconic, IsWindowVisible, SetForegroundWindow, SetWindowPos, ShowWindow, SW_MAXIMIZE,
+        SW_RESTORE, SW_SHOW, WS_EX_TOOLWINDOW, HWND_TOP, SET_WINDOW_POS_FLAGS, WINDOWPLACEMENT,
     };
 
     unsafe extern "system" fn enum_window_proc(hwnd: HWND, lparam: LPARAM) -> BOOL {
@@ -534,14 +536,58 @@ pub mod windows_impl {
     pub fn focus_hwnd(hwnd: isize) -> Result<(), String> {
         let target = HWND(hwnd as *mut _);
         unsafe {
-            let _ = ShowWindow(target, SW_RESTORE);
+            // Restore first if the window is minimized, otherwise SetForegroundWindow
+            // raises an iconic window that stays visually minimized.
+            if IsIconic(target).as_bool() {
+                let _ = ShowWindow(target, SW_RESTORE);
+            }
 
+            let foreground = GetForegroundWindow();
+            if foreground == target {
+                return Ok(()); // already frontmost — nothing to do
+            }
+
+            // A background process (Krishna) calling SetForegroundWindow is throttled by
+            // Windows unless its input thread is attached to the current foreground thread.
+            // The bare Alt-key nudge alone is unreliable; AttachThreadInput is the robust path.
+            let our_thread = GetCurrentThreadId();
+            let fg_thread = GetWindowThreadProcessId(foreground, None);
+            let target_thread = GetWindowThreadProcessId(target, None);
+
+            let attach_fg = fg_thread != 0 && fg_thread != our_thread;
+            let attach_target =
+                target_thread != 0 && target_thread != our_thread && target_thread != fg_thread;
+            if attach_fg {
+                let _ = AttachThreadInput(our_thread, fg_thread, TRUE);
+            }
+            if attach_target {
+                let _ = AttachThreadInput(our_thread, target_thread, TRUE);
+            }
+
+            // Alt nudge still helps lift the lock in some shells; keep it as a belt-and-braces.
             keybd_event(0x12, 0, KEYBD_EVENT_FLAGS(0), 0);
             keybd_event(0x12, 0, KEYEVENTF_KEYUP, 0);
 
-            let _ = SetForegroundWindow(target);
+            let _ = BringWindowToTop(target);
+            let set_ok = SetForegroundWindow(target).as_bool();
+            let _ = ShowWindow(target, SW_SHOW);
+
+            if attach_fg {
+                let _ = AttachThreadInput(our_thread, fg_thread, FALSE);
+            }
+            if attach_target {
+                let _ = AttachThreadInput(our_thread, target_thread, FALSE);
+            }
+
+            // Verify against reality rather than trusting the call — don't report a
+            // success the user can't see (RESUME_HERE §7.3).
+            let now_fg = GetForegroundWindow();
+            if now_fg == target || set_ok {
+                Ok(())
+            } else {
+                Err("I found the window but Windows blocked me from bringing it to the front.".to_string())
+            }
         }
-        Ok(())
     }
 
     pub fn move_hwnd(

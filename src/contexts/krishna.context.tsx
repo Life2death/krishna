@@ -232,6 +232,17 @@ export const BASE_SYSTEM_PROMPT = [
   '```',
   '- Returns the count of unapplied jobs and the top ones by fit / freshness.',
   '',
+  'WINDOW CONTROL (move/focus other apps\' windows, Windows only):',
+  '- "bring Teams to the front" / "focus Chrome" / "switch to File Explorer" → emit an ACTION block with mode "focus":',
+  '```action',
+  '{"action":"control_window","mode":"focus","target":"Teams"}',
+  '```',
+  '- "move Teams to my other monitor" / "put Chrome on the left screen" → emit an ACTION block with mode "move" (monitor: "left"|"right"|"primary"|"next" or a number):',
+  '```action',
+  '{"action":"control_window","mode":"move","target":"Teams","monitor":"next"}',
+  '```',
+  '- `target` is the app or window name (title or process). This is a real command — emit the action block, do NOT just say you did it. The spoken result comes from the actual window operation; if the window isn\'t found you\'ll get a "which one?" disambiguation to relay. NEVER claim success without emitting the action.',
+  '',
   'MULTI-STEP TASK PLANNING (Phase 4):',
   'For complex requests like "play this song on YouTube" or "type opencode in command prompt", you can output a multi-step plan instead of a single action.',
   'Use the ```plan JSON block:',
@@ -290,7 +301,7 @@ const SYSTEM_PROMPT_RULES = [
   '8. "Open VS Code at path X" or "open my repo in VS Code" → open_target with target "code" and args path (opens VS Code directly at that folder).',
   '9. "Open a terminal" or "open command prompt" → open_target with target "cmd". Then use computer_type and computer_key to type commands into it.',
   '10. Only use computer_* tools when the user explicitly asks you to type/click/control something. Never use them to fill passwords or payment fields.',
-  '11. For "move Chrome to the other monitor" / "bring File Explorer to the front", use the control_window tool with action "focus" or "move", target as the window name (title or app name), and optionally monitor for moves.',
+  '11. For "move Chrome to the other monitor" / "bring File Explorer to the front", emit a control_window ACTION block (see the WINDOW CONTROL section for the exact format) — mode "focus" or "move", target = window/app name, optional monitor for moves. Emit the block; never just say you did it.',
 ].join("\n");
 
 function buildToolsSection(query?: string): string {

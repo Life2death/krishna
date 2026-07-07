@@ -24,7 +24,8 @@ export type Action =
   | { action: "speech_ban"; phrase: string }
   | { action: "speech_teach"; phrase: string; category?: string }
   | { action: "speech_refresh" }
-  | { action: "speech_accept_vocabulary" };
+  | { action: "speech_accept_vocabulary" }
+  | { action: "control_window"; mode: "focus" | "move"; target: string; monitor?: string };
 
 export interface StepAction {
   tool: string;
