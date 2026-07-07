@@ -96,3 +96,47 @@ pub fn list_chrome_profiles() -> Vec<ChromeProfile> {
     profiles.extend(read_profiles_from(&debug_data_dir, "Debug Chrome"));
     profiles
 }
+
+fn find_chrome() -> Option<PathBuf> {
+    let candidates = [
+        r"C:\Program Files\Google\Chrome\Application\chrome.exe",
+        r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
+        r"C:\Users\vikra\AppData\Local\Google\Chrome\Application\chrome.exe",
+    ];
+    for path in &candidates {
+        let p = PathBuf::from(path);
+        if p.exists() {
+            return Some(p);
+        }
+    }
+    None
+}
+
+#[tauri::command]
+pub fn open_in_chrome_profile(url: String, profile_dir: String, debug: bool) -> Result<String, String> {
+    let lower_host = url.to_lowercase();
+    let allowed = lower_host.starts_with("https://naukri.com")
+        || lower_host.starts_with("https://www.naukri.com")
+        || lower_host.starts_with("https://linkedin.com")
+        || lower_host.starts_with("https://www.linkedin.com");
+    if !allowed {
+        return Err("URL must be on naukri.com or linkedin.com".to_string());
+    }
+
+    let chrome = find_chrome().ok_or_else(|| "Chrome not found on this system".to_string())?;
+
+    let mut cmd = std::process::Command::new(&chrome);
+    if !profile_dir.is_empty() {
+        cmd.arg(format!("--profile-directory={}", profile_dir));
+    }
+    if debug {
+        cmd.arg("--remote-debugging-port=9222");
+        cmd.arg(r"--user-data-dir=C:\chrome-krishna");
+        cmd.arg("--remote-allow-origins=*");
+    }
+    cmd.arg(&url);
+
+    cmd.spawn().map_err(|e| format!("Failed to launch Chrome: {}", e))?;
+
+    Ok(format!("Opened {}", url))
+}

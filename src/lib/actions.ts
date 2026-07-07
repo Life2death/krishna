@@ -15,6 +15,7 @@ import { getLastCheckAt } from "@krishna/core/tools/recruiter-radar-state";
 import { createRouteWatch, getActiveRouteWatch, cancelRouteWatch, disableLine, getLinesByText, insertLine, getAllLines, getAllLinesByCategory, banPhrase, enableAllPendingLlmLines } from "@krishna/core/database";
 import { resolvePlace } from "@krishna/core/tools/place-resolver";
 import { controlWindowTool } from "@krishna/core/tools/computer";
+import { getAllSavedSearches } from "@krishna/core/database/saved-searches.action";
 
 const ACTION_REGEX = /```action\n([\s\S]*?)```/g;
 const JSON_BLOCK_REGEX = /```json\n([\s\S]*?)```/g;
@@ -121,6 +122,9 @@ export function parseActions(reply: string): ParsedReply {
         if (parsed && parsed.action === "control_window" && parsed.target) {
           const mode = parsed.mode === "move" ? "move" : "focus";
           actions.push({ action: "control_window", mode, target: parsed.target, monitor: parsed.monitor });
+        }
+        if (parsed && parsed.action === "open_saved_search" && parsed.target) {
+          actions.push({ action: "open_saved_search", target: parsed.target });
         }
       } catch {
         // Not valid JSON, ignore
@@ -671,6 +675,66 @@ export async function executeAction(
 
     await cancelRouteWatch(active.id);
     return { kind: "status", spokenResponse: `Cancelled the route watch from ${active.origin} to ${active.destination}, sir.`, ok: true };
+  }
+
+  if (action.action === "open_saved_search") {
+    try {
+      const searches = await getAllSavedSearches();
+      const lower = action.target.toLowerCase();
+
+      const exact = searches.find((s) => s.name.toLowerCase() === lower);
+      if (exact) {
+        await invoke<string>("open_in_chrome_profile", {
+          url: exact.url,
+          profileDir: exact.chromeProfileDir,
+          debug: exact.mode === "assisted",
+        });
+        return {
+          kind: "status",
+          spokenResponse: `Opening "${exact.name}" in your ${exact.chromeProfileName || "default"} profile, sir.`,
+          ok: true,
+        };
+      }
+
+      const matches = searches.filter(
+        (s) => s.name.toLowerCase().includes(lower) || s.roleTag.toLowerCase().includes(lower),
+      );
+
+      if (matches.length === 0) {
+        return {
+          kind: "status",
+          ok: false,
+          spokenResponse: `I couldn't find a saved search called "${action.target}", sir. You can add one in Settings under Job Searches.`,
+        };
+      }
+
+      if (matches.length > 1) {
+        const list = matches.map((s) => s.name).join(", ");
+        return {
+          kind: "status",
+          spokenResponse: `I found ${matches.length} matching searches: ${list}. Which one?`,
+        };
+      }
+
+      await invoke<string>("open_in_chrome_profile", {
+        url: matches[0].url,
+        profileDir: matches[0].chromeProfileDir,
+        debug: matches[0].mode === "assisted",
+      });
+      return {
+        kind: "status",
+        spokenResponse: `Opening "${matches[0].name}" in your ${matches[0].chromeProfileName || "default"} profile, sir.`,
+        ok: true,
+      };
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return {
+        kind: "status",
+        ok: false,
+        spokenResponse: `I couldn't open that search, sir. ${msg}`,
+        errorDetail: msg,
+      };
+    }
   }
 
   if (action.action === "gmail_send") {

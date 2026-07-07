@@ -210,6 +210,7 @@ pub fn run() {
             #[cfg(desktop)]
             automation::window_list_summary,
             chrome_profiles::list_chrome_profiles,
+            chrome_profiles::open_in_chrome_profile,
         ])
         .setup(|app| {
             // Phase 0: brain spawning is removed. The app runs fully in local
