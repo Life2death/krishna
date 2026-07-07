@@ -22,6 +22,7 @@ const mockGetActiveRouteWatch = vi.hoisted(() => vi.fn());
 const mockCancelRouteWatch = vi.hoisted(() => vi.fn());
 const mockResolvePlace = vi.hoisted(() => vi.fn());
 const mockControlWindowRun = vi.hoisted(() => vi.fn());
+const mockGetAllSavedSearches = vi.hoisted(() => vi.fn());
 
 vi.mock("@krishna/core/tools/get-travel-time", () => ({
   getTravelTimeTool: {
@@ -74,6 +75,10 @@ vi.mock("@krishna/core/tools/place-resolver", () => ({
 
 vi.mock("@krishna/core/tools/computer", () => ({
   controlWindowTool: { run: mockControlWindowRun },
+}));
+
+vi.mock("@krishna/core/database/saved-searches.action", () => ({
+  getAllSavedSearches: mockGetAllSavedSearches,
 }));
 
 describe("parseActions", () => {
@@ -220,6 +225,17 @@ describe("parseActions", () => {
     expect(parseActions('```action\n{"action":"control_window","target":"Teams"}\n```').actions[0])
       .toEqual({ action: "control_window", mode: "focus", target: "Teams", monitor: undefined });
     expect(parseActions('```action\n{"action":"control_window","mode":"move"}\n```').actions).toHaveLength(0);
+  });
+
+  it("parses open_saved_search action from action block", () => {
+    const result = parseActions('On it.\n```action\n{"action":"open_saved_search","target":"PM Mumbai belt"}\n```');
+    expect(result.spokenText).toBe("On it.");
+    expect(result.actions[0]).toEqual({ action: "open_saved_search", target: "PM Mumbai belt" });
+  });
+
+  it("ignores open_saved_search without target", () => {
+    const result = parseActions('```action\n{"action":"open_saved_search"}\n```');
+    expect(result.actions.filter((a) => a.action === "open_saved_search")).toHaveLength(0);
   });
 });
 
@@ -807,6 +823,93 @@ describe("buildRecruiterClassify", () => {
 // ── detectPhantomSave (T4-F1 grounding) ──────────────────────────────────
 // Tests the REAL exported helper (userCommand + spokenText + actions → boolean),
 // not a re-declared regex — this is the layer the grounding logic actually runs at.
+
+describe("executeAction — open_saved_search", () => {
+  beforeEach(() => {
+    vi.mocked(invoke).mockReset();
+    mockGetAllSavedSearches.mockReset();
+  });
+
+  it("opens search on exact name match", async () => {
+    mockGetAllSavedSearches.mockResolvedValue([
+      { id: "s1", name: "PM Mumbai belt", roleTag: "program-manager", url: "https://naukri.com/pm", chromeProfileDir: "Profile 1", chromeProfileName: "PM", mode: "manual", resumePathOverride: null, created_at: 1 },
+    ]);
+    vi.mocked(invoke).mockResolvedValue("OK");
+
+    const result = await executeAction({ action: "open_saved_search", target: "PM Mumbai belt" });
+
+    expect(result.kind).toBe("status");
+    expect(result.ok).toBe(true);
+    expect(result.spokenResponse).toContain("PM Mumbai belt");
+    expect(result.spokenResponse).toContain("PM");
+    expect(invoke).toHaveBeenCalledWith("open_in_chrome_profile", {
+      url: "https://naukri.com/pm",
+      profileDir: "Profile 1",
+      debug: false,
+    });
+  });
+
+  it("fuzzy matches by partial name", async () => {
+    mockGetAllSavedSearches.mockResolvedValue([
+      { id: "s1", name: "PM Mumbai belt", roleTag: "program manager", url: "https://naukri.com/pm", chromeProfileDir: "Profile 1", chromeProfileName: "PM", mode: "manual", resumePathOverride: null, created_at: 1 },
+    ]);
+    vi.mocked(invoke).mockResolvedValue("OK");
+
+    const result = await executeAction({ action: "open_saved_search", target: "program manager" });
+
+    expect(result.ok).toBe(true);
+    expect(result.spokenResponse).toContain("PM Mumbai belt");
+  });
+
+  it("fuzzy matches by roleTag", async () => {
+    mockGetAllSavedSearches.mockResolvedValue([
+      { id: "s1", name: "Director Bangalore", roleTag: "director", url: "https://naukri.com/dir", chromeProfileDir: "Profile 2", chromeProfileName: "Director", mode: "manual", resumePathOverride: null, created_at: 1 },
+    ]);
+    vi.mocked(invoke).mockResolvedValue("OK");
+
+    const result = await executeAction({ action: "open_saved_search", target: "director" });
+
+    expect(result.ok).toBe(true);
+    expect(result.spokenResponse).toContain("Director Bangalore");
+  });
+
+  it("returns not-found when no match", async () => {
+    mockGetAllSavedSearches.mockResolvedValue([]);
+
+    const result = await executeAction({ action: "open_saved_search", target: "nonexistent" });
+
+    expect(result.ok).toBe(false);
+    expect(result.spokenResponse).toContain("couldn't find");
+  });
+
+  it("speaks disambiguation on multiple matches", async () => {
+    mockGetAllSavedSearches.mockResolvedValue([
+      { id: "s1", name: "Director Bangalore", roleTag: "director", url: "https://naukri.com/dir-blr", chromeProfileDir: "Profile 2", chromeProfileName: "Director", mode: "manual", resumePathOverride: null, created_at: 1 },
+      { id: "s2", name: "Director Pune", roleTag: "director", url: "https://naukri.com/dir-pune", chromeProfileDir: "Profile 2", chromeProfileName: "Director", mode: "manual", resumePathOverride: null, created_at: 2 },
+    ]);
+
+    const result = await executeAction({ action: "open_saved_search", target: "director" });
+
+    expect(result.ok).toBeUndefined();
+    expect(result.spokenResponse).toContain("2 matching");
+    expect(result.spokenResponse).toContain("Director Bangalore");
+    expect(result.spokenResponse).toContain("Director Pune");
+    expect(invoke).not.toHaveBeenCalled();
+  });
+
+  it("surfaces invoke errors gracefully", async () => {
+    mockGetAllSavedSearches.mockResolvedValue([
+      { id: "s1", name: "PM Mumbai belt", roleTag: "program-manager", url: "https://naukri.com/pm", chromeProfileDir: "Profile 1", chromeProfileName: "PM", mode: "manual", resumePathOverride: null, created_at: 1 },
+    ]);
+    vi.mocked(invoke).mockRejectedValue(new Error("Chrome not found"));
+
+    const result = await executeAction({ action: "open_saved_search", target: "PM Mumbai belt" });
+
+    expect(result.ok).toBe(false);
+    expect(result.spokenResponse).toContain("couldn't open");
+    expect(result.spokenResponse).toContain("Chrome not found");
+  });
+});
 
 describe("executeAction — gmail (error propagation G-2)", () => {
   beforeEach(() => {

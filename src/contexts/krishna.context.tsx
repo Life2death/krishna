@@ -243,6 +243,16 @@ export const BASE_SYSTEM_PROMPT = [
   '```',
   '- `target` is the app or window name (title or process). This is a real command — emit the action block, do NOT just say you did it. The spoken result comes from the actual window operation; if the window isn\'t found you\'ll get a "which one?" disambiguation to relay. NEVER claim success without emitting the action.',
   '',
+  'SAVED SEARCHES (Naukri/LinkedIn):',
+  '- You can open saved job searches that the owner configured in Settings → Job Searches.',
+  '- Each saved search has a name (e.g. "PM Mumbai belt"), a saved URL, and a Chrome profile binding.',
+  '- "open my program manager search" / "open naukri for director roles" / "open PM Mumbai belt" → emit:',
+  '```action',
+  '{"action":"open_saved_search","target":"program manager"}',
+  '```',
+  '- `target` is the search name or role tag (fuzzy-matched). If there\'s an exact name match, it opens directly. If multiple match, I\'ll list them and ask which one.',
+  '- This is a real command — it launches Chrome in the correct profile, already logged in. NEVER claim you opened it without emitting the action block.',
+  '',
   'MULTI-STEP TASK PLANNING (Phase 4):',
   'For complex requests like "play this song on YouTube" or "type opencode in command prompt", you can output a multi-step plan instead of a single action.',
   'Use the ```plan JSON block:',
@@ -302,6 +312,7 @@ const SYSTEM_PROMPT_RULES = [
   '9. "Open a terminal" or "open command prompt" → open_target with target "cmd". Then use computer_type and computer_key to type commands into it.',
   '10. Only use computer_* tools when the user explicitly asks you to type/click/control something. Never use them to fill passwords or payment fields.',
   '11. For "move Chrome to the other monitor" / "bring File Explorer to the front", emit a control_window ACTION block (see the WINDOW CONTROL section for the exact format) — mode "focus" or "move", target = window/app name, optional monitor for moves. Emit the block; never just say you did it.',
+  '12. For "open my [name] search" / "open naukri for [role]" / "open my saved search", use the open_saved_search action block (see SAVED SEARCHES section). This launches Chrome in the correct profile — never just say you opened it without the action block.',
 ].join("\n");
 
 function buildToolsSection(query?: string): string {

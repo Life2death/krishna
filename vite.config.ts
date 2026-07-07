@@ -17,6 +17,8 @@ export default defineConfig(async () => ({
       // via their realpath (packages/core/...), so aliasing to the symlink path created
       // a second module instance — startup.ts set the driver/http shims on one copy while
       // the hooks read getDatabase()/getHttpFetch() from the other ("SqlDriver not set").
+      "@krishna/core/database/saved-searches.action": path.resolve(__dirname, "packages/core/database/saved-searches.action.ts"),
+      "@krishna/core/types/saved-search": path.resolve(__dirname, "packages/core/types/saved-search.ts"),
       "@krishna/core/database/driver": path.resolve(__dirname, "packages/core/database/driver.ts"),
       "@krishna/core/database": path.resolve(__dirname, "packages/core/database/index.ts"),
       "@krishna/core/http": path.resolve(__dirname, "packages/core/http.ts"),
