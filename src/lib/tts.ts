@@ -320,10 +320,8 @@ export class ElevenLabsTTS implements TTSProvider {
         } catch {
           this._speaking = false;
           this._cleanupStreaming();
-          if (playbackResolve) {
-            playbackResolve();
-            playbackResolve = null;
-          }
+          playbackResolve?.();
+          playbackResolve = null;
         }
       }
     }
