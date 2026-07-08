@@ -8,22 +8,29 @@
 
 ## 1. STATUS IN ONE PARAGRAPH
 
-`main` is **GREEN** — `tsc --noEmit` clean, `vitest run` 731/731, `cargo test` compiles clean, all
-independently reverified 2026-07-07 night. The **entire job-autopilot track (items 1–4 of the
-plan) is code-complete and merged**: J1 (voice-open pipeline), J2 (queue read), J3 (profile store)
-+ J3-A (native resume file picker), and the full **J4 assisted-apply pipeline** (J4-a
-open+Easy-Apply, J4-b auto-fill from profile, J4-c confirm-gated submit). Both owner gates (G-13
-Gmail, H1 job-hunter token) are cleared and live-verified. Item 9 (travel insights, P1–P4), item 13
-(recruiter radar + all RR/G follow-ups), and item 11 (Natural Speech V1–V4) are also fully
-complete. **Window Control (item 14)** shipped, **failed its first live test** (a real wiring gap —
-see §3a), was diagnosed and fixed same-day, and is now merged (`22c6168`) — **awaiting owner
-retest**. **Naukri saved searches N1–N3 (`NAUKRI_SEARCH_PROFILES_PLAN.md`) is also now DONE +
-merged** (`669c6ce`) — awaiting owner live-test of the Settings UI + voice command. Mid-review, a
-`.git` config corruption (`core.bare=true`, likely from concurrent git operations across
-worktrees) briefly blocked all git commands in both `main` and `krishna-m15` — diagnosed and fixed
-(§6). **Owner has explicitly reordered the queue tonight: first-word latency
-(`LATENCY_FIRST_WORD_PLAN.md`) is now the top priority, ahead of the live-transcript panel** (both
-touch the same stream loop — sequenced deliberately, see §4 item 5 and §7).
+`main` is **GREEN** — `tsc --noEmit` clean, `vitest run` 802/802 (43 files), all independently
+reverified 2026-07-08. The **entire job-autopilot track (items 1–4)**, travel insights (item 9),
+recruiter radar (item 13), Natural Speech V1–V4 (item 11), Window Control (item 14, merged
+`22c6168`, awaiting owner retest), and Naukri saved searches N1–N3 (merged `669c6ce`, awaiting
+owner live-test) are all code-complete and merged. **First-word latency is now FULLY DONE, L1–L5,
+all merged**: L1 sentence-streaming (`5097b66`), L2 ElevenLabs streaming endpoint (`508a5ec`), L3–L5
+earcon/STT-watchdog/panel-fix (`8e8d8c6`). **The live-transcript panel is also DONE + merged**
+(`e16b0c7`) — real-time panel showing the utterance + Krishna's reply streaming in, built on L1's
+infra per the plan. A final post-merge review pass caught and fixed two more issues (`3339561`): a
+test-mock type gap in `live-transcript.test.tsx` that should have always failed `tsc`, and a genuine
+`stripActionFences` double-space bug that the *original* L1 tests had actually baked in as
+"expected" (asserting the buggy output, not the intended one) — both fixed, both re-verified.
+**Neither of the panel/latency owner-facing features has been live-tested yet** — see §2.
+
+**⚠️ Incident tonight (fully resolved, no data lost):** mid-review, `D:\Learning\krishna`'s working
+tree suddenly showed ~139 tracked files deleted from disk (including `packages/core/tools/index.ts`)
+plus a degraded `node_modules` (devDependencies missing, matching a corruption signature seen
+earlier in `krishna-m15`) — most likely the agent's tooling operating in this checkout instead of
+its own worktree during an unrelated cleanup task. Nothing was staged/committed, so `git restore .`
+recovered all 139 files instantly; `node_modules` was rebuilt via `rm -rf node_modules && npm ci`
+(same fix as the earlier `krishna-m15` incident). **If you ever see a wave of "D " deletions in
+`git status` here with no corresponding commits, this is recoverable — don't panic, check
+`git reflog` (HEAD not moving means nothing was actually lost) and `git restore .`.**
 
 ---
 
@@ -160,61 +167,38 @@ fully built end to end. Full history/spec: `NATURAL_SPEECH_PLAN.md`.
    profile-aware; still sequenced after LinkedIn proves out, and blocked on the D4 owner
    decision in that plan (one shared ApplicationProfile + per-search resume override vs
    per-role profiles).
-5. **First-word latency — L1+L2 DONE + merged, L3-L5 remain.**
-   - **L1 (`5097b66`, 2026-07-07 night):** sentence-streaming speech — Krishna speaks
-     sentence-by-sentence as the reply streams instead of waiting for full generation + one TTS
-     call. `SentenceStream` (fence-aware incremental splitter) + `SpeechQueue` (serializes
-     playback, atomic `stop()`, `waitUntilDrained()` gates `setKrishnaSpeaking(false)`/`last_audio`
-     on real completion, `onFirstAudio` fires at true first dequeue). `plan-abort`/`stopSpeaking`
-     route through `speechQueue.stop()` — single choke point. One review round: a cross-chunk
-     sentence-boundary bug (period at the exact end of a stream chunk mis-split decimals/times)
-     found, fixed, reverified. **Known, accepted gap:** no test drives the real
-     `krishna.context.tsx` wiring directly (verified by manual review only — no test harness exists
-     for that file in this codebase).
-   - **L2 (`508a5ec`, 2026-07-08):** ElevenLabs streaming endpoint — when the WebView supports
-     MediaSource, `ElevenLabsTTS` now streams `/v1/text-to-speech/{id}/stream`
-     (`optimize_streaming_latency: 3`) and starts playback on the first chunk instead of waiting
-     for the whole synthesis to download; falls back to the original blob path when MSE isn't
-     available. **Three review rounds, all real bugs, all fixed:** (1) `audio.play().catch(() =>
-     {})` in both new code paths silently swallowed play() rejections — since the original
-     pre-L2 code awaited `play()` directly (propagating to the outer catch), this was a genuine
-     regression that could permanently hang `speak()`/the whole `SpeechQueue`/`setKrishnaSpeaking`
-     if `play()` ever rejected (autoplay block, no audio device, decode failure) — fixed by
-     awaiting `play()` in both paths and routing rejection through the same path as `onerror`;
-     (2) `mediaSource.addEventListener("sourceerror", ...)` listened for an event that doesn't
-     exist in the MediaSource spec (dead code) — replaced with a 5s timeout on `sourceopen`;
-     (3) fixing #1 hit a genuine TypeScript limitation — a `let` reassigned only inside a `Promise`
-     executor closure isn't narrowed by outer-scope flow analysis, so even `?.()` failed to
-     typecheck — root-caused via an isolated repro and fixed with an explicit type assertion.
-     `tsc` clean, `vitest` 783/783, independently reverified by the reviewer after each round (not
-     taken from the agent's reports — one round's "tsc clean" claim didn't hold up on
-     independent re-check).
-   - **L3-L5 (end-of-speech earcon, STT watchdog, latency-panel column fix) remain unbuilt** — see
-     `LATENCY_FIRST_WORD_PLAN.md`.
-   - **Workflow incident during L2 — fully resolved.** The coding agent's session ran the initial
-     L2 branch-cleanup + commit directly inside `D:\Learning\krishna` (the reviewer's checkout)
-     instead of a `krishna-m15` worktree — traced via reflog, nothing was lost (`main` was
-     untouched). `krishna-m15` got deregistered as a worktree in the process, went orphaned +
-     locked (post-restart Windows Search/Defender scan), and the agent's follow-up work happened
-     from a temporary `D:\Learning\krishna-m15-l2` instead (with a `node_modules` junction back to
-     the reviewer's — the exact shared-resource hazard [[one-party-npm-install-rule]] warns about,
-     though harmless this time since `package.json` never diverged). Once the lock cleared: L2 was
-     merged, `krishna-m15-l2` was removed cleanly (branch deleted, directory removed — real
-     `node_modules` at `D:\Learning\krishna` confirmed untouched throughout), and `krishna-m15` was
-     **recreated as a proper independent worktree** on a fresh branch (`feat/first-word-latency-l3`,
-     off current `main`) — no `node_modules` yet, needs a real `npm install` there before the next
-     phase starts (intentional — avoids resurrecting the junction).
-   - **Not yet owner-live-tested** — talk to Krishna and listen for whether the first word now
-     arrives noticeably faster, especially on a long reply.
-6. **Live transcript panel** — `LIVE_TRANSCRIPT_PANEL_PLAN.md` (design-complete, 2026-07-07):
-   real-time panel showing the current utterance + Krishna's reply **streaming token-by-token** +
-   live status. Owner asked for it (2026-07-07) after expecting the ▦ Dashboard icon to be live.
-   v1 = inline panel reading `useKrishna()` (D1 recommends inline over a separate window); live
-   word-by-word STT is explicitly out of v1 (needs a streaming STT provider). One owner decision
-   remains (D2 toggle default) — D1 is settled. **Now unblocked** (item 5's L1 is merged) — re-read
-   the plan's Phase 1 before starting, it has an L1-exists branch that supersedes the from-scratch
-   version (reuse `src/lib/sentence-stream.ts`'s exported `stripActionFences`/`isInsideFence`
-   instead of writing a second fence parser).
+5. **First-word latency — FULLY DONE, L1-L5, all merged.** `main` at `8e8d8c6` (L1-L5) then
+   `e16b0c7`/`3339561` (live-transcript + post-merge fixes) — see `LATENCY_FIRST_WORD_PLAN.md` for
+   the original spec. Summary: L1 sentence-streaming speech (`SentenceStream`+`SpeechQueue`, speaks
+   sentence-by-sentence instead of waiting for the full reply) → L2 ElevenLabs MSE streaming
+   endpoint (starts playback on the first audio chunk) → L3 80ms earcon at end-of-speech + dynamic
+   filler-watchdog timing → L4 8s STT abort+retry → L5 latency-panel column fix. **Real bugs found
+   and fixed across the review rounds** (not just style nits): a `play()`-rejection hang risk in
+   L2's ElevenLabs refactor (silently swallowed rejections could permanently freeze
+   `SpeechQueue`/`setKrishnaSpeaking`), a dead `mediaSource.addEventListener("sourceerror", ...)`
+   listener for a non-existent MediaSource event, a genuine TypeScript closure-narrowing limitation
+   that took an isolated repro to root-cause, an L4 branch that was originally cut as a *sibling* of
+   L3 rather than stacked on top of it (caught via `git merge-base --is-ancestor` before any code
+   review — would have silently dropped L3 from `main` if merged as-is), and two test-reimplementation
+   gaps (L3's filler-timing tests re-derived the formula inline instead of testing the real code;
+   L4's retry tests never advanced fake timers to prove the 8s abort itself fires) — both closed by
+   extracting `computeFillerRemaining()` as an exported pure function and adding a real abort-timeout
+   test. **Known, accepted gap:** no test drives the real `krishna.context.tsx` wiring directly for
+   any of L1-L3 (verified by manual review only — no test harness exists for that file in this
+   codebase). `tsc` clean, `vitest` 802/802 (43 files) on merged `main` — independently reverified
+   by the reviewer at every stage, not taken from the agent's self-reports (which twice this session
+   claimed "tsc clean" that didn't hold up on independent re-check).
+6. **Live transcript panel — DONE + merged** (`e16b0c7`). Real-time inline popover (bar toggle,
+   off by default, matches `KrishnaChat`'s pattern) showing the current utterance + Krishna's reply
+   streaming in as it's generated (fed from L1's sentence-emission point, so it shows exactly what's
+   spoken — no raw tokens, no JSON fences), falling back to `lastSpoken` once idle. Merged cleanly on
+   top of the L1-L5 latency merge (both touch `krishna.context.tsx`'s stream loop; auto-merge
+   succeeded, hand-verified both sets of changes coexist correctly). **Post-merge review pass found
+   and fixed two more issues** (`3339561`): a test-mock type gap that should have always failed
+   `tsc` (fixed via `as ReturnType<typeof useKrishna>`, since the internal `KrishnaContextType`
+   isn't exported), and a genuine `stripActionFences` double-space bug where the *original* L1 tests
+   had actually asserted the buggy output as correct — both fixed, `main` re-verified 802/802.
+   **Neither this nor item 5 has been owner-live-tested yet.**
 7. **Settings menu reorg** — spec approved (`SETTINGS_REORG_PLAN.md`), P1–P3 ready to code.
 8. **Item 6 · Network resilience P1** — `NETWORK_RESILIENCE_PLAN.md`.
 

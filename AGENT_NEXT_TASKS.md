@@ -1,60 +1,58 @@
-# Agent — next tasks (written by reviewer, 2026-07-08 — L1+L2 latency merged)
+# Agent — next tasks (written by reviewer, 2026-07-08 — latency L1-L5 + live-transcript both merged)
 
-## ✅ Latency L2 merged (`508a5ec`) — three review rounds, all real, all fixed
-1. **`feat/first-word-latency-l2`** merged as `508a5ec`. ElevenLabs streaming endpoint (MSE) —
-   speaks the first chunk as it arrives instead of waiting for full synthesis. Review found and
-   fixed: (1) `audio.play().catch(() => {})` silently swallowed play() rejections — a genuine
-   regression vs. the pre-L2 code, could permanently hang the whole `SpeechQueue`; (2) a
-   `mediaSource.addEventListener("sourceerror", ...)` listener for an event that doesn't exist in
-   the MediaSource spec (dead code, no timeout fallback); (3) fixing #1 hit a real TypeScript
-   closure-narrowing limitation requiring an explicit type assertion (not just `?.()`). `tsc`/
-   `vitest` (783/783) independently reverified by the reviewer after **each** round — one round's
-   "tsc clean" self-report did not hold up on independent re-check. See `RESUME_HERE.md` §4 item 5
-   for the full writeup.
-2. **Workflow incident during L2 — fully resolved, read once, don't repeat.** Your previous
-   session ran the branch cleanup + initial L2 commit directly inside `D:\Learning\krishna` (the
-   reviewer's checkout) instead of a `krishna-m15` worktree — nothing was lost, but `krishna-m15`
-   got deregistered as a worktree and went orphaned+locked, so follow-up work happened from a
-   temporary `D:\Learning\krishna-m15-l2` (with a `node_modules` junction back to the reviewer's —
-   the exact shared-resource hazard [[one-party-npm-install-rule]] warns about, harmless this time
-   only because `package.json` never diverged). **Everything is now cleaned up:** `krishna-m15-l2`
-   is gone (branch deleted, directory removed), and `krishna-m15` has been recreated as a proper,
-   independent worktree on branch `feat/first-word-latency-l3` off current `main`. **Never operate
-   in `D:\Learning\krishna` — that's reviewer-only, always.** Before starting new work, run
-   `git worktree list` and confirm you're in a path that isn't the reviewer's main checkout.
-3. **`krishna-m15` has no `node_modules` yet** — run a real `npm install` (or `npm ci`) there before
-   starting L3. Do not junction/link it to another checkout's `node_modules`.
+## ✅ Everything from tonight's latency + transcript work is MERGED to `main` (`3339561`)
+1. **First-word latency L1-L5 fully merged** (`5097b66` L1, `508a5ec` L2, `8e8d8c6` L3-L5). Real
+   bugs found and fixed across every phase — see `RESUME_HERE.md` §4 item 5 for the full list
+   (play()-rejection hang risk, dead MediaSource event listener, a TypeScript closure-narrowing
+   limitation, an L4 branch that didn't actually contain L3, two test-reimplementation gaps). Do
+   not touch any of this — it's done.
+2. **Live-transcript panel fully merged** (`e16b0c7`, plus post-merge fixes `3339561`). Do not
+   touch — it's done. See `RESUME_HERE.md` §4 item 6.
+3. **🔴 Second workflow incident tonight, fully resolved, read this carefully.** After the L2
+   incident (agent working in the reviewer's checkout instead of a worktree), it happened AGAIN in
+   a different form: `D:\Learning\krishna`'s working tree suddenly showed ~139 tracked files
+   deleted from disk (`packages/core/tools/index.ts`, all of `apps/brain`, etc.) plus a degraded
+   `node_modules`. Nothing was staged/committed, so it was fully recoverable (`git restore .` +
+   `rm -rf node_modules && npm ci`) and nothing was lost — but this is now the SECOND time
+   something operated on the reviewer's checkout instead of an agent worktree. **Before running
+   ANY command that touches files, run `pwd` and `git worktree list` and confirm you are NOT in
+   `D:\Learning\krishna`.** If you ever find yourself there, stop immediately and switch to your
+   assigned worktree first.
 4. **Never push, ever, any branch, without the owner explicitly asking that exact time.** Standing
    rule, no exceptions absent a fresh explicit ask.
 
 ## Queue — next up
-1. **L3-L5 of `LATENCY_FIRST_WORD_PLAN.md`**: L3 end-of-speech earcon + earlier filler, L4 STT
-   watchdog+retry, L5 latency-panel column-label fix. Branch fresh off current local `main` (L1+L2
-   are both in it).
-2. **`feat/live-transcript` rebuild** — unblocked (L1 merged). Re-read
-   `LIVE_TRANSCRIPT_PANEL_PLAN.md`'s Phase 1 first — it has an L1-exists branch that supersedes the
-   from-scratch version: reuse `src/lib/sentence-stream.ts`'s exported
-   `stripActionFences`/`isInsideFence` instead of writing a second fence parser.
+Nothing is currently blocking. Pick one:
+1. **Settings menu reorg** — spec approved (`SETTINGS_REORG_PLAN.md`), P1–P3 ready to code.
+2. **Item 6 · Network resilience P1** — `NETWORK_RESILIENCE_PLAN.md`.
+3. Smaller queued items below.
 
 > Read `RESUME_HERE.md` in full first. This file is the short "start here" for the coding agent:
 > what just landed, the current worktree state, and what to build next.
 
-## Everything else already on `main` (do NOT redo — full history in `RESUME_HERE.md` §3/§3a/§5)
-- VID-1 (bundled WavLM model + SHA-gate), Natural Speech V1–V4, Window Control, Naukri N1-N3,
-  first-word-latency L1+L2 — all done, merged. See "✅ Latency L2 merged" above for the latest.
+## Everything else already on `main` (do NOT redo — full history in `RESUME_HERE.md` §3/§3a/§4/§5)
+- VID-1, Natural Speech V1–V4, Window Control, Naukri N1-N3, first-word-latency L1-L5,
+  live-transcript panel — all done, merged. See "✅ Everything from tonight's..." above.
 
 ## ⚠️ Worktree state — read before you touch anything
-- `main` (`D:\Learning\krishna`) is at `e7676d2`. **Reviewer-only — never work here.**
-- `D:\Learning\krishna-m15` is a fresh, clean worktree on branch `feat/first-word-latency-l3`, no
-  `node_modules` yet (see item 3 above) — this is where L3 work should happen.
+- `main` (`D:\Learning\krishna`) is at `3339561`. **Reviewer-only — never work here, ever, for any
+  reason.** This has now bitten us twice.
+- Confirm your actual worktree with `git worktree list` before starting anything. If your assigned
+  worktree doesn't exist or is in a bad state, say so and wait for the reviewer rather than
+  falling back to the main checkout.
 - **Branch fresh off LOCAL `main` per track** (`git checkout -b <name> main`). One track per
   branch. **Never `origin/main`.**
 - `tsc --noEmit` + `vitest run` + (`cargo test` when Rust changes) all green before every commit —
-  and actually paste the real output, not just "clean" — two separate rounds this week had a
-  self-reported "tsc clean" that didn't hold up on independent re-check.
-- **Test the real seam, not just the new module in isolation** where practical — L2's regression
-  tests correctly did this (mocked `HTMLMediaElement.prototype.play` and drove the real `speak()`
-  method), which is exactly the right pattern to keep using.
+  and actually paste the real output, not just "clean". Multiple rounds this week had a
+  self-reported "tsc clean" that didn't hold up on independent re-check — including one on a
+  now-merged branch, caught only because the reviewer re-verified main itself after merging rather
+  than trusting the pre-merge report. Always assume your own report needs independent confirmation.
+- **Test the real seam, not just the new module in isolation** where practical. Two related traps
+  worth remembering: a test can assert output that happens to match a *buggy* implementation
+  (stripActionFences's original tests baked in a whitespace bug as "correct" — nobody caught it
+  until a differently-scoped test later exposed the inconsistency), and a mock can be missing a
+  type assertion that would have caught it immediately (`ReturnType<typeof someHook>` is the
+  pattern to reach for when mocking a hook that returns a large, non-exported interface).
 
 ## Smaller queued items (not urgent, pick up opportunistically — see `RESUME_HERE.md` §4 / findings docs)
 - **JC-1** — `job_apply_submit` fires the "applied" status POST unconditionally; gate it on
@@ -66,9 +64,7 @@
   Windows).
 - **Minor L2 follow-up (non-blocking):** in `_speakStreaming`, when `play()` rejects on the first
   chunk, the read loop doesn't `break` — it keeps consuming the network stream and appending to a
-  `SourceBuffer` that will never play until the response body is exhausted. Harmless (each append
-  after cleanup is caught and logged as a warning) but wasteful. Worth a `break` next time you're
-  in that file.
+  `SourceBuffer` that will never play until the response body is exhausted. Harmless but wasteful.
 
 ## Owner action still open (not agent work)
 - Live mic-test of VID-1: speak to Krishna once, confirm the model loads fast with no re-download
@@ -78,6 +74,8 @@
   Explorer/Teams to the front", a query that matches nothing, Computer Control toggled off.
 - Live-test Naukri N2/N3 (merged `669c6ce`): Settings → Naukri Searches UI + Chrome profile picker,
   and the `open_saved_search` voice command.
-- Live-test first-word latency L1+L2 (merged `5097b66`, `508a5ec`): ask a question with a long
-  answer and listen for whether the first word arrives noticeably faster — speech should start
-  before generation finishes.
+- Live-test first-word latency L1-L5 (merged through `8e8d8c6`): ask a question with a long answer
+  and listen for whether the first word arrives noticeably faster — speech should start well before
+  generation finishes, with a short earcon right at end-of-speech.
+- Live-test the live transcript panel (merged `e16b0c7`): toggle it on via the bar's captions icon,
+  ask something, and confirm the reply streams in live without any JSON ever flashing.
