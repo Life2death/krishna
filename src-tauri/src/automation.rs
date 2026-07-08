@@ -645,6 +645,24 @@ pub mod windows_impl {
             .position(|m| cx >= m.rect.0 && cx < m.rect.2 && cy >= m.rect.1 && cy < m.rect.3)
             .map(|i| i as u32)
     }
+
+    // The foreground window's screen rect — used by screen-capture ("what am I looking
+    // at") to target whichever monitor the user is actually working on, instead of
+    // wherever the (never-focused, focus:false) Krishna bar happens to sit. Since the
+    // bar never steals focus, the foreground window for a voice-triggered command is
+    // reliably whatever app the user was last using.
+    pub fn foreground_window_rect() -> Option<(i32, i32, i32, i32)> {
+        let hwnd = unsafe { GetForegroundWindow() };
+        if hwnd.0.is_null() {
+            return None;
+        }
+        let mut rect: RECT = unsafe { std::mem::zeroed() };
+        let ok = unsafe { GetWindowRect(hwnd, &mut rect) };
+        if ok.is_err() {
+            return None;
+        }
+        Some((rect.left, rect.top, rect.right, rect.bottom))
+    }
 }
 
 // Stub for non-Windows: no-op compile-time safe stand-ins
@@ -658,6 +676,7 @@ pub mod windows_impl {
     pub fn is_window_maximized(_hwnd: isize) -> bool { false }
     pub fn get_window_text(_hwnd: isize) -> String { String::new() }
     pub fn window_monitor_index(_hwnd: isize, _monitors: &[MonitorInfo]) -> Option<u32> { None }
+    pub fn foreground_window_rect() -> Option<(i32, i32, i32, i32)> { None }
 }
 
 // ── Tests ─────────────────────────────────────────────────────────

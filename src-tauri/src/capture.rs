@@ -299,31 +299,32 @@ async fn do_capture_to_base64(window: tauri::WebviewWindow) -> Result<String, St
     if window.label() != "main" {
         return Err("Capture not allowed from this window".to_string());
     }
+    // Prefer the foreground window's monitor — that's whatever the user is actually
+    // working on. The Krishna bar itself never takes focus (focus:false in
+    // tauri.conf.json), so for a voice-triggered "what am I looking at" the foreground
+    // window is reliably the app the user was last using, not wherever the bar sits.
+    // Falls back to the bar's own geometry (the previous behavior) if the foreground
+    // window can't be determined (non-Windows, or the lookup fails for any reason).
+    let foreground_rect = crate::automation::windows_impl::foreground_window_rect();
+
     let monitor_fallback = window
         .current_monitor()
         .ok()
         .flatten()
         .or_else(|| window.primary_monitor().ok().flatten());
 
-    let geometry = match (window.outer_position(), window.outer_size()) {
-        (Ok(position), Ok(size)) => {
-            let width = size.width.min(i32::MAX as u32) as i32;
-            let height = size.height.min(i32::MAX as u32) as i32;
-            let left = position.x;
-            let top = position.y;
-            (
-                left,
-                top,
-                left.saturating_add(width),
-                top.saturating_add(height),
-                left.saturating_add(width / 2),
-                top.saturating_add(height / 2),
-            )
-        }
-        _ => {
-            if let Some(monitor) = &monitor_fallback {
-                let position = monitor.position();
-                let size = monitor.size();
+    let geometry = if let Some((left, top, right, bottom)) = foreground_rect {
+        (
+            left,
+            top,
+            right,
+            bottom,
+            left.saturating_add((right - left) / 2),
+            top.saturating_add((bottom - top) / 2),
+        )
+    } else {
+        match (window.outer_position(), window.outer_size()) {
+            (Ok(position), Ok(size)) => {
                 let width = size.width.min(i32::MAX as u32) as i32;
                 let height = size.height.min(i32::MAX as u32) as i32;
                 let left = position.x;
@@ -336,8 +337,26 @@ async fn do_capture_to_base64(window: tauri::WebviewWindow) -> Result<String, St
                     left.saturating_add(width / 2),
                     top.saturating_add(height / 2),
                 )
-            } else {
-                (0, 0, 0, 0, 0, 0)
+            }
+            _ => {
+                if let Some(monitor) = &monitor_fallback {
+                    let position = monitor.position();
+                    let size = monitor.size();
+                    let width = size.width.min(i32::MAX as u32) as i32;
+                    let height = size.height.min(i32::MAX as u32) as i32;
+                    let left = position.x;
+                    let top = position.y;
+                    (
+                        left,
+                        top,
+                        left.saturating_add(width),
+                        top.saturating_add(height),
+                        left.saturating_add(width / 2),
+                        top.saturating_add(height / 2),
+                    )
+                } else {
+                    (0, 0, 0, 0, 0, 0)
+                }
             }
         }
     };
