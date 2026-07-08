@@ -1,11 +1,12 @@
-import { Card, Updater, DragButton, CustomCursor, Button, KrishnaVAD, KrishnaChat, MobileVoiceButton } from "@/components";
+import { Card, Updater, DragButton, CustomCursor, Button, KrishnaVAD, KrishnaChat, MobileVoiceButton, LiveTranscript, Popover, PopoverContent, PopoverTrigger } from "@/components";
 import { Completion, BrainSelector, SystemPromptSelector } from "./components";
 import { useApp, useKrishna } from "@/hooks";
 import { useApp as useAppContext } from "@/contexts";
-import { LayoutDashboardIcon, SquareIcon } from "lucide-react";
+import { LayoutDashboardIcon, SquareIcon, CaptionsIcon } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
 import { ErrorBoundary } from "react-error-boundary";
 import { ErrorLayout } from "@/layouts";
+import { useState } from "react";
 import { getPlatform } from "@/lib";
 
 const App = () => {
@@ -16,6 +17,7 @@ const App = () => {
   });
   const { customizable } = useAppContext();
   const platform = getPlatform();
+  const [transcriptOpen, setTranscriptOpen] = useState(false);
 
   const openDashboard = async () => {
     try {
@@ -55,6 +57,23 @@ const App = () => {
             <BrainSelector />
             <SystemPromptSelector />
             <KrishnaChat />
+            <Popover open={transcriptOpen} onOpenChange={setTranscriptOpen}>
+              <PopoverTrigger asChild>
+                <Button
+                  size="icon"
+                  className="cursor-pointer"
+                  title="Live transcript"
+                >
+                  <CaptionsIcon className="h-4 w-4" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent align="end" side="bottom" sideOffset={8} className="w-80 p-0">
+                <div className="px-3 py-2 border-b border-border/20">
+                  <span className="text-sm font-semibold">Live Transcript</span>
+                </div>
+                <LiveTranscript />
+              </PopoverContent>
+            </Popover>
             <Button
               size="icon"
               className="cursor-pointer"
