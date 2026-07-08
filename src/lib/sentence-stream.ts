@@ -96,5 +96,5 @@ export function isInsideFence(text: string): boolean {
 }
 
 export function stripActionFences(text: string): string {
-  return text.replace(/```[\s\S]*?```/g, "").trim();
+  return text.replace(/```[\s\S]*?```/g, " ").replace(/ {2,}/g, " ").trim();
 }

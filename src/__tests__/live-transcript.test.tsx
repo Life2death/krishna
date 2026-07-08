@@ -16,7 +16,7 @@ function mockKrishna(overrides: Record<string, any> = {}) {
     streamingReply: "",
     lastSpoken: "",
     ...overrides,
-  });
+  } as ReturnType<typeof useKrishna>);
 }
 
 describe("LiveTranscript", () => {

@@ -139,12 +139,12 @@ describe("isInsideFence", () => {
 describe("stripActionFences", () => {
   it("removes fenced blocks", () => {
     const result = stripActionFences("Hello. ```action\n{ \"tool\": \"test\" }\n``` Done.");
-    expect(result).toBe("Hello.  Done.");
+    expect(result).toBe("Hello. Done.");
   });
 
   it("removes multiple fenced blocks", () => {
     const result = stripActionFences("A. ```action\n{}\n``` B. ```json\n{}\n``` C.");
-    expect(result).toBe("A.  B.  C.");
+    expect(result).toBe("A. B. C.");
   });
 
   it("returns original text when no fences", () => {
