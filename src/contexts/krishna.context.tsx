@@ -56,6 +56,7 @@ interface KrishnaContextType {
   setKrishnaEnabled: (v: boolean) => void;
   status: AssistantStatus;
   lastSpoken: string;
+  streamingReply: string;
   processCommand: (transcription: string, opts?: { skipWakeWord?: boolean; voiceVerifyResult?: VoiceVerifyResult }) => Promise<void>;
   stopSpeaking: () => void;
   pendingCommand: string | null;
@@ -434,12 +435,39 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
   const [lastError, setLastError] = useState<string | null>(null);
   const clearLastError = useCallback(() => setLastError(null), []);
   const [conversationHistory, setConversationHistory] = useState<ConversationTurn[]>([]);
+  const [streamingReply, setStreamingReply] = useState("");
   const pendingUserTextRef = useRef<string>("");
   const currentCaptureIdRef = useRef<string | null>(null);
   const fillerTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const fillerSpokenRef = useRef(false);
   const fillerPromiseRef = useRef<Promise<void> | null>(null);
   const sentenceStreamRef = useRef<SentenceStream | null>(null);
+  const streamingAccumRef = useRef("");
+  const streamingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const flushStreamingReply = useCallback(() => {
+    if (streamingTimerRef.current) {
+      clearTimeout(streamingTimerRef.current);
+      streamingTimerRef.current = null;
+    }
+    setStreamingReply(streamingAccumRef.current);
+  }, []);
+
+  function clearStreamingReply() {
+    if (streamingTimerRef.current) {
+      clearTimeout(streamingTimerRef.current);
+      streamingTimerRef.current = null;
+    }
+    streamingAccumRef.current = "";
+    setStreamingReply("");
+  }
+
+  function feedStreamingReply(text: string) {
+    streamingAccumRef.current += text;
+    if (!streamingTimerRef.current) {
+      streamingTimerRef.current = setTimeout(flushStreamingReply, 50);
+    }
+  }
   const [voice, setVoiceState] = useState<string>(() => {
     return safeLocalStorage.getItem(STORAGE_KEYS.KRISHNA_VOICE) || "";
   });
@@ -959,6 +987,7 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
           planAbortRef.current.abort();
           planAbortRef.current = null;
         }
+        clearStreamingReply();
         setStatus("idle");
         setKrishnaSpeaking(false);
       });
@@ -1480,6 +1509,7 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
       pendingUserTextRef.current = command;
       setLastError(null);
       setPendingCommand(command);
+      clearStreamingReply();
       setStatus("thinking");
 
       const turnTiming = new TurnTiming();
@@ -1934,6 +1964,7 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
             }
             for (const s of sentences) {
               speechQueueRef.current!.enqueue(s);
+              feedStreamingReply(s + " ");
             }
           }
         }
@@ -1949,8 +1980,10 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
         if (remaining.length > 0) {
           for (const s of remaining) {
             speechQueueRef.current!.enqueue(s);
+            feedStreamingReply(s + " ");
           }
         }
+        flushStreamingReply();
 
         const { spokenText, actions, plan } = parseActions(fullResponse);
 
@@ -2217,7 +2250,7 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
       <KrishnaContext.Provider
         value={{
           enabled, setKrishnaEnabled,
-          status, lastSpoken,
+          status, lastSpoken, streamingReply,
           processCommand, stopSpeaking,
           pendingCommand,
           lastError, clearLastError,
