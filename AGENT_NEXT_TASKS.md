@@ -11,19 +11,19 @@
    `vitest` (783/783) independently reverified by the reviewer after **each** round — one round's
    "tsc clean" self-report did not hold up on independent re-check. See `RESUME_HERE.md` §4 item 5
    for the full writeup.
-2. **🔴 Workflow incident during L2 (resolved, but read this):** your session ran the branch
-   cleanup + initial L2 commit directly inside `D:\Learning\krishna` (the reviewer's checkout)
-   instead of a `krishna-m15` worktree. Nothing was lost, but `krishna-m15` got deregistered as a
-   worktree in the process and its folder is now orphaned + **locked** (permission denied, likely a
-   post-restart Windows Search/Defender scan) — work continued from `D:\Learning\krishna-m15-l2`
-   instead. **Never operate in `D:\Learning\krishna` — that's reviewer-only, always.** Before
-   starting new work, run `git worktree list` and confirm you're about to work in a path that
-   isn't the reviewer's main checkout.
-3. **🟡 `krishna-m15-l2`'s `node_modules` is a junction to the reviewer's `node_modules`** (same
-   physical folder, not an independent install) — harmless right now since `package.json` is
-   identical on both sides, but it's the exact shared-node_modules setup
-   [[one-party-npm-install-rule]] warns about. **Before starting L3below, run a real `npm install`
-   (or `npm ci`) in whatever worktree you use** instead of relying on the junction.
+2. **Workflow incident during L2 — fully resolved, read once, don't repeat.** Your previous
+   session ran the branch cleanup + initial L2 commit directly inside `D:\Learning\krishna` (the
+   reviewer's checkout) instead of a `krishna-m15` worktree — nothing was lost, but `krishna-m15`
+   got deregistered as a worktree and went orphaned+locked, so follow-up work happened from a
+   temporary `D:\Learning\krishna-m15-l2` (with a `node_modules` junction back to the reviewer's —
+   the exact shared-resource hazard [[one-party-npm-install-rule]] warns about, harmless this time
+   only because `package.json` never diverged). **Everything is now cleaned up:** `krishna-m15-l2`
+   is gone (branch deleted, directory removed), and `krishna-m15` has been recreated as a proper,
+   independent worktree on branch `feat/first-word-latency-l3` off current `main`. **Never operate
+   in `D:\Learning\krishna` — that's reviewer-only, always.** Before starting new work, run
+   `git worktree list` and confirm you're in a path that isn't the reviewer's main checkout.
+3. **`krishna-m15` has no `node_modules` yet** — run a real `npm install` (or `npm ci`) there before
+   starting L3. Do not junction/link it to another checkout's `node_modules`.
 4. **Never push, ever, any branch, without the owner explicitly asking that exact time.** Standing
    rule, no exceptions absent a fresh explicit ask.
 
@@ -44,11 +44,9 @@
   first-word-latency L1+L2 — all done, merged. See "✅ Latency L2 merged" above for the latest.
 
 ## ⚠️ Worktree state — read before you touch anything
-- `main` (`D:\Learning\krishna`) is at `508a5ec`. **Reviewer-only — never work here.**
-- `D:\Learning\krishna-m15` (the usual agent worktree) is currently an orphaned, locked, non-git
-  folder — do not try to use it until the owner confirms it's cleared. Use
-  `D:\Learning\krishna-m15-l2` for now, or run `git worktree add` at a fresh path if that's also
-  unavailable.
+- `main` (`D:\Learning\krishna`) is at `e7676d2`. **Reviewer-only — never work here.**
+- `D:\Learning\krishna-m15` is a fresh, clean worktree on branch `feat/first-word-latency-l3`, no
+  `node_modules` yet (see item 3 above) — this is where L3 work should happen.
 - **Branch fresh off LOCAL `main` per track** (`git checkout -b <name> main`). One track per
   branch. **Never `origin/main`.**
 - `tsc --noEmit` + `vitest run` + (`cargo test` when Rust changes) all green before every commit —
@@ -83,6 +81,3 @@
 - Live-test first-word latency L1+L2 (merged `5097b66`, `508a5ec`): ask a question with a long
   answer and listen for whether the first word arrives noticeably faster — speech should start
   before generation finishes.
-- Manually clear the locked `D:\Learning\krishna-m15` folder (close any Explorer window on that
-  path, or just wait — likely a post-restart AV/indexer scan) so the reviewer can recreate it as a
-  proper worktree.
