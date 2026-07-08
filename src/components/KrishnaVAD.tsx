@@ -3,8 +3,8 @@ import { useMicVAD } from "@ricky0123/vad-react";
 import { AlertCircleIcon } from "lucide-react";
 import { Button } from "@/components";
 import { KrishnaChakra } from "./KrishnaChakra";
-import { fetchSTT } from "@/lib";
 import { floatArrayToWav } from "@/lib/utils";
+import { fetchSTTWithRetryDefault } from "@/lib/fetch-stt-with-retry";
 import { useApp } from "@/contexts";
 import { useKrishna } from "@/hooks";
 import { isKrishnaSpeaking } from "@/lib/krishna-mutex";
@@ -102,7 +102,7 @@ export const KrishnaVAD = () => {
         // no status indicator, no command gating.
         const voiceIdEnabled = isVoiceIdEnabled();
         const [transcription, voiceResult] = await Promise.all([
-          fetchSTT({
+          fetchSTTWithRetryDefault({
             provider: providerConfig,
             selectedProvider: selectedSttProvider,
             audio: audioBlob,

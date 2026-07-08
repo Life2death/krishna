@@ -14,6 +14,7 @@ export interface STTParams {
     variables: Record<string, string>;
   };
   audio: File | Blob;
+  signal?: AbortSignal;
 }
 
 /**
@@ -23,7 +24,7 @@ export async function fetchSTT(params: STTParams): Promise<string> {
   let warnings: string[] = [];
 
   try {
-    const { provider, selectedProvider, audio } = params;
+    const { provider, selectedProvider, audio, signal } = params;
 
     if (!provider) throw new Error("Provider not provided");
     if (!selectedProvider) throw new Error("Selected provider not provided");
@@ -159,6 +160,7 @@ export async function fetchSTT(params: STTParams): Promise<string> {
         method: curlJson.method || "POST",
         headers: finalHeaders,
         body: curlJson.method === "GET" ? undefined : body,
+        signal,
       });
     } catch (e) {
       throw new Error(`Network error: ${e instanceof Error ? e.message : e}`);
