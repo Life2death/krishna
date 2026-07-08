@@ -1871,6 +1871,9 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
         let fullResponse = "";
         fillerSpokenRef.current = false;
         turnTiming.mark("request_sent");
+        const endOfSpeech = turnTiming.marks.end_of_speech;
+        const elapsedSinceEos = endOfSpeech !== undefined ? performance.now() - endOfSpeech : 0;
+        const fillerRemaining = Math.max(0, 2500 - elapsedSinceEos);
         fillerTimerRef.current = setTimeout(() => {
           if (!fillerSpokenRef.current) {
             fillerSpokenRef.current = true;
@@ -1880,7 +1883,7 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
               fillerPromiseRef.current = null;
             });
           }
-        }, 1500);
+        }, fillerRemaining);
         let firstChunk = true;
         sentenceStreamRef.current = new SentenceStream();
         speechQueueRef.current!.reset();
