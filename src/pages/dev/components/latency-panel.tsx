@@ -80,14 +80,14 @@ export const LatencyPanel = () => {
               <tr className="text-muted-foreground border-b border-border/30">
                 <th className="text-left py-1 pr-2">#</th>
                 <th className="text-left py-1 pr-2">Transcript</th>
-                <th className="text-right py-1 pr-2">E→Send</th>
-                <th className="text-right py-1 pr-2">Send→1st</th>
-                <th className="text-right py-1 pr-2">1st→Audio</th>
-                <th className="text-right py-1 pr-2">Gen</th>
-                <th className="text-right py-1 pr-2">Tokens</th>
-                <th className="text-right py-1 pr-2">Cache</th>
-                <th className="text-right py-1 pr-2">TTS</th>
-                <th className="text-right py-1 pr-2">Total</th>
+                <th className="text-right py-1 pr-2" title="Speech-to-text: end of speech to request sent">STT</th>
+                <th className="text-right py-1 pr-2" title="Time to first token: request sent to first token received">TTFT</th>
+                <th className="text-right py-1 pr-2" title="First token to first audio played">1st Audio</th>
+                <th className="text-right py-1 pr-2" title="Generation time: first token to last token">Gen</th>
+                <th className="text-right py-1 pr-2" title="Prompt tokens / completion tokens">Tokens</th>
+                <th className="text-right py-1 pr-2" title="Cache read / cache created tokens">Cache</th>
+                <th className="text-right py-1 pr-2" title="Audio playback duration: first audio to last audio">Speech</th>
+                <th className="text-right py-1 pr-2" title="Total turn time: end of speech to last audio">Total</th>
                 <th className="text-left py-1 pl-2">Outcome</th>
               </tr>
             </thead>
