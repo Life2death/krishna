@@ -160,26 +160,55 @@ fully built end to end. Full history/spec: `NATURAL_SPEECH_PLAN.md`.
    profile-aware; still sequenced after LinkedIn proves out, and blocked on the D4 owner
    decision in that plan (one shared ApplicationProfile + per-search resume override vs
    per-role profiles).
-5. **First-word latency L1 — DONE + merged (`5097b66`, 2026-07-07 night).** Sentence-streaming
-   speech: Krishna now speaks sentence-by-sentence as the reply streams instead of waiting for full
-   generation + one TTS call. `SentenceStream` (fence-aware incremental splitter) +
-   `SpeechQueue` (serializes playback, atomic `stop()`, `waitUntilDrained()` gates
-   `setKrishnaSpeaking(false)`/`last_audio` on real completion, `onFirstAudio` fires at true first
-   dequeue). `plan-abort`/`stopSpeaking` now route through `speechQueue.stop()` — single choke
-   point, replacing two direct `ttsRef.current.stop()` calls. **One review round:** a cross-chunk
-   sentence-boundary bug (a period landing at the exact end of a stream chunk — e.g. "...at 3." |
-   "5pm sharp." — was mis-split before the digit continuing it arrived) was found, reproduced,
-   fixed, and independently reverified by the reviewer before merge — `tsc` clean, `vitest`
-   773/773, confirmed twice (pre- and post-fix). **Known, accepted gap (not silently covered):**
-   no test exercises the real `krishna.context.tsx` wiring directly — `first-word-latency-
-   integration.test.ts` composes `SentenceStream`+`SpeechQueue` together (good, catches real
-   composition bugs) but doesn't drive the actual stream loop / `onFirstAudio` closure / drain
-   sequencing inside the context file. Verified correct by manual review only. There is no
-   existing test harness for `krishna.context.tsx` in this codebase (pre-existing gap, not new).
-   **L2-L5 (EL streaming endpoint, end-of-speech earcon, STT watchdog, latency-panel column fix)
-   remain unbuilt** — see `LATENCY_FIRST_WORD_PLAN.md`. **Not yet owner-live-tested** — talk to
-   Krishna and listen for whether the first word now arrives noticeably faster, especially on a
-   long reply.
+5. **First-word latency — L1+L2 DONE + merged, L3-L5 remain.**
+   - **L1 (`5097b66`, 2026-07-07 night):** sentence-streaming speech — Krishna speaks
+     sentence-by-sentence as the reply streams instead of waiting for full generation + one TTS
+     call. `SentenceStream` (fence-aware incremental splitter) + `SpeechQueue` (serializes
+     playback, atomic `stop()`, `waitUntilDrained()` gates `setKrishnaSpeaking(false)`/`last_audio`
+     on real completion, `onFirstAudio` fires at true first dequeue). `plan-abort`/`stopSpeaking`
+     route through `speechQueue.stop()` — single choke point. One review round: a cross-chunk
+     sentence-boundary bug (period at the exact end of a stream chunk mis-split decimals/times)
+     found, fixed, reverified. **Known, accepted gap:** no test drives the real
+     `krishna.context.tsx` wiring directly (verified by manual review only — no test harness exists
+     for that file in this codebase).
+   - **L2 (`508a5ec`, 2026-07-08):** ElevenLabs streaming endpoint — when the WebView supports
+     MediaSource, `ElevenLabsTTS` now streams `/v1/text-to-speech/{id}/stream`
+     (`optimize_streaming_latency: 3`) and starts playback on the first chunk instead of waiting
+     for the whole synthesis to download; falls back to the original blob path when MSE isn't
+     available. **Three review rounds, all real bugs, all fixed:** (1) `audio.play().catch(() =>
+     {})` in both new code paths silently swallowed play() rejections — since the original
+     pre-L2 code awaited `play()` directly (propagating to the outer catch), this was a genuine
+     regression that could permanently hang `speak()`/the whole `SpeechQueue`/`setKrishnaSpeaking`
+     if `play()` ever rejected (autoplay block, no audio device, decode failure) — fixed by
+     awaiting `play()` in both paths and routing rejection through the same path as `onerror`;
+     (2) `mediaSource.addEventListener("sourceerror", ...)` listened for an event that doesn't
+     exist in the MediaSource spec (dead code) — replaced with a 5s timeout on `sourceopen`;
+     (3) fixing #1 hit a genuine TypeScript limitation — a `let` reassigned only inside a `Promise`
+     executor closure isn't narrowed by outer-scope flow analysis, so even `?.()` failed to
+     typecheck — root-caused via an isolated repro and fixed with an explicit type assertion.
+     `tsc` clean, `vitest` 783/783, independently reverified by the reviewer after each round (not
+     taken from the agent's reports — one round's "tsc clean" claim didn't hold up on
+     independent re-check).
+   - **L3-L5 (end-of-speech earcon, STT watchdog, latency-panel column fix) remain unbuilt** — see
+     `LATENCY_FIRST_WORD_PLAN.md`.
+   - **⚠️ Workflow incident during L2 (now resolved):** the coding agent's session ran the initial
+     L2 branch-cleanup + commit directly inside `D:\Learning\krishna` (the reviewer's checkout)
+     instead of a `krishna-m15` worktree — traced via reflog, nothing was lost (`main` was
+     untouched), but `krishna-m15` got deregistered as a worktree in the process, leaving an
+     orphaned, no-longer-git-tracked folder on disk that's been **locked (permission denied on
+     rename/delete) since a machine restart** — likely Windows Search/Defender scanning it, hasn't
+     cleared on its own yet. The agent's follow-up work happened in a new path,
+     `D:\Learning\krishna-m15-l2`, instead. **Owner: try deleting/renaming
+     `D:\Learning\krishna-m15-l2` — sorry, `D:\Learning\krishna-m15` — the orphaned one — manually
+     once the lock clears (close any Explorer window on that path); it's inert, safe to remove.**
+   - **⚠️ Also from that incident:** `krishna-m15-l2`'s `node_modules` is a Windows junction
+     pointing at `D:\Learning\krishna\node_modules` (the reviewer's, same physical folder) — not an
+     independent install. Harmless right now (`package.json` is identical on both sides) but
+     reintroduces the exact shared-`node_modules` hazard [[one-party-npm-install-rule]] already
+     documents. **Before the next phase (L3), run a real `npm install`/`npm ci` in whatever worktree
+     is used next instead of relying on this junction.**
+   - **Not yet owner-live-tested** — talk to Krishna and listen for whether the first word now
+     arrives noticeably faster, especially on a long reply.
 6. **Live transcript panel** — `LIVE_TRANSCRIPT_PANEL_PLAN.md` (design-complete, 2026-07-07):
    real-time panel showing the current utterance + Krishna's reply **streaming token-by-token** +
    live status. Owner asked for it (2026-07-07) after expecting the ▦ Dashboard icon to be live.

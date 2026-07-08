@@ -1,64 +1,62 @@
-# Agent — next tasks (written by reviewer, 2026-07-07 night — L1 latency merged)
+# Agent — next tasks (written by reviewer, 2026-07-08 — L1+L2 latency merged)
 
-## ✅ Three branches now MERGED to `main` (window-control-wiring, naukri N1-N3, latency L1)
-1. **`fix/window-control-wiring`** merged as `22c6168`.
-2. **`feat/naukri-searches` (N1-N3)** merged as `669c6ce`. One review round (a rebase conflict left
-   the `Action` type union malformed — caught by `tsc`, NOT `vitest`). Non-blocking follow-ups
-   filed for `chrome_profiles.rs` (see below) — pick up opportunistically.
-3. **`feat/first-word-latency` (L1 only)** merged as `5097b66`. Sentence-streaming speech —
-   Krishna speaks sentence-by-sentence as the reply streams instead of waiting for the full
-   generation. One review round: a cross-chunk sentence-boundary bug (period at the exact end of a
-   stream chunk mis-split decimal/time values — "...at 3." | "5pm sharp.") was found, reproduced,
-   and fixed before merge (`dfc2b3b`). **Known, accepted gap:** no test drives the real
-   `krishna.context.tsx` wiring directly (verified correct by manual review only; no test harness
-   exists for that file in this codebase — pre-existing gap, not new). `tsc`/`vitest` (773/773)
-   independently reverified by the reviewer, twice.
-4. **Never push, ever, any branch, without the owner explicitly asking that exact time. Never
-   branch from `origin/main` — always local `main`.** Three branches were pushed in error on
-   2026-07-07 (`release.yml` fired, failed 0s each time, nothing released, but still a violation).
-   **Note:** the owner DID explicitly ask to push `main` on 2026-07-08 (ahead of a machine restart,
-   wanted a GitHub backup) — `origin/main` is now at `18d5a23`. That was a one-time, explicit
-   exception, not a policy change — still branch from local `main` and still don't push anything
-   without being asked fresh each time.
-5. **Resolved incident:** `D:\Learning\krishna`'s `.git\config` briefly had `core.bare = true`
-   (blocked all git commands in both worktrees — they share the parent's `core.*` config). Fixed
-   via `git config core.bare false`. If "must be run in a work tree" shows up from an obviously-
-   fine command, check `git config --get core.bare` before assuming something else broke.
+## ✅ Latency L2 merged (`508a5ec`) — three review rounds, all real, all fixed
+1. **`feat/first-word-latency-l2`** merged as `508a5ec`. ElevenLabs streaming endpoint (MSE) —
+   speaks the first chunk as it arrives instead of waiting for full synthesis. Review found and
+   fixed: (1) `audio.play().catch(() => {})` silently swallowed play() rejections — a genuine
+   regression vs. the pre-L2 code, could permanently hang the whole `SpeechQueue`; (2) a
+   `mediaSource.addEventListener("sourceerror", ...)` listener for an event that doesn't exist in
+   the MediaSource spec (dead code, no timeout fallback); (3) fixing #1 hit a real TypeScript
+   closure-narrowing limitation requiring an explicit type assertion (not just `?.()`). `tsc`/
+   `vitest` (783/783) independently reverified by the reviewer after **each** round — one round's
+   "tsc clean" self-report did not hold up on independent re-check. See `RESUME_HERE.md` §4 item 5
+   for the full writeup.
+2. **🔴 Workflow incident during L2 (resolved, but read this):** your session ran the branch
+   cleanup + initial L2 commit directly inside `D:\Learning\krishna` (the reviewer's checkout)
+   instead of a `krishna-m15` worktree. Nothing was lost, but `krishna-m15` got deregistered as a
+   worktree in the process and its folder is now orphaned + **locked** (permission denied, likely a
+   post-restart Windows Search/Defender scan) — work continued from `D:\Learning\krishna-m15-l2`
+   instead. **Never operate in `D:\Learning\krishna` — that's reviewer-only, always.** Before
+   starting new work, run `git worktree list` and confirm you're about to work in a path that
+   isn't the reviewer's main checkout.
+3. **🟡 `krishna-m15-l2`'s `node_modules` is a junction to the reviewer's `node_modules`** (same
+   physical folder, not an independent install) — harmless right now since `package.json` is
+   identical on both sides, but it's the exact shared-node_modules setup
+   [[one-party-npm-install-rule]] warns about. **Before starting L3below, run a real `npm install`
+   (or `npm ci`) in whatever worktree you use** instead of relying on the junction.
+4. **Never push, ever, any branch, without the owner explicitly asking that exact time.** Standing
+   rule, no exceptions absent a fresh explicit ask.
 
 ## Queue — next up
-1. **L2-L5 of `LATENCY_FIRST_WORD_PLAN.md`** (owner hasn't said whether to continue immediately or
-   pivot to the transcript panel first — ask, or default to finishing the latency track since it's
-   mid-flight): L2 ElevenLabs streaming endpoint, L3 end-of-speech earcon + earlier filler, L4 STT
-   watchdog+retry, L5 latency-panel column-label fix. Branch fresh off current local `main` (L1 is
-   already in it).
-2. **`feat/live-transcript` rebuild — now unblocked** (L1 merged). Fresh branch off local `main`.
-   Re-read `LIVE_TRANSCRIPT_PANEL_PLAN.md`'s Phase 1 — it has an L1-exists branch that supersedes
-   the from-scratch version: reuse `src/lib/sentence-stream.ts`'s exported
+1. **L3-L5 of `LATENCY_FIRST_WORD_PLAN.md`**: L3 end-of-speech earcon + earlier filler, L4 STT
+   watchdog+retry, L5 latency-panel column-label fix. Branch fresh off current local `main` (L1+L2
+   are both in it).
+2. **`feat/live-transcript` rebuild** — unblocked (L1 merged). Re-read
+   `LIVE_TRANSCRIPT_PANEL_PLAN.md`'s Phase 1 first — it has an L1-exists branch that supersedes the
+   from-scratch version: reuse `src/lib/sentence-stream.ts`'s exported
    `stripActionFences`/`isInsideFence` instead of writing a second fence parser.
 
-> Read `RESUME_HERE.md` §4/§5/§6/§7 in full first. This file is the short "start here" for the
-> coding agent: what just landed, the current worktree state, and what to build next.
+> Read `RESUME_HERE.md` in full first. This file is the short "start here" for the coding agent:
+> what just landed, the current worktree state, and what to build next.
 
 ## Everything else already on `main` (do NOT redo — full history in `RESUME_HERE.md` §3/§3a/§5)
-- VID-1 (bundled WavLM model + SHA-gate) — done, merged.
-- Natural Speech V1–V4 (variety engine, prompt variety, ban/teach actions, vocabulary refresh) —
-  done, merged.
-- Window Control + Naukri N1-N3 + first-word-latency L1 — see the "✅ Three branches" section above.
+- VID-1 (bundled WavLM model + SHA-gate), Natural Speech V1–V4, Window Control, Naukri N1-N3,
+  first-word-latency L1+L2 — all done, merged. See "✅ Latency L2 merged" above for the latest.
 
 ## ⚠️ Worktree state — read before you touch anything
-- `main` (`D:\Learning\krishna`) is at `5097b66`; `node_modules` healthy.
-- **`krishna-m15`** should be fast-forwarded to main's current HEAD before branching off for new
-  work — simplest: `git checkout -b <name> main` directly names main's current tip regardless of
-  what branch `krishna-m15` was last left on.
+- `main` (`D:\Learning\krishna`) is at `508a5ec`. **Reviewer-only — never work here.**
+- `D:\Learning\krishna-m15` (the usual agent worktree) is currently an orphaned, locked, non-git
+  folder — do not try to use it until the owner confirms it's cleared. Use
+  `D:\Learning\krishna-m15-l2` for now, or run `git worktree add` at a fresh path if that's also
+  unavailable.
 - **Branch fresh off LOCAL `main` per track** (`git checkout -b <name> main`). One track per
   branch. **Never `origin/main`.**
 - `tsc --noEmit` + `vitest run` + (`cargo test` when Rust changes) all green before every commit —
-  run all of them, not just the fast ones. `tsc` catches things `vitest` doesn't (naukri N3 hit
-  this exact gap).
-- **Test the real seam, not just the new module in isolation.** L1's `SentenceStream`/`SpeechQueue`
-  unit tests were excellent, but initially nothing exercised the two working *together*, and
-  nothing exercises the real `krishna.context.tsx` wiring at all (deferred as a known gap this
-  round — see item 3 above). When in doubt, add one test that drives the actual composed/live path.
+  and actually paste the real output, not just "clean" — two separate rounds this week had a
+  self-reported "tsc clean" that didn't hold up on independent re-check.
+- **Test the real seam, not just the new module in isolation** where practical — L2's regression
+  tests correctly did this (mocked `HTMLMediaElement.prototype.play` and drove the real `speak()`
+  method), which is exactly the right pattern to keep using.
 
 ## Smaller queued items (not urgent, pick up opportunistically — see `RESUME_HERE.md` §4 / findings docs)
 - **JC-1** — `job_apply_submit` fires the "applied" status POST unconditionally; gate it on
@@ -68,6 +66,11 @@
   `open_in_chrome_profile`'s URL check is a weak prefix match (low risk, N1's store-side check is
   the real gate); macOS/Linux `get_default_user_data_dir` has a latent type mismatch (dead code on
   Windows).
+- **Minor L2 follow-up (non-blocking):** in `_speakStreaming`, when `play()` rejects on the first
+  chunk, the read loop doesn't `break` — it keeps consuming the network stream and appending to a
+  `SourceBuffer` that will never play until the response body is exhausted. Harmless (each append
+  after cleanup is caught and logged as a warning) but wasteful. Worth a `break` next time you're
+  in that file.
 
 ## Owner action still open (not agent work)
 - Live mic-test of VID-1: speak to Krishna once, confirm the model loads fast with no re-download
@@ -77,5 +80,9 @@
   Explorer/Teams to the front", a query that matches nothing, Computer Control toggled off.
 - Live-test Naukri N2/N3 (merged `669c6ce`): Settings → Naukri Searches UI + Chrome profile picker,
   and the `open_saved_search` voice command.
-- Live-test first-word latency (merged `5097b66`): ask a question with a long answer and listen for
-  whether the first word arrives noticeably faster — speech should start before generation finishes.
+- Live-test first-word latency L1+L2 (merged `5097b66`, `508a5ec`): ask a question with a long
+  answer and listen for whether the first word arrives noticeably faster — speech should start
+  before generation finishes.
+- Manually clear the locked `D:\Learning\krishna-m15` folder (close any Explorer window on that
+  path, or just wait — likely a post-restart AV/indexer scan) so the reviewer can recreate it as a
+  proper worktree.
