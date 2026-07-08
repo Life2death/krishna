@@ -191,22 +191,19 @@ fully built end to end. Full history/spec: `NATURAL_SPEECH_PLAN.md`.
      independent re-check).
    - **L3-L5 (end-of-speech earcon, STT watchdog, latency-panel column fix) remain unbuilt** — see
      `LATENCY_FIRST_WORD_PLAN.md`.
-   - **⚠️ Workflow incident during L2 (now resolved):** the coding agent's session ran the initial
+   - **Workflow incident during L2 — fully resolved.** The coding agent's session ran the initial
      L2 branch-cleanup + commit directly inside `D:\Learning\krishna` (the reviewer's checkout)
      instead of a `krishna-m15` worktree — traced via reflog, nothing was lost (`main` was
-     untouched), but `krishna-m15` got deregistered as a worktree in the process, leaving an
-     orphaned, no-longer-git-tracked folder on disk that's been **locked (permission denied on
-     rename/delete) since a machine restart** — likely Windows Search/Defender scanning it, hasn't
-     cleared on its own yet. The agent's follow-up work happened in a new path,
-     `D:\Learning\krishna-m15-l2`, instead. **Owner: try deleting/renaming
-     `D:\Learning\krishna-m15-l2` — sorry, `D:\Learning\krishna-m15` — the orphaned one — manually
-     once the lock clears (close any Explorer window on that path); it's inert, safe to remove.**
-   - **⚠️ Also from that incident:** `krishna-m15-l2`'s `node_modules` is a Windows junction
-     pointing at `D:\Learning\krishna\node_modules` (the reviewer's, same physical folder) — not an
-     independent install. Harmless right now (`package.json` is identical on both sides) but
-     reintroduces the exact shared-`node_modules` hazard [[one-party-npm-install-rule]] already
-     documents. **Before the next phase (L3), run a real `npm install`/`npm ci` in whatever worktree
-     is used next instead of relying on this junction.**
+     untouched). `krishna-m15` got deregistered as a worktree in the process, went orphaned +
+     locked (post-restart Windows Search/Defender scan), and the agent's follow-up work happened
+     from a temporary `D:\Learning\krishna-m15-l2` instead (with a `node_modules` junction back to
+     the reviewer's — the exact shared-resource hazard [[one-party-npm-install-rule]] warns about,
+     though harmless this time since `package.json` never diverged). Once the lock cleared: L2 was
+     merged, `krishna-m15-l2` was removed cleanly (branch deleted, directory removed — real
+     `node_modules` at `D:\Learning\krishna` confirmed untouched throughout), and `krishna-m15` was
+     **recreated as a proper independent worktree** on a fresh branch (`feat/first-word-latency-l3`,
+     off current `main`) — no `node_modules` yet, needs a real `npm install` there before the next
+     phase starts (intentional — avoids resurrecting the junction).
    - **Not yet owner-live-tested** — talk to Krishna and listen for whether the first word now
      arrives noticeably faster, especially on a long reply.
 6. **Live transcript panel** — `LIVE_TRANSCRIPT_PANEL_PLAN.md` (design-complete, 2026-07-07):
