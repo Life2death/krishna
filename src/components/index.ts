@@ -16,3 +16,4 @@ export * from "./KrishnaVAD";
 export * from "./KrishnaChat";
 export * from "./MobileVoiceButton";
 export * from "./MobileNav";
+export * from "./LiveTranscript";
