@@ -1,6 +1,34 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { computeFillerRemaining } from "@/lib/turn-timing";
 
 describe("P4-F9: filler threshold and sequencing (L3: 2500ms from end-of-speech)", () => {
+  describe("computeFillerRemaining", () => {
+    it("returns 2500ms when EOS just happened (elapsed = 0)", () => {
+      const now = performance.now();
+      expect(computeFillerRemaining(now, now)).toBe(2500);
+    });
+
+    it("returns reduced timeout when EOS was 1000ms ago", () => {
+      const eos = 1000;
+      const now = 2000;
+      expect(computeFillerRemaining(eos, now)).toBe(1500);
+    });
+
+    it("returns 0 when EOS was more than 2500ms ago", () => {
+      const eos = 1000;
+      const now = 4000;
+      expect(computeFillerRemaining(eos, now)).toBe(0);
+    });
+
+    it("returns 0 when EOS is undefined (fallback)", () => {
+      expect(computeFillerRemaining(undefined, performance.now())).toBe(0);
+    });
+
+    it("respects a custom threshold", () => {
+      expect(computeFillerRemaining(1000, 1500, 3000)).toBe(2500);
+    });
+  });
+
   beforeEach(() => {
     vi.useFakeTimers();
   });
@@ -22,32 +50,6 @@ describe("P4-F9: filler threshold and sequencing (L3: 2500ms from end-of-speech)
     vi.advanceTimersByTime(5000);
 
     expect(fillerFired).toBe(false);
-  });
-
-  it("filler fire time is dynamically reduced based on elapsed time since EOS", () => {
-    let fillerFiredAt = 0;
-
-    // Simulate EOS having happened 1000ms ago (e.g., slow STT)
-    const elapsedSinceEos = 1000;
-    const fillerRemaining = Math.max(0, 2500 - elapsedSinceEos);
-    const timer = setTimeout(() => { fillerFiredAt = Date.now(); }, fillerRemaining);
-
-    vi.advanceTimersByTime(fillerRemaining);
-    expect(fillerFiredAt).toBeGreaterThan(0);
-  });
-
-  it("filler fires immediately when EOS was more than 2500ms ago", () => {
-    let fillerFired = false;
-
-    // Simulate EOS having happened 3000ms ago (e.g., very slow STT)
-    const elapsedSinceEos = 3000;
-    const fillerRemaining = Math.max(0, 2500 - elapsedSinceEos);
-    const timer = setTimeout(() => { fillerFired = true; }, fillerRemaining);
-
-    // Should fire immediately (remaining = 0, setTimeout with 0)
-    vi.advanceTimersByTime(0);
-    expect(fillerFired).toBe(true);
-    clearTimeout(timer);
   });
 
   it("answer speech awaits pending filler before speaking on a slow turn", async () => {

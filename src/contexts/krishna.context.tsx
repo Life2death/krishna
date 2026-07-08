@@ -37,7 +37,7 @@ import type { Skill } from "@/types/skill";
 import type { Message, AttachedFile } from "@/types";
 import type { VoiceVerifyResult } from "@/lib/voice-client";
 import { MAX_FILES } from "@/config";
-import { TurnTiming } from "@/lib/turn-timing";
+import { TurnTiming, computeFillerRemaining } from "@/lib/turn-timing";
 import { getResponseSettings } from "@krishna/core/settings";
 import { getRecentSpeech, getDisabledLines, getBannedPhrases } from "@krishna/core/database";
 import { matchCannedResponse } from "@/lib/canned-responses";
@@ -1871,9 +1871,7 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
         let fullResponse = "";
         fillerSpokenRef.current = false;
         turnTiming.mark("request_sent");
-        const endOfSpeech = turnTiming.marks.end_of_speech;
-        const elapsedSinceEos = endOfSpeech !== undefined ? performance.now() - endOfSpeech : 0;
-        const fillerRemaining = Math.max(0, 2500 - elapsedSinceEos);
+        const fillerRemaining = computeFillerRemaining(turnTiming.marks.end_of_speech, performance.now());
         fillerTimerRef.current = setTimeout(() => {
           if (!fillerSpokenRef.current) {
             fillerSpokenRef.current = true;

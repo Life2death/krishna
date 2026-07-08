@@ -70,6 +70,40 @@ describe("L4: STT watchdog + single retry", () => {
     expect(mockFetchSTT).toHaveBeenCalledTimes(2);
   });
 
+  it("aborts after 8000ms timeout and retries once", async () => {
+    const mockFetchSTT = vi.fn();
+
+    // First attempt: hang until signal aborts
+    mockFetchSTT.mockImplementationOnce(async (params: any) => {
+      await new Promise<void>((_resolve, reject) => {
+        if (params.signal) {
+          (params.signal as AbortSignal).addEventListener("abort", () => {
+            reject(new DOMException("The user aborted a request.", "AbortError"));
+          });
+        }
+      });
+    });
+    // Second attempt: succeed
+    mockFetchSTT.mockResolvedValueOnce("hello");
+
+    const { fetchSTTWithRetry } = await import("@/lib/fetch-stt-with-retry");
+
+    const resultPromise = fetchSTTWithRetry(mockFetchSTT, {
+      provider: undefined,
+      selectedProvider: { provider: "groq", variables: {} },
+      audio: new Blob(),
+    });
+
+    // Advance past the 8000ms timeout — the abort fires
+    vi.advanceTimersByTime(8000);
+    // Flush microtasks so the abort rejection propagates
+    await Promise.resolve();
+
+    const result = await resultPromise;
+    expect(result).toBe("hello");
+    expect(mockFetchSTT).toHaveBeenCalledTimes(2);
+  });
+
   it("returns result on first attempt without retry", async () => {
     const mockFetchSTT = vi.fn();
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});

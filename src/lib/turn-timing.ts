@@ -1,3 +1,14 @@
+const EOS_FILLER_THRESHOLD = 2500;
+
+export function computeFillerRemaining(
+  endOfSpeechMark: number | undefined,
+  now: number,
+  threshold: number = EOS_FILLER_THRESHOLD,
+): number {
+  if (endOfSpeechMark === undefined) return 0;
+  return Math.max(0, threshold - (now - endOfSpeechMark));
+}
+
 export type TimingMark =
   | "end_of_speech"
   | "request_sent"
