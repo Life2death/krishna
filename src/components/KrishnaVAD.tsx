@@ -1,10 +1,10 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useMicVAD } from "@ricky0123/vad-react";
 import { AlertCircleIcon } from "lucide-react";
 import { Button } from "@/components";
 import { KrishnaChakra } from "./KrishnaChakra";
-import { fetchSTT } from "@/lib";
 import { floatArrayToWav } from "@/lib/utils";
+import { fetchSTTWithRetryDefault } from "@/lib/fetch-stt-with-retry";
 import { useApp } from "@/contexts";
 import { useKrishna } from "@/hooks";
 import { isKrishnaSpeaking } from "@/lib/krishna-mutex";
@@ -19,6 +19,31 @@ export const KrishnaVAD = () => {
   const [voiceStatus, setVoiceStatus] = useState<VoiceVerifyResult | null>(null);
   const { selectedSttProvider, allSttProviders, selectedAIProvider } = useApp();
   const krishna = useKrishna();
+  const audioCtxRef = useRef<AudioContext | null>(null);
+
+  function playEarcon() {
+    try {
+      let ctx = audioCtxRef.current;
+      if (!ctx) {
+        ctx = new AudioContext();
+        audioCtxRef.current = ctx;
+      }
+      if (ctx.state === "suspended") {
+        ctx.resume();
+      }
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = "sine";
+      osc.frequency.value = 523.25;
+      gain.gain.setValueAtTime(0.04, ctx.currentTime);
+      gain.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.08);
+      osc.connect(gain).connect(ctx.destination);
+      osc.start(ctx.currentTime);
+      osc.stop(ctx.currentTime + 0.08);
+    } catch (err) {
+      console.error("[earcon] Failed to play:", err);
+    }
+  }
 
   const missingAI = !selectedAIProvider.provider;
   const missingSTT = !selectedSttProvider.provider;
@@ -56,6 +81,8 @@ export const KrishnaVAD = () => {
     onSpeechEnd: async (audio) => {
       if (isKrishnaSpeaking()) return;
 
+      playEarcon();
+
       try {
         const audioBlob = floatArrayToWav(audio, 16000, "wav");
         const providerConfig = allSttProviders.find(
@@ -75,7 +102,7 @@ export const KrishnaVAD = () => {
         // no status indicator, no command gating.
         const voiceIdEnabled = isVoiceIdEnabled();
         const [transcription, voiceResult] = await Promise.all([
-          fetchSTT({
+          fetchSTTWithRetryDefault({
             provider: providerConfig,
             selectedProvider: selectedSttProvider,
             audio: audioBlob,
