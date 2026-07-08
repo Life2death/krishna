@@ -83,6 +83,7 @@ export const LatencyPanel = () => {
                 <th className="text-right py-1 pr-2">E→Send</th>
                 <th className="text-right py-1 pr-2">Send→1st</th>
                 <th className="text-right py-1 pr-2">1st→Audio</th>
+                <th className="text-right py-1 pr-2">Gen</th>
                 <th className="text-right py-1 pr-2">Tokens</th>
                 <th className="text-right py-1 pr-2">Cache</th>
                 <th className="text-right py-1 pr-2">TTS</th>
@@ -108,6 +109,11 @@ export const LatencyPanel = () => {
                   </td>
                   <td className="py-1 pr-2 text-right tabular-nums">
                     {formatDelta(e.timing.deltas.first_token_to_last_token)}
+                  </td>
+                  <td className="py-1 pr-2 text-right tabular-nums">
+                    {e.timing.usage
+                      ? `${formatTokens(e.timing.usage.prompt_tokens)} / ${formatTokens(e.timing.usage.completion_tokens)}`
+                      : "—"}
                   </td>
                   <td className="py-1 pr-2 text-right tabular-nums">
                     {formatCachePair(e.timing.usage?.cache_read_input_tokens, e.timing.usage?.cache_creation_input_tokens)}
