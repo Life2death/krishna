@@ -176,7 +176,7 @@ export class ElevenLabsTTS implements TTSProvider {
     this.audioEl = audio;
     this._speaking = true;
 
-    await new Promise<void>((resolvePlayback) => {
+    await new Promise<void>(async (resolvePlayback) => {
       audio.onended = () => {
         this._speaking = false;
         this._cleanupBlob();
@@ -187,7 +187,13 @@ export class ElevenLabsTTS implements TTSProvider {
         this._cleanupBlob();
         resolvePlayback();
       };
-      audio.play().catch(() => {});
+      try {
+        await audio.play();
+      } catch {
+        this._speaking = false;
+        this._cleanupBlob();
+        resolvePlayback();
+      }
     });
   }
 
@@ -236,7 +242,12 @@ export class ElevenLabsTTS implements TTSProvider {
     this._speaking = true;
 
     const sourceBuffer = await new Promise<SourceBuffer>((resolve, reject) => {
+      const timeoutId = setTimeout(() => {
+        reject(new Error("MediaSource sourceopen timed out"));
+      }, 5000);
+
       mediaSource.addEventListener("sourceopen", () => {
+        clearTimeout(timeoutId);
         try {
           const sb = mediaSource.addSourceBuffer(mimeType);
           resolve(sb);
@@ -244,12 +255,24 @@ export class ElevenLabsTTS implements TTSProvider {
           reject(e);
         }
       }, { once: true });
-      mediaSource.addEventListener("sourceerror", () => {
-        reject(new Error("MediaSource sourceerror"));
-      }, { once: true });
     });
 
     this.sourceBuffer = sourceBuffer;
+
+    let playbackResolve: (() => void) | null = null;
+    const playbackPromise = new Promise<void>((resolve) => {
+      playbackResolve = resolve;
+      audio.onended = () => {
+        this._speaking = false;
+        this._cleanupStreaming();
+        resolve();
+      };
+      audio.onerror = () => {
+        this._speaking = false;
+        this._cleanupStreaming();
+        resolve();
+      };
+    });
 
     const reader = res.body.getReader();
     let firstChunkPlayed = false;
@@ -292,7 +315,16 @@ export class ElevenLabsTTS implements TTSProvider {
 
       if (!firstChunkPlayed) {
         firstChunkPlayed = true;
-        audio.play().catch(() => {});
+        try {
+          await audio.play();
+        } catch {
+          this._speaking = false;
+          this._cleanupStreaming();
+          if (playbackResolve) {
+            playbackResolve();
+            playbackResolve = null;
+          }
+        }
       }
     }
 
@@ -300,18 +332,7 @@ export class ElevenLabsTTS implements TTSProvider {
       mediaSource.endOfStream();
     }
 
-    await new Promise<void>((resolvePlayback) => {
-      audio.onended = () => {
-        this._speaking = false;
-        this._cleanupStreaming();
-        resolvePlayback();
-      };
-      audio.onerror = () => {
-        this._speaking = false;
-        this._cleanupStreaming();
-        resolvePlayback();
-      };
-    });
+    await playbackPromise;
   }
 
   private _cleanupBlob(): void {

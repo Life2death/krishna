@@ -218,4 +218,54 @@ describe("ElevenLabsTTS", () => {
     await expect(tts.speak("hello")).resolves.toBeUndefined();
     expect(tts.isSpeaking()).toBe(false);
   });
+
+  it("blob fallback resolves when play() rejects (regression: hang)", async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      blob: () => Promise.resolve(new Blob(["data"], { type: "audio/mpeg" })),
+      headers: new Headers({ "content-type": "audio/mpeg" }),
+    });
+    vi.spyOn(tts as any, "_speakBlob").mockRestore();
+    vi.spyOn(HTMLMediaElement.prototype, "play").mockRejectedValue(new Error("autoplay blocked"));
+
+    await expect(tts.speak("test")).resolves.toBeUndefined();
+    expect(tts.isSpeaking()).toBe(false);
+  });
+
+  it("streaming resolves when play() rejects (regression: hang)", async () => {
+    const reader = vi.fn()
+      .mockReturnValueOnce(Promise.resolve({ done: false, value: new Uint8Array([1, 2, 3]) }))
+      .mockReturnValueOnce(Promise.resolve({ done: true, value: undefined }));
+
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      body: { getReader: reader } as unknown as ReadableStream<Uint8Array>,
+      headers: new Headers({ "content-type": "audio/mpeg" }),
+    });
+
+    const mockSourceBuffer = {
+      updating: false,
+      appendBuffer: vi.fn(),
+      addEventListener: vi.fn(),
+    };
+
+    let sourceOpenHandler: ((...args: any[]) => void) | null = null;
+    const mockMediaSource = {
+      readyState: "open",
+      addSourceBuffer: vi.fn().mockReturnValue(mockSourceBuffer),
+      endOfStream: vi.fn(),
+      addEventListener: vi.fn((_event: string, handler: (...args: any[]) => void) => {
+        sourceOpenHandler = handler;
+      }),
+    };
+
+    vi.spyOn(tts as any, "_supportsMse").mockReturnValue(true);
+    vi.stubGlobal("MediaSource", vi.fn(() => mockMediaSource));
+    vi.spyOn(HTMLMediaElement.prototype, "play").mockRejectedValue(new Error("autoplay blocked"));
+
+    const promise = tts.speak("test");
+    (sourceOpenHandler as (() => void) | null)?.();
+    await expect(promise).resolves.toBeUndefined();
+    expect(tts.isSpeaking()).toBe(false);
+  });
 });
