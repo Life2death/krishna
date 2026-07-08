@@ -3,8 +3,7 @@ import { useCommandInsights, useSystemHealth } from "@/hooks";
 import { PageLayout } from "@/layouts";
 import {
   XCircleIcon, BarChart3Icon, LightbulbIcon, RefreshCwIcon,
-  BrainCircuitIcon, DatabaseIcon, CloudIcon, MailIcon,
-  SearchIcon, CpuIcon, PuzzleIcon, HardDriveIcon,
+  DatabaseIcon, CloudIcon, MailIcon, CpuIcon, HardDriveIcon,
 } from "lucide-react";
 import moment from "moment";
 import { useState } from "react";
@@ -173,15 +172,7 @@ const Status = () => {
           </div>
 
           {status && (
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              <div className="rounded-md border border-green-200 bg-green-50 p-3 dark:border-green-800 dark:bg-green-950">
-                <div className="mb-1 flex items-center gap-1.5">
-                  <BrainCircuitIcon className="h-4 w-4 text-green-600" />
-                  <span className="text-xs font-semibold">Brain</span>
-                  <Badge className="ml-auto text-xs bg-green-50 text-green-600 dark:bg-green-950 dark:text-green-300">OK</Badge>
-                </div>
-                <p className="text-xs text-muted-foreground">Local mode — no brain process</p>
-              </div>
+            <div className="grid gap-3 sm:grid-cols-2">
               <div className="rounded-md border border-amber-200 bg-amber-50 p-3 dark:border-amber-800 dark:bg-amber-950">
                 <div className="mb-1 flex items-center gap-1.5">
                   <CloudIcon className="h-4 w-4 text-amber-600" />
@@ -198,14 +189,6 @@ const Status = () => {
                 </div>
                 <p className="text-xs text-muted-foreground">Not configured</p>
               </div>
-              <div className="rounded-md border border-amber-200 bg-amber-50 p-3 dark:border-amber-800 dark:bg-amber-950">
-                <div className="mb-1 flex items-center gap-1.5">
-                  <SearchIcon className="h-4 w-4 text-amber-600" />
-                  <span className="text-xs font-semibold">RAG</span>
-                  <Badge className="ml-auto text-xs bg-amber-50 text-amber-600 dark:bg-amber-950 dark:text-amber-300">Disabled</Badge>
-                </div>
-                <p className="text-xs text-muted-foreground">Local mode only</p>
-              </div>
               <div className="rounded-md border border-green-200 bg-green-50 p-3 dark:border-green-800 dark:bg-green-950">
                 <div className="mb-1 flex items-center gap-1.5">
                   <CpuIcon className="h-4 w-4 text-green-600" />
@@ -213,14 +196,6 @@ const Status = () => {
                   <Badge className="ml-auto text-xs bg-green-50 text-green-600 dark:bg-green-950 dark:text-green-300">Local</Badge>
                 </div>
                 <p className="text-xs text-muted-foreground">Configured in AI Provider settings</p>
-              </div>
-              <div className="rounded-md border border-amber-200 bg-amber-50 p-3 dark:border-amber-800 dark:bg-amber-950">
-                <div className="mb-1 flex items-center gap-1.5">
-                  <PuzzleIcon className="h-4 w-4 text-amber-600" />
-                  <span className="text-xs font-semibold">MCP Tools</span>
-                  <Badge className="ml-auto text-xs bg-amber-50 text-amber-600 dark:bg-amber-950 dark:text-amber-300">0</Badge>
-                </div>
-                <p className="text-xs text-muted-foreground">Client-side MCP deferred to Phase 4</p>
               </div>
               <div className="rounded-md border border-green-200 bg-green-50 p-3 dark:border-green-800 dark:bg-green-950">
                 <div className="mb-1 flex items-center gap-1.5">
