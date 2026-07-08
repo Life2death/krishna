@@ -10,9 +10,10 @@
 
 `main` is **GREEN** — `tsc --noEmit` clean, `vitest run` 802/802 (43 files), all independently
 reverified 2026-07-08. The **entire job-autopilot track (items 1–4)**, travel insights (item 9),
-recruiter radar (item 13), Natural Speech V1–V4 (item 11), Window Control (item 14, merged
-`22c6168`, awaiting owner retest), and Naukri saved searches N1–N3 (merged `669c6ce`, awaiting
-owner live-test) are all code-complete and merged. **First-word latency is now FULLY DONE, L1–L5,
+recruiter radar (item 13), Natural Speech V1–V4 (item 11), and Naukri saved searches N1–N3 (merged
+`669c6ce`, awaiting owner live-test) are all code-complete and merged. **Window Control (item 14,
+merged `22c6168`) is now owner-confirmed working live** (2026-07-08) — the wiring fix holds up in
+real use, no further action needed there. **First-word latency is now FULLY DONE, L1–L5,
 all merged**: L1 sentence-streaming (`5097b66`), L2 ElevenLabs streaming endpoint (`508a5ec`), L3–L5
 earcon/STT-watchdog/panel-fix (`8e8d8c6`). **The live-transcript panel is also DONE + merged**
 (`e16b0c7`) — real-time panel showing the utterance + Krishna's reply streaming in, built on L1's
@@ -36,13 +37,7 @@ recovered all 139 files instantly; `node_modules` was rebuilt via `rm -rf node_m
 
 ## 2. OWNER ACTION ITEMS — what's still on you
 
-1. **Live-verify Window Control** (new, 2026-07-06/07 build — see §3a): with two monitors
-   connected, say "move Chrome to the other monitor" → confirm it physically moves and comes to
-   front, maximized state preserved. Say "bring File Explorer to the front" while Krishna is
-   focused → confirm it raises reliably (the foreground-lock case). Try a query that doesn't match
-   anything open → confirm you get a spoken "I can see X, Y, Z — which one?" instead of a crash.
-   Toggle Computer Control OFF → confirm window commands refuse with the existing settings-path
-   error. This is the thing unit tests can't prove (Rust/TS tests are green, see §3a).
+1. **~~Live-verify Window Control~~ — DONE, confirmed working (2026-07-08).** See §3a.
 2. **Live-verify the full J4 assisted-apply flow** against real LinkedIn: say "apply to the next
    job" → confirm it opens the job + clicks Easy Apply → confirm fields fill from your Application
    Profile → confirm the "shall I send it, sir?" prompt appears → say yes → confirm it submits (or
@@ -75,7 +70,7 @@ recovered all 139 files instantly; `node_modules` was rebuilt via `rm -rf node_m
 Full history incl. fixed review findings (JA-1/JA-2, JB-1, JC-1): `JOB_AUTOPILOT_REVIEW_FINDINGS.md`.
 **Not yet built:** J4b-Naukri (LinkedIn-only for now, per plan), J5 batch semi-auto (parked).
 
-### Window Control (item 14) — built, FAILED first live test, wiring fixed + MERGED (`22c6168`, 2026-07-07 evening); owner retest pending
+### Window Control (item 14) — built, FAILED first live test, wiring fixed + MERGED (`22c6168`), **owner-confirmed working live 2026-07-08 — DONE**
 | Phase | What | Commit |
 |---|---|---|
 | P1 | Win32 window/monitor enumeration + pure `match_window()` matcher (exact > substring > process-alias > exe-stem fallback); 11 unit tests | `0b171c8` |

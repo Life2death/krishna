@@ -70,8 +70,7 @@ Nothing is currently blocking. Pick one:
 - Live mic-test of VID-1: speak to Krishna once, confirm the model loads fast with no re-download
   after a `Ctrl+R`, and capture one `[voice-id] verify: score=… threshold=… match=…` console line —
   that both closes VID-1 and gives the number needed to fix **VID-2** (meter stuck at 5 samples).
-- Live-test Window Control (merged `22c6168`): "move Chrome to the other monitor", "bring File
-  Explorer/Teams to the front", a query that matches nothing, Computer Control toggled off.
+- ~~Live-test Window Control~~ — **DONE, confirmed working 2026-07-08.**
 - Live-test Naukri N2/N3 (merged `669c6ce`): Settings → Naukri Searches UI + Chrome profile picker,
   and the `open_saved_search` voice command.
 - Live-test first-word latency L1-L5 (merged through `8e8d8c6`): ask a question with a long answer
