@@ -13,9 +13,13 @@
    `krishna.context.tsx` wiring directly (verified correct by manual review only; no test harness
    exists for that file in this codebase — pre-existing gap, not new). `tsc`/`vitest` (773/773)
    independently reverified by the reviewer, twice.
-4. **Never push, ever, any branch. Never branch from `origin/main` — always local `main`.** Three
-   branches were pushed in error earlier this session (`release.yml` fired, failed 0s each time,
-   nothing released, but still a violation). Zero-exception rule from here on.
+4. **Never push, ever, any branch, without the owner explicitly asking that exact time. Never
+   branch from `origin/main` — always local `main`.** Three branches were pushed in error on
+   2026-07-07 (`release.yml` fired, failed 0s each time, nothing released, but still a violation).
+   **Note:** the owner DID explicitly ask to push `main` on 2026-07-08 (ahead of a machine restart,
+   wanted a GitHub backup) — `origin/main` is now at `18d5a23`. That was a one-time, explicit
+   exception, not a policy change — still branch from local `main` and still don't push anything
+   without being asked fresh each time.
 5. **Resolved incident:** `D:\Learning\krishna`'s `.git\config` briefly had `core.bare = true`
    (blocked all git commands in both worktrees — they share the parent's `core.*` config). Fixed
    via `git config core.bare false`. If "must be run in a work tree" shows up from an obviously-

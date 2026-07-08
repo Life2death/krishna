@@ -1,4 +1,4 @@
-# RESUME HERE — Krishna handoff (updated 2026-07-07)
+# RESUME HERE — Krishna handoff (updated 2026-07-08)
 
 > **This is the single source of truth to resume from.** Reviewer (Claude), coding agent, and
 > owner (Vikram) all sync through this file. Read the whole thing before touching anything.
@@ -277,8 +277,15 @@ one. See `GMAIL_RECRUITER_RADAR_REVIEW_FINDINGS.md` for the full trail.
   `package-lock.json` (and `Cargo.toml`/`Cargo.lock` for Rust deps) together, confirms done — ONLY
   THEN does the reviewer install/build. Never run installs/builds in parallel across the two
   checkouts.
-- **NEVER `git push`** (feature branch OR main) — can trip the auto-release pipeline. Already
-  violated once (`fix/gmail-latest-email` pushed to origin). See [[no-push-release-pipeline]].
+- **NEVER `git push`** (feature branch OR main) without explicit owner ask — can trip the auto-release
+  pipeline. Already violated once by the owner-authored fix (`fix/gmail-latest-email`), and three
+  more times by the coding agent pushing feature branches on 2026-07-07. See
+  [[no-push-release-pipeline]]. **Owner EXPLICITLY asked to push `main` on 2026-07-08** (ahead of a
+  machine restart, wanted GitHub as a safe backup) — `origin/main` is now at `18d5a23`, matching
+  local. `release.yml` fired and failed in 0s (same benign gate as every prior push — verified via
+  `gh release list`, no new release published). **This does NOT change the standing rule** — it was
+  one explicit, one-time exception for that specific moment; keep defaulting to local-only unless
+  asked again.
 - **Three gotchas:** (1) secrets go in `secureStorage`/`getSecret`, NOT Windows Credential Manager
   (a separate store the app can't read) — see [[secure-store-key-gotcha]]; personal data (e.g. the
   Application Profile) goes in the SQLCipher memory store, not localStorage (bit us once — J4-b's
