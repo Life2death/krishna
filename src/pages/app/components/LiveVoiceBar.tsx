@@ -6,7 +6,11 @@ import { getRealtimeTools } from "@/lib/realtime/live-tool-bridge";
 import { LiveOrchestrator } from "@/lib/realtime/live-orchestrator";
 import { getLiveVoiceSettings } from "@/lib/storage/live-voice-settings.storage";
 import { LiveTurnLogger } from "@/lib/realtime/live-turn-logger";
+import { getTTS } from "@/lib/tts";
 import { MicIcon, MicOffIcon, Loader2Icon, AlertCircleIcon } from "lucide-react";
+
+const HANDOFF_MESSAGE =
+  "Connection issue. Handing over to local Krishna.";
 
 const STORAGE_KEY_REALTIME_KEY = "openai_realtime_api_key";
 
@@ -28,6 +32,7 @@ export const LiveVoiceBar = ({
   const orchestratorRef = useRef<LiveOrchestrator | null>(null);
   const loggerRef = useRef<LiveTurnLogger | null>(null);
   const autoStartedRef = useRef(false);
+  const handedOffRef = useRef(false);
 
   const [state, setState] = useState<string>("idle");
   const [apiKey, setApiKey] = useState<string | null>(null);
@@ -72,6 +77,7 @@ export const LiveVoiceBar = ({
   const handleStart = useCallback(async () => {
     setError(null);
     setTranscript(null);
+    handedOffRef.current = false;
 
     const key = apiKey;
     if (!key) {
@@ -136,6 +142,16 @@ export const LiveVoiceBar = ({
           await orchestrator.interceptToolCall(call);
         },
         onFallbackToClassic: () => {
+          // Inform the user before the classic (local) Krishna silently takes over.
+          if (!handedOffRef.current) {
+            handedOffRef.current = true;
+            setError(HANDOFF_MESSAGE);
+            try {
+              void getTTS().speak(HANDOFF_MESSAGE);
+            } catch {
+              /* announcement is best-effort */
+            }
+          }
           onSwitchToClassic();
         },
       });

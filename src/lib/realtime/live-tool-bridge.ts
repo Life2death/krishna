@@ -19,7 +19,6 @@ const REALTIME_TOOL_NAMES = new Set([
 
 const SENSITIVE_NAMES = new Set([
   "gmail_send_email",
-  "control_window",
   "get_travel_time",
   "suggest_departure_time",
   "gmail_send",
@@ -30,9 +29,11 @@ const SENSITIVE_NAMES = new Set([
   "computer_key",
 ]);
 
+// Window focus/move is non-destructive, so it executes immediately without a
+// spoken confirmation. Truly sensitive actions (send email, type/click) stay gated.
 const SENSITIVE_VERBS = new Set([
   "send", "delete", "remove", "write", "create", "post",
-  "submit", "apply", "move", "focus", "click", "type",
+  "submit", "apply", "click", "type",
 ]);
 
 export function classifyRealtimeTool(name: string): Sensitivity {

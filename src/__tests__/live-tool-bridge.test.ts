@@ -51,8 +51,8 @@ describe("classifyRealtimeTool", () => {
     expect(classifyRealtimeTool("gmail_send_email")).toBe("sensitive");
   });
 
-  it("classifies control_window as sensitive", () => {
-    expect(classifyRealtimeTool("control_window")).toBe("sensitive");
+  it("classifies control_window as safe (non-destructive focus/move runs immediately)", () => {
+    expect(classifyRealtimeTool("control_window")).toBe("safe");
   });
 
   it("classifies get_travel_time as sensitive", () => {

@@ -118,9 +118,10 @@ export const controlWindowTool: Tool = {
   name: "control_window",
   description: "Move or focus a window by its title. Action 'focus' brings the window to the front. Action 'move' moves it to another monitor (specify monitor: primary, left, right, next, or a number).",
   run: async (args) => {
-    const action = args.action;
+    // Accept both `action` (classic pipeline) and `mode` (realtime tool schema).
+    const action = args.action || args.mode;
     const target = args.target;
-    if (!action || !target) return { success: false, error: "Missing required args: action (focus|move), target" };
+    if (!action || !target) return { success: false, error: "Missing required args: action/mode (focus|move), target" };
     if (action !== "focus" && action !== "move") return { success: false, error: "action must be 'focus' or 'move'" };
     try {
       if (action === "focus") {
