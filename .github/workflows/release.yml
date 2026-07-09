@@ -15,6 +15,12 @@ jobs:
   build:
     runs-on: windows-latest
 
+    # The `secrets` context cannot be used in step `if:` conditions, so expose
+    # the signing cert as job-level env and gate the import step on that.
+    env:
+      WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
+      WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+
     steps:
       - uses: actions/checkout@v4
 
@@ -48,10 +54,7 @@ jobs:
       # Requires WINDOWS_CERTIFICATE and WINDOWS_CERTIFICATE_PASSWORD secrets.
       # See CODE_SIGNING_PLAN.md for setup instructions.
       - name: Import Windows code-signing certificate
-        if: ${{ secrets.WINDOWS_CERTIFICATE != '' }}
-        env:
-          WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
-          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+        if: ${{ env.WINDOWS_CERTIFICATE != '' }}
         shell: pwsh
         run: |
           New-Item -ItemType directory -Path certificate -Force | Out-Null
