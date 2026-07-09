@@ -18,6 +18,9 @@ export interface CustomizableState {
   computerControl: {
     enabled: boolean;
   };
+  liveVoice: {
+    enabled: boolean;
+  };
 }
 
 export const DEFAULT_CUSTOMIZABLE_STATE: CustomizableState = {
@@ -26,6 +29,7 @@ export const DEFAULT_CUSTOMIZABLE_STATE: CustomizableState = {
   autostart: { isEnabled: true },
   cursor: { type: "invisible" },
   computerControl: { enabled: false },
+  liveVoice: { enabled: false },
 };
 
 /**
@@ -48,6 +52,8 @@ export const getCustomizableState = (): CustomizableState => {
       cursor: parsedState.cursor || DEFAULT_CUSTOMIZABLE_STATE.cursor,
       computerControl:
         parsedState.computerControl || DEFAULT_CUSTOMIZABLE_STATE.computerControl,
+      liveVoice:
+        parsedState.liveVoice || DEFAULT_CUSTOMIZABLE_STATE.liveVoice,
     };
   } catch (error) {
     console.error("Failed to get customizable state:", error);
@@ -111,6 +117,13 @@ export const updateAutostart = (isEnabled: boolean): CustomizableState => {
 export const updateComputerControl = (enabled: boolean): CustomizableState => {
   const currentState = getCustomizableState();
   const newState = { ...currentState, computerControl: { enabled } };
+  setCustomizableState(newState);
+  return newState;
+};
+
+export const updateLiveVoice = (enabled: boolean): CustomizableState => {
+  const currentState = getCustomizableState();
+  const newState = { ...currentState, liveVoice: { enabled } };
   setCustomizableState(newState);
   return newState;
 };

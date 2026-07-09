@@ -42,6 +42,7 @@ export type IContextType = {
   toggleAlwaysOnTop: (isEnabled: boolean) => Promise<void>;
   toggleAutostart: (isEnabled: boolean) => Promise<void>;
   toggleComputerControlEnabled: (enabled: boolean) => Promise<void>;
+  toggleLiveVoiceEnabled: (enabled: boolean) => void;
   loadData: () => void;
   hasActiveLicense: boolean;
   setHasActiveLicense: Dispatch<SetStateAction<boolean>>;
