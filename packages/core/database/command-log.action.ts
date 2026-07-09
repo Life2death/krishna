@@ -15,7 +15,7 @@ export interface CommandLogEntry {
   detail?: string | null;
   timing?: string | null;
   response?: string | null;
-  source?: "voice" | "text" | "mobile";
+  source?: "voice" | "text" | "mobile" | "live";
   createdAt: number;
 }
 
@@ -55,7 +55,7 @@ export async function logCommand(e: CommandLogEntry): Promise<void> {
 export async function insertPendingCommand(e: {
   id: string;
   transcript: string;
-  source: "voice" | "text" | "mobile";
+  source: "voice" | "text" | "mobile" | "live";
   createdAt: number;
 }): Promise<void> {
   const db = await getDatabase();
@@ -164,7 +164,7 @@ export async function getRecentCommands(opts?: {
     detail: r.detail,
     timing: r.timing,
     response: r.response,
-    source: r.source as "voice" | "text" | "mobile",
+    source: r.source as "voice" | "text" | "mobile" | "live",
     createdAt: r.created_at,
   }));
 }
@@ -185,7 +185,7 @@ export async function getRecentActivity(opts?: {
     detail: r.detail,
     timing: r.timing,
     response: r.response,
-    source: r.source as "voice" | "text" | "mobile",
+    source: r.source as "voice" | "text" | "mobile" | "live",
     createdAt: r.created_at,
   }));
 }

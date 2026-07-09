@@ -5,6 +5,7 @@ import type {
   RealtimeTimingMarks,
   RealtimeFunctionDefinition,
   RealtimeFunctionCallDone,
+  RealtimeUsage,
 } from "./realtime-types";
 import { estimateRealtimeCost, formatDuration, formatCost } from "./realtime-cost";
 import { DEFAULT_REALTIME_CONFIG } from "./realtime-types";
@@ -39,6 +40,10 @@ export interface RealtimeCallbacks {
   onUserTranscript?: UserTranscriptHandler;
   onFunctionCall?: FunctionCallHandler;
   onError?: (msg: string, code?: string) => void;
+  // Fires when the model starts a response (response.created) — turn boundary.
+  onResponseCreated?: () => void;
+  // Fires when a response completes (response.done), carrying real token usage.
+  onResponseDone?: (info: { usage?: RealtimeUsage }) => void;
   onFallbackToClassic?: () => void;
   onCostUpdate?: (cost: { inputTokens: number; outputTokens: number; estimatedCostUsd: number; speechSeconds: number }) => void;
 }
@@ -464,11 +469,15 @@ export class RealtimeClient {
     if (isResponseCreated(parsed)) {
       this.timing.responseCreated = Date.now();
       this.transcriptAccumulator = "";
+      this.callbacks.onResponseCreated?.();
       return;
     }
 
     if (isResponseDone(parsed)) {
       this.timing.responseDone = Date.now();
+      const usage = (parsed.response as { usage?: RealtimeUsage } | undefined)
+        ?.usage;
+      this.callbacks.onResponseDone?.({ usage });
       if (this._state === "speaking") this.setState("connected");
       return;
     }

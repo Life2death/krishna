@@ -51,6 +51,19 @@ export function estimateRealtimeCost(
   };
 }
 
+// Real cost from API-reported token counts (preferred over the duration-based
+// estimate when usage is available on response.done).
+export function estimateCostFromTokens(
+  inputTokens: number,
+  outputTokens: number,
+  model: string = "gpt-realtime-2.1",
+): number {
+  const pricing = getRealtimePricing(model);
+  const inputCost = (inputTokens / 1_000_000) * pricing.inputPer1M;
+  const outputCost = (outputTokens / 1_000_000) * pricing.outputPer1M;
+  return Math.round((inputCost + outputCost) * 10000) / 10000;
+}
+
 export function formatCost(costUsd: number): string {
   if (costUsd < 0.01) return "<$0.01";
   return `$${costUsd.toFixed(2)}`;

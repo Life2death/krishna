@@ -1,4 +1,5 @@
 import { Badge, Input, Card, Empty, Button } from "@/components";
+import { LiveVoiceSummary } from "./components";
 import { useHistory } from "@/hooks";
 import { PageLayout } from "@/layouts";
 import { deleteAllConversations } from "@/lib/database";
@@ -37,6 +38,9 @@ const Dashboard = () => {
       description="Krishna — your AI voice assistant"
     >
       <>
+        <div className="mb-4">
+          <LiveVoiceSummary />
+        </div>
         {conversations.conversations.length === 0 ? (
           <Empty
             isLoading={conversations.isLoading}

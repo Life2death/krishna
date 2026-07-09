@@ -5,17 +5,28 @@ import { secureStorage } from "@/lib/secure-storage";
 import { getRealtimeTools } from "@/lib/realtime/live-tool-bridge";
 import { LiveOrchestrator } from "@/lib/realtime/live-orchestrator";
 import { getLiveVoiceSettings } from "@/lib/storage/live-voice-settings.storage";
+import { LiveTurnLogger } from "@/lib/realtime/live-turn-logger";
 import { MicIcon, MicOffIcon, Loader2Icon, AlertCircleIcon } from "lucide-react";
 
 const STORAGE_KEY_REALTIME_KEY = "openai_realtime_api_key";
 
 interface LiveVoiceBarProps {
   onSwitchToClassic: () => void;
+  // Bubble the live session up to the shell so the Live Transcript popover works.
+  onLiveStatus?: (status: string) => void;
+  onLiveUserText?: (text: string | null) => void;
+  onLiveAssistantText?: (text: string | null) => void;
 }
 
-export const LiveVoiceBar = ({ onSwitchToClassic }: LiveVoiceBarProps) => {
+export const LiveVoiceBar = ({
+  onSwitchToClassic,
+  onLiveStatus,
+  onLiveUserText,
+  onLiveAssistantText,
+}: LiveVoiceBarProps) => {
   const clientRef = useRef<RealtimeClient | null>(null);
   const orchestratorRef = useRef<LiveOrchestrator | null>(null);
+  const loggerRef = useRef<LiveTurnLogger | null>(null);
   const autoStartedRef = useRef(false);
 
   const [state, setState] = useState<string>("idle");
@@ -91,18 +102,35 @@ export const LiveVoiceBar = ({ onSwitchToClassic }: LiveVoiceBarProps) => {
       const orchestrator = new LiveOrchestrator(client, { settings });
       orchestratorRef.current = orchestrator;
 
+      const logger = new LiveTurnLogger(client.config.model);
+      loggerRef.current = logger;
+
       client.setCallbacks({
         onStateChange: (s) => {
           setState(s);
+          onLiveStatus?.(s);
         },
         onError: (msg) => {
           setError(msg);
         },
         onTranscript: (text, _isFinal) => {
           setTranscript(text);
+          logger.handleTranscript(text);
+          onLiveAssistantText?.(text);
         },
         onUserTranscript: (text) => {
           orchestrator.handleUserTranscript(text);
+          logger.handleUserTranscript(text);
+          onLiveUserText?.(text);
+        },
+        onAudioDelta: () => {
+          logger.handleAudioDelta();
+        },
+        onResponseCreated: () => {
+          logger.handleResponseCreated();
+        },
+        onResponseDone: ({ usage }) => {
+          void logger.handleResponseDone(usage);
         },
         onFunctionCall: async (call) => {
           await orchestrator.interceptToolCall(call);
@@ -119,7 +147,14 @@ export const LiveVoiceBar = ({ onSwitchToClassic }: LiveVoiceBarProps) => {
       const msg = err instanceof Error ? err.message : String(err);
       setError(msg);
     }
-  }, [apiKey, onSwitchToClassic, startDurationUpdates]);
+  }, [
+    apiKey,
+    onSwitchToClassic,
+    startDurationUpdates,
+    onLiveStatus,
+    onLiveUserText,
+    onLiveAssistantText,
+  ]);
 
   useEffect(() => {
     const settings = getLiveVoiceSettings();
@@ -135,11 +170,15 @@ export const LiveVoiceBar = ({ onSwitchToClassic }: LiveVoiceBarProps) => {
       clientRef.current = null;
     }
     orchestratorRef.current = null;
+    loggerRef.current = null;
     stopDurationUpdates();
     setState("idle");
     setDuration("00:00");
     setCostStr("$0.00");
-  }, [stopDurationUpdates]);
+    onLiveStatus?.("idle");
+    onLiveUserText?.(null);
+    onLiveAssistantText?.(null);
+  }, [stopDurationUpdates, onLiveStatus, onLiveUserText, onLiveAssistantText]);
 
   useEffect(() => {
     return () => {

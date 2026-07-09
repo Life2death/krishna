@@ -8,7 +8,7 @@ import {
 } from "lucide-react";
 
 const tabs = [
-  { icon: MessageSquarePlus, label: "New Chat", href: "/", action: true },
+  { icon: MessageSquarePlus, label: "New Chat", href: "/" },
   { icon: MessageSquare, label: "History", href: "/dashboard" },
   { icon: BrainCircuit, label: "Memories", href: "/mobile/memories" },
   { icon: Settings, label: "Settings", href: "/settings" },

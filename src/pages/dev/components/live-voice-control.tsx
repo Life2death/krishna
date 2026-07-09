@@ -5,6 +5,7 @@ import { RealtimeClient } from "@/lib/realtime/realtime-client";
 import { secureStorage } from "@/lib/secure-storage";
 import { getRealtimeTools } from "@/lib/realtime/live-tool-bridge";
 import { LiveOrchestrator } from "@/lib/realtime/live-orchestrator";
+import { LiveTurnLogger } from "@/lib/realtime/live-turn-logger";
 import type {
   RealtimeTimingMarks,
 } from "@/lib/realtime/realtime-types";
@@ -49,6 +50,7 @@ export const LiveVoiceControl = () => {
 
   const clientRef = useRef<RealtimeClient | null>(null);
   const orchestratorRef = useRef<LiveOrchestrator | null>(null);
+  const loggerRef = useRef<LiveTurnLogger | null>(null);
 
   const [sessionState, setSessionState] =
     useState<string>("idle");
@@ -143,6 +145,9 @@ export const LiveVoiceControl = () => {
       });
       orchestratorRef.current = orchestrator;
 
+      const logger = new LiveTurnLogger(client.config.model);
+      loggerRef.current = logger;
+
       client.tools = getRealtimeTools();
 
       client.setCallbacks({
@@ -157,14 +162,23 @@ export const LiveVoiceControl = () => {
           setAssistantTranscript(text);
           setLiveTranscript({ text, isFinal, timestamp: Date.now() });
           setTiming(client.timing);
+          logger.handleTranscript(text);
         },
         onUserTranscript: (text) => {
           setUserTranscript(text);
           setTiming(client.timing);
           orchestrator.handleUserTranscript(text);
+          logger.handleUserTranscript(text);
         },
         onAudioDelta: () => {
           setTiming(client.timing);
+          logger.handleAudioDelta();
+        },
+        onResponseCreated: () => {
+          logger.handleResponseCreated();
+        },
+        onResponseDone: ({ usage }) => {
+          void logger.handleResponseDone(usage);
         },
         onFunctionCall: async (call) => {
           await orchestrator.interceptToolCall(call);
@@ -187,6 +201,7 @@ export const LiveVoiceControl = () => {
       clientRef.current = null;
     }
     orchestratorRef.current = null;
+    loggerRef.current = null;
     stopDurationUpdates();
     setSessionState("idle");
     setSessionDuration("00:00");

@@ -18,6 +18,9 @@ const App = () => {
   const { customizable, toggleLiveVoiceMode } = useAppContext();
   const platform = getPlatform();
   const [transcriptOpen, setTranscriptOpen] = useState(false);
+  const [liveStatus, setLiveStatus] = useState("idle");
+  const [liveUserText, setLiveUserText] = useState<string | null>(null);
+  const [liveAssistantText, setLiveAssistantText] = useState<string | null>(null);
 
   const isLiveMode = customizable.liveVoice?.enabled && customizable.liveVoice?.mode === "live";
   const isClassicMode = !isLiveMode;
@@ -47,7 +50,12 @@ const App = () => {
       >
         <Card className="w-full flex flex-row items-center gap-1 p-2">
           {isClassicMode ? <KrishnaVAD /> : (
-            <LiveVoiceBar onSwitchToClassic={handleSwitchToClassic} />
+            <LiveVoiceBar
+              onSwitchToClassic={handleSwitchToClassic}
+              onLiveStatus={setLiveStatus}
+              onLiveUserText={setLiveUserText}
+              onLiveAssistantText={setLiveAssistantText}
+            />
           )}
           <MobileVoiceButton />
           {(krishna.status === "speaking" || krishna.status === "thinking") && (
@@ -80,7 +88,17 @@ const App = () => {
                 <div className="px-3 py-2 border-b border-border/20">
                   <span className="text-sm font-semibold">Live Transcript</span>
                 </div>
-                <LiveTranscript />
+                <LiveTranscript
+                  override={
+                    isLiveMode
+                      ? {
+                          status: liveStatus,
+                          userText: liveUserText,
+                          assistantText: liveAssistantText,
+                        }
+                      : undefined
+                  }
+                />
               </PopoverContent>
             </Popover>
             <Button
