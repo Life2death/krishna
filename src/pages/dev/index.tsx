@@ -1,4 +1,4 @@
-import { AIProviders, STTProviders, LatencyPanel, SpeechLogPanel } from "./components";
+import { AIProviders, STTProviders, LatencyPanel, SpeechLogPanel, LiveVoiceControl } from "./components";
 import Contribute from "@/components/Contribute";
 import { useSettings } from "@/hooks";
 import { PageLayout } from "@/layouts";
@@ -23,6 +23,11 @@ const DevSpace = () => {
       {/* Speech log — every spoken utterance (T4-F7) */}
       <div className="mt-6">
         <SpeechLogPanel />
+      </div>
+
+      {/* Live Voice — Realtime audio session (Stage 1) */}
+      <div className="mt-6">
+        <LiveVoiceControl />
       </div>
     </PageLayout>
   );

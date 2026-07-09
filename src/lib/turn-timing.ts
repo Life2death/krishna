@@ -10,6 +10,10 @@ export function computeFillerRemaining(
 }
 
 export type TimingMark =
+  | "vad_end"
+  | "stt_done"
+  | "voiceid_done"
+  | "process_start"
   | "end_of_speech"
   | "request_sent"
   | "first_token"
@@ -21,6 +25,9 @@ export interface TurnTimingData {
   marks: Partial<Record<TimingMark, number>>;
   deltas: {
     stt_to_send?: number;
+    vad_to_stt?: number;
+    vad_to_voiceid?: number;
+    vad_to_process?: number;
     send_to_first_token?: number;
     first_token_to_first_audio?: number;
     first_audio_to_last_audio?: number;
@@ -46,6 +53,12 @@ export class TurnTiming {
     this._marks[name] = performance.now();
   }
 
+  markAt(name: TimingMark, value: number): void {
+    if (this._frozen) return;
+    if (this._marks[name] !== undefined) return;
+    this._marks[name] = value;
+  }
+
   setUsage(usage: { prompt_tokens?: number; completion_tokens?: number; cache_read_input_tokens?: number; cache_creation_input_tokens?: number }): void {
     this._usage = usage;
   }
@@ -65,12 +78,15 @@ export class TurnTiming {
     return {
       marks: { ...this._marks },
       deltas: {
+        vad_to_stt: this.delta("vad_end", "stt_done"),
+        vad_to_voiceid: this.delta("vad_end", "voiceid_done"),
+        vad_to_process: this.delta("vad_end", "process_start"),
         stt_to_send: this.delta("end_of_speech", "request_sent"),
         send_to_first_token: this.delta("request_sent", "first_token"),
         first_token_to_first_audio: this.delta("first_token", "first_audio"),
         first_audio_to_last_audio: this.delta("first_audio", "last_audio"),
         first_token_to_last_token: this.delta("first_token", "last_token"),
-        total: this.delta("end_of_speech", "last_audio"),
+        total: this.delta(this._marks.vad_end !== undefined ? "vad_end" : "end_of_speech", "last_audio"),
       },
       ...(this._usage ? { usage: this._usage } : {}),
     };
