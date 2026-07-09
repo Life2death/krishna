@@ -1,12 +1,12 @@
-import { Card, Updater, DragButton, CustomCursor, Button, KrishnaVAD, KrishnaChat, MobileVoiceButton, LiveTranscript, Popover, PopoverContent, PopoverTrigger } from "@/components";
-import { Completion, BrainSelector, SystemPromptSelector, LiveVoiceBar } from "./components";
+import { Card, Updater, DragButton, CustomCursor, Button, KrishnaVAD, MobileVoiceButton } from "@/components";
+import { Completion, BrainSelector, LiveVoiceBar } from "./components";
 import { useApp, useKrishna } from "@/hooks";
 import { useApp as useAppContext } from "@/contexts";
-import { LayoutDashboardIcon, SquareIcon, CaptionsIcon } from "lucide-react";
+import { SquareIcon, CaptionsIcon } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
 import { ErrorBoundary } from "react-error-boundary";
 import { ErrorLayout } from "@/layouts";
-import { useState, useCallback } from "react";
+import { useCallback } from "react";
 import { getPlatform } from "@/lib";
 
 const App = () => {
@@ -24,10 +24,6 @@ const App = () => {
     onKrishnaCommand: krishna.processCommand,
   });
   const platform = getPlatform();
-  const [transcriptOpen, setTranscriptOpen] = useState(false);
-  const [liveStatus, setLiveStatus] = useState("idle");
-  const [liveUserText, setLiveUserText] = useState<string | null>(null);
-  const [liveAssistantText, setLiveAssistantText] = useState<string | null>(null);
 
   const handleSwitchToClassic = useCallback(() => {
     toggleLiveVoiceMode("classic");
@@ -56,9 +52,6 @@ const App = () => {
           {isClassicMode ? <KrishnaVAD /> : (
             <LiveVoiceBar
               onSwitchToClassic={handleSwitchToClassic}
-              onLiveStatus={setLiveStatus}
-              onLiveUserText={setLiveUserText}
-              onLiveAssistantText={setLiveAssistantText}
               onTurnComplete={krishna.maybeLearnStyle}
             />
           )}
@@ -77,42 +70,15 @@ const App = () => {
           <div className="w-full flex flex-row gap-1 items-center">
             <Completion isHidden={isHidden} />
             <BrainSelector />
-            <SystemPromptSelector />
-            <KrishnaChat />
-            <Popover open={transcriptOpen} onOpenChange={setTranscriptOpen}>
-              <PopoverTrigger asChild>
-                <Button
-                  size="icon"
-                  className="cursor-pointer"
-                  title="Live transcript"
-                >
-                  <CaptionsIcon className="h-4 w-4" />
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent align="end" side="bottom" sideOffset={8} className="w-80 p-0">
-                <div className="px-3 py-2 border-b border-border/20">
-                  <span className="text-sm font-semibold">Live Transcript</span>
-                </div>
-                <LiveTranscript
-                  override={
-                    isLiveMode
-                      ? {
-                          status: liveStatus,
-                          userText: liveUserText,
-                          assistantText: liveAssistantText,
-                        }
-                      : undefined
-                  }
-                />
-              </PopoverContent>
-            </Popover>
+            {/* Single conversation entry: opens the Dashboard, which shows the
+                full history including live-voice turns (both are persisted). */}
             <Button
               size="icon"
               className="cursor-pointer"
-              title="Open Dashboard"
+              title="Conversation & live chat"
               onClick={openDashboard}
             >
-              <LayoutDashboardIcon className="h-4 w-4" />
+              <CaptionsIcon className="h-4 w-4" />
             </Button>
           </div>
 
