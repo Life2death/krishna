@@ -2,7 +2,7 @@ import { Card, Updater, DragButton, CustomCursor, Button, KrishnaVAD, MobileVoic
 import { Completion, BrainSelector, LiveVoiceBar } from "./components";
 import { useApp, useKrishna } from "@/hooks";
 import { useApp as useAppContext } from "@/contexts";
-import { SquareIcon, CaptionsIcon } from "lucide-react";
+import { SquareIcon, LayoutDashboardIcon } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
 import { ErrorBoundary } from "react-error-boundary";
 import { ErrorLayout } from "@/layouts";
@@ -70,15 +70,15 @@ const App = () => {
           <div className="w-full flex flex-row gap-1 items-center">
             <Completion isHidden={isHidden} />
             <BrainSelector />
-            {/* Single conversation entry: opens the Dashboard, which shows the
-                full history including live-voice turns (both are persisted). */}
+            {/* Dashboard: full conversation history including live-voice turns
+                (both classic and live are persisted there). */}
             <Button
               size="icon"
               className="cursor-pointer"
-              title="Conversation & live chat"
+              title="Open Dashboard"
               onClick={openDashboard}
             >
-              <CaptionsIcon className="h-4 w-4" />
+              <LayoutDashboardIcon className="h-4 w-4" />
             </Button>
           </div>
 
