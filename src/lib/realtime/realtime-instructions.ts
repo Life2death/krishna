@@ -22,6 +22,7 @@ export function generateLiveInstructions(
   language: string,
   persona?: string,
   responseLength?: string,
+  memoryBlock?: string,
 ): string {
   const parts: string[] = [];
 
@@ -47,6 +48,13 @@ export function generateLiveInstructions(
   parts.push(
     "You have access to tools for web search, Gmail, travel, window control, and more. Use them when appropriate.",
   );
+
+  if (memoryBlock && memoryBlock.trim()) {
+    parts.push(
+      "Things you know about the user (reference these naturally when relevant):\n" +
+        memoryBlock.trim(),
+    );
+  }
 
   return parts.join("\n\n");
 }

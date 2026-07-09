@@ -6,6 +6,8 @@ import { secureStorage } from "@/lib/secure-storage";
 import { getRealtimeTools } from "@/lib/realtime/live-tool-bridge";
 import { LiveOrchestrator } from "@/lib/realtime/live-orchestrator";
 import { LiveTurnLogger } from "@/lib/realtime/live-turn-logger";
+import { getAllMemories } from "@/lib/repo-bound";
+import { formatMemoriesBlock } from "@/lib/memory";
 import type {
   RealtimeTimingMarks,
 } from "@/lib/realtime/realtime-types";
@@ -125,7 +127,15 @@ export const LiveVoiceControl = () => {
       const client = new RealtimeClient();
       clientRef.current = client;
 
+      let memoryBlock = "";
+      try {
+        memoryBlock = formatMemoriesBlock(await getAllMemories());
+      } catch (e) {
+        console.error("[LiveVoice] failed to load memories:", e);
+      }
+
       const orchestrator = new LiveOrchestrator(client, {
+        memoryBlock,
         onToolCallStart: (name, args) => {
           addToolCall({ name, args: JSON.stringify(args), status: "started", timestamp: Date.now() });
           setTiming(client.timing);

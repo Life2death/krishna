@@ -32,11 +32,18 @@ export function parseRememberCommand(command: string): { key: string | null; val
   return null;
 }
 
-export function buildMemoryPrompt(basePrompt: string, memories: Memory[]): string {
+// Formats confirmed memories as a bullet list (empty string if none). Shared by
+// the classic prompt builder and the Live Voice session instructions.
+export function formatMemoriesBlock(memories: Memory[]): string {
   const confirmed = memories.filter(m => m.confirmed && m.value);
-  if (confirmed.length === 0) return basePrompt;
-  const memoryBlock = confirmed
+  if (confirmed.length === 0) return "";
+  return confirmed
     .map(m => "- " + (m.key ? m.key + ": " : "") + m.value)
     .join("\n");
+}
+
+export function buildMemoryPrompt(basePrompt: string, memories: Memory[]): string {
+  const memoryBlock = formatMemoriesBlock(memories);
+  if (!memoryBlock) return basePrompt;
   return basePrompt + "\n\nThings I know about the user:\n" + memoryBlock + "\n\nUse these facts when relevant.";
 }

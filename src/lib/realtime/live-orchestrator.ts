@@ -51,6 +51,9 @@ export interface OrchestratorOptions {
   onSensitiveBlocked?: (name: string, args: Record<string, string>) => void;
   onFallbackToClassic?: () => void;
   settings?: LiveVoiceSettings;
+  // Confirmed user memories, preformatted (see formatMemoriesBlock), injected
+  // into the session instructions so Live Voice can speak about them.
+  memoryBlock?: string;
 }
 
 export class LiveOrchestrator {
@@ -67,11 +70,25 @@ export class LiveOrchestrator {
   }
 
   private applySettings(settings?: LiveVoiceSettings): void {
-    if (!settings) return;
+    const memoryBlock = this.options.memoryBlock;
+
+    if (!settings) {
+      // No settings (e.g. dev panel) — still enrich the default instructions
+      // with the user's memories so Live Voice can reference them.
+      if (memoryBlock && memoryBlock.trim()) {
+        this.client.config.instructions =
+          this.client.config.instructions +
+          "\n\nThings you know about the user (reference these naturally when relevant):\n" +
+          memoryBlock.trim();
+      }
+      return;
+    }
 
     const instructions = generateLiveInstructions(
       settings.language,
       undefined,
+      undefined,
+      memoryBlock,
     );
 
     this.client.config.instructions = instructions;

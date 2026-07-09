@@ -6,6 +6,8 @@ import { getRealtimeTools } from "@/lib/realtime/live-tool-bridge";
 import { LiveOrchestrator } from "@/lib/realtime/live-orchestrator";
 import { getLiveVoiceSettings } from "@/lib/storage/live-voice-settings.storage";
 import { LiveTurnLogger } from "@/lib/realtime/live-turn-logger";
+import { getAllMemories } from "@/lib/repo-bound";
+import { formatMemoriesBlock } from "@/lib/memory";
 import { getTTS } from "@/lib/tts";
 import { MicIcon, MicOffIcon, Loader2Icon, AlertCircleIcon } from "lucide-react";
 
@@ -105,7 +107,16 @@ export const LiveVoiceBar = ({
       });
       clientRef.current = client;
 
-      const orchestrator = new LiveOrchestrator(client, { settings });
+      // Load confirmed memories so Live Voice can speak about what the user has
+      // stored (best-effort — never block the session on this).
+      let memoryBlock = "";
+      try {
+        memoryBlock = formatMemoriesBlock(await getAllMemories());
+      } catch (e) {
+        console.error("[LiveVoice] failed to load memories:", e);
+      }
+
+      const orchestrator = new LiveOrchestrator(client, { settings, memoryBlock });
       orchestratorRef.current = orchestrator;
 
       const logger = new LiveTurnLogger(client.config.model);
