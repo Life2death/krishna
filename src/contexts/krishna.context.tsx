@@ -22,6 +22,7 @@ import { saveAndConfirm } from "@/lib/resolver";
 import { getAllSkills, getSkillByName, createSkill, updateSkillUseCount } from "@/lib/repo-bound";
 import { getAllMemories, createMemory } from "@/lib/repo-bound";
 import { parseRememberCommand } from "@/lib/memory";
+import { runStyleDistillation, type RunLLM } from "@/lib/learning";
 import { detectWakeWord } from "@/lib/wake-word";
 import { parseReminderCommand } from "@/lib/reminders";
 import { createReminder, getDueReminders, updateReminder, cancelReminder } from "@/lib/repo-bound";
@@ -74,6 +75,7 @@ interface KrishnaContextType {
   streamingReply: string;
   processCommand: (transcription: string, opts?: ProcessCommandOptions) => Promise<void>;
   stopSpeaking: () => void;
+  maybeLearnStyle: () => Promise<void>;
   pendingCommand: string | null;
   lastError: string | null;
   clearLastError: () => void;
@@ -611,6 +613,31 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
     emit("command-log-updated").catch(() => {});
   };
 
+  // Passively distil how the user talks into a style-profile memory. Throttled
+  // internally; safe to call after every turn (classic or live). Uses the
+  // configured AI provider for a short one-shot summary.
+  const maybeLearnStyle = useCallback(async () => {
+    if (!selectedAIProvider?.provider) return;
+    const provider = allAiProviders.find(
+      (p) => p.id === selectedAIProvider.provider,
+    );
+    if (!provider) return;
+    const runLLM: RunLLM = async (systemPrompt, userMessage) => {
+      let out = "";
+      for await (const chunk of fetchAIResponse({
+        provider,
+        selectedProvider: selectedAIProvider,
+        systemPrompt,
+        userMessage,
+        maxOutputTokens: 400,
+      })) {
+        out += chunk;
+      }
+      return out;
+    };
+    await runStyleDistillation(runLLM);
+  }, [selectedAIProvider, allAiProviders]);
+
   const recordTurn = async (userText: string, assistantText: string) => {
     if (!userText && !assistantText) return;
     const now = Date.now();
@@ -663,6 +690,7 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
       }
       console.error("Failed to persist turn to SQLite:", e);
     }
+    void maybeLearnStyle();
   };
 
   // T4-F7: single choke point for every spoken utterance. Persists to speech_log
@@ -2361,6 +2389,7 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
           enabled, setKrishnaEnabled,
           status, lastSpoken, streamingReply,
           processCommand, stopSpeaking,
+          maybeLearnStyle,
           pendingCommand,
           lastError, clearLastError,
           voice, setVoice,

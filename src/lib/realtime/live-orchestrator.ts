@@ -8,6 +8,7 @@ import {
 import { RealtimeClient } from "./realtime-client";
 import { getTool } from "@krishna/core/tools";
 import type { ToolResult } from "@krishna/core/tools";
+import { createLearnedAction } from "@/lib/database";
 import { parseYesNo } from "@krishna/core/parse-yes-no";
 import { parseFastCommand as parseClassicFastCommand } from "@/lib/fast-command";
 import { generateLiveInstructions } from "./realtime-instructions";
@@ -62,6 +63,7 @@ export class LiveOrchestrator {
   private options: OrchestratorOptions;
   private proceedAfterConfirm = false;
   private recentFastActions = new Map<string, number>();
+  private lastUserTranscript = "";
 
   constructor(client: RealtimeClient, options: OrchestratorOptions = {}) {
     this.client = client;
@@ -184,13 +186,34 @@ export class LiveOrchestrator {
 
     if (result.success) {
       this.client.sendFunctionResponse(callId, result.output ?? "Done");
+      this.learnFromLive(toolName, args);
     } else {
       this.client.sendFunctionResponse(callId, JSON.stringify({ error: result.error ?? "Tool failed" }));
     }
     this.client.continueResponse();
   }
 
+  // Teach the classic resolver from successful live "open" commands so the same
+  // phrase resolves instantly next time. Only open_target has a clean
+  // input → target mapping; other tools aren't resolution-based.
+  private learnFromLive(toolName: string, args: Record<string, string>): void {
+    if (toolName !== "open_target") return;
+    const input = this.lastUserTranscript.trim().toLowerCase();
+    const target = (args.target ?? "").trim();
+    if (!input || !target) return;
+    createLearnedAction({
+      id: crypto.randomUUID(),
+      displayName: target,
+      target,
+      input,
+      resolvedVia: "live",
+      confidence: 0.8,
+      createdAt: Date.now(),
+    }).catch((e) => console.error("[live] learnFromLive failed:", e));
+  }
+
   handleUserTranscript(text: string): void {
+    this.lastUserTranscript = text;
     if (this.pendingAction && !this.proceedAfterConfirm) {
       const decision = parseYesNo(text);
       if (decision === "yes") {

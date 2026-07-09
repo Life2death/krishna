@@ -22,6 +22,8 @@ interface LiveVoiceBarProps {
   onLiveStatus?: (status: string) => void;
   onLiveUserText?: (text: string | null) => void;
   onLiveAssistantText?: (text: string | null) => void;
+  // Called after each completed live turn so the learning loop can run.
+  onTurnComplete?: () => void;
 }
 
 export const LiveVoiceBar = ({
@@ -29,6 +31,7 @@ export const LiveVoiceBar = ({
   onLiveStatus,
   onLiveUserText,
   onLiveAssistantText,
+  onTurnComplete,
 }: LiveVoiceBarProps) => {
   const clientRef = useRef<RealtimeClient | null>(null);
   const orchestratorRef = useRef<LiveOrchestrator | null>(null);
@@ -165,7 +168,7 @@ export const LiveVoiceBar = ({
           logger.handleResponseCreated();
         },
         onResponseDone: ({ usage }) => {
-          void logger.handleResponseDone(usage);
+          void logger.handleResponseDone(usage).then(() => onTurnComplete?.());
         },
         onFunctionCall: async (call) => {
           await orchestrator.interceptToolCall(call);
@@ -199,6 +202,7 @@ export const LiveVoiceBar = ({
     onLiveStatus,
     onLiveUserText,
     onLiveAssistantText,
+    onTurnComplete,
   ]);
 
   useEffect(() => {

@@ -55,6 +55,7 @@ const App = () => {
               onLiveStatus={setLiveStatus}
               onLiveUserText={setLiveUserText}
               onLiveAssistantText={setLiveAssistantText}
+              onTurnComplete={krishna.maybeLearnStyle}
             />
           )}
           <MobileVoiceButton />
