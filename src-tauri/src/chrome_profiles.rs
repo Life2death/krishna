@@ -27,23 +27,22 @@ pub struct ChromeProfile {
 fn get_default_user_data_dir() -> Option<PathBuf> {
     #[cfg(target_os = "windows")]
     {
-        std::env::var("LOCALAPPDATA")
+        return std::env::var("LOCALAPPDATA")
             .ok()
-            .map(|d| PathBuf::from(d).join(r"Google\Chrome\User Data"))
+            .map(|d| PathBuf::from(d).join(r"Google\Chrome\User Data"));
     }
     #[cfg(target_os = "macos")]
     {
-        Some(
-            dirs_home_dir()
-                .map(|h| h.join(r"Library/Application Support/Google/Chrome")),
-        )
+        return dirs_home_dir().map(|h| h.join("Library/Application Support/Google/Chrome"));
     }
     #[cfg(target_os = "linux")]
     {
-        Some(
-            dirs_home_dir()
-                .map(|h| h.join(r".config/google-chrome")),
-        )
+        return dirs_home_dir().map(|h| h.join(".config/google-chrome"));
+    }
+    // Chrome-profile discovery is desktop-only; other targets (e.g. Android) have none.
+    #[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
+    {
+        None
     }
 }
 
