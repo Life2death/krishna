@@ -87,15 +87,33 @@ export const LiveVoiceBar = ({
       return;
     }
 
+    // Preflight: on some mobile WebViews mic capture is unavailable (non-secure
+    // context). Fail with a clear message instead of a cryptic undefined error.
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setError("Microphone unavailable here (WebView needs a secure context).");
+      return;
+    }
+
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          channelCount: 1,
-          sampleRate: 24000,
-          echoCancellation: true,
-          noiseSuppression: true,
-        },
-      });
+      let stream: MediaStream;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          audio: {
+            channelCount: 1,
+            sampleRate: 24000,
+            echoCancellation: true,
+            noiseSuppression: true,
+          },
+        });
+      } catch (micErr) {
+        const name = micErr instanceof Error ? micErr.name : "";
+        setError(
+          name === "NotAllowedError"
+            ? "Microphone permission denied. Enable it for Krishna in system settings."
+            : `Couldn't access microphone: ${micErr instanceof Error ? micErr.message : String(micErr)}`,
+        );
+        return;
+      }
 
       const settings = getLiveVoiceSettings();
       const client = new RealtimeClient({

@@ -555,6 +555,12 @@ export class RealtimeClient {
     if (!this.audioContext) {
       this.audioContext = new AudioContext({ sampleRate: 24000 });
     }
+    // Mobile WebViews create the context in a "suspended" state; resume it
+    // (startRecording runs inside the mic-tap gesture) or neither capture nor
+    // playback will run. Harmless no-op on desktop where it's already running.
+    if (this.audioContext.state === "suspended") {
+      this.audioContext.resume().catch(() => {});
+    }
     if (this.nextPlayTime < this.audioContext.currentTime) {
       this.nextPlayTime = this.audioContext.currentTime;
     }
