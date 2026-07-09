@@ -20,6 +20,8 @@ export interface CustomizableState {
   };
   liveVoice: {
     enabled: boolean;
+    mode: "classic" | "live";
+    autoStart: boolean;
   };
 }
 
@@ -29,7 +31,7 @@ export const DEFAULT_CUSTOMIZABLE_STATE: CustomizableState = {
   autostart: { isEnabled: true },
   cursor: { type: "invisible" },
   computerControl: { enabled: false },
-  liveVoice: { enabled: false },
+  liveVoice: { enabled: false, mode: "classic", autoStart: false },
 };
 
 /**
@@ -52,8 +54,11 @@ export const getCustomizableState = (): CustomizableState => {
       cursor: parsedState.cursor || DEFAULT_CUSTOMIZABLE_STATE.cursor,
       computerControl:
         parsedState.computerControl || DEFAULT_CUSTOMIZABLE_STATE.computerControl,
-      liveVoice:
-        parsedState.liveVoice || DEFAULT_CUSTOMIZABLE_STATE.liveVoice,
+      liveVoice: {
+        enabled: parsedState.liveVoice?.enabled ?? DEFAULT_CUSTOMIZABLE_STATE.liveVoice.enabled,
+        mode: parsedState.liveVoice?.mode ?? DEFAULT_CUSTOMIZABLE_STATE.liveVoice.mode,
+        autoStart: parsedState.liveVoice?.autoStart ?? DEFAULT_CUSTOMIZABLE_STATE.liveVoice.autoStart,
+      },
     };
   } catch (error) {
     console.error("Failed to get customizable state:", error);
@@ -123,7 +128,28 @@ export const updateComputerControl = (enabled: boolean): CustomizableState => {
 
 export const updateLiveVoice = (enabled: boolean): CustomizableState => {
   const currentState = getCustomizableState();
-  const newState = { ...currentState, liveVoice: { enabled } };
+  const newState = { ...currentState, liveVoice: { ...currentState.liveVoice, enabled } };
+  setCustomizableState(newState);
+  return newState;
+};
+
+export const updateLiveVoiceMode = (mode: "classic" | "live"): CustomizableState => {
+  const currentState = getCustomizableState();
+  const newState = {
+    ...currentState,
+    liveVoice: {
+      ...currentState.liveVoice,
+      enabled: mode === "live",
+      mode,
+    },
+  };
+  setCustomizableState(newState);
+  return newState;
+};
+
+export const updateLiveVoiceAutoStart = (autoStart: boolean): CustomizableState => {
+  const currentState = getCustomizableState();
+  const newState = { ...currentState, liveVoice: { ...currentState.liveVoice, autoStart } };
   setCustomizableState(newState);
   return newState;
 };

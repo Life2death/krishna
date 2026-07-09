@@ -15,6 +15,8 @@ import {
   updateAutostart,
   updateComputerControl,
   updateLiveVoice,
+  updateLiveVoiceMode,
+  updateLiveVoiceAutoStart,
   CustomizableState,
   DEFAULT_CUSTOMIZABLE_STATE,
   CursorType,
@@ -787,6 +789,18 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     loadData();
   };
 
+  const toggleLiveVoiceMode = (mode: "classic" | "live") => {
+    const newState = updateLiveVoiceMode(mode);
+    setCustomizable(newState);
+    loadData();
+  };
+
+  const toggleLiveVoiceAutoStart = (autoStart: boolean) => {
+    const newState = updateLiveVoiceAutoStart(autoStart);
+    setCustomizable(newState);
+    loadData();
+  };
+
   const setCursorType = (type: CursorType) => {
     setCustomizable((prev) => ({ ...prev, cursor: { type } }));
     updateCursor(type);
@@ -816,6 +830,8 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     toggleAutostart,
     toggleComputerControlEnabled,
     toggleLiveVoiceEnabled,
+    toggleLiveVoiceMode,
+    toggleLiveVoiceAutoStart,
     loadData,
     hasActiveLicense,
     setHasActiveLicense,

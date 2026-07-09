@@ -1,12 +1,12 @@
 import { Card, Updater, DragButton, CustomCursor, Button, KrishnaVAD, KrishnaChat, MobileVoiceButton, LiveTranscript, Popover, PopoverContent, PopoverTrigger } from "@/components";
-import { Completion, BrainSelector, SystemPromptSelector } from "./components";
+import { Completion, BrainSelector, SystemPromptSelector, LiveVoiceBar } from "./components";
 import { useApp, useKrishna } from "@/hooks";
 import { useApp as useAppContext } from "@/contexts";
 import { LayoutDashboardIcon, SquareIcon, CaptionsIcon } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
 import { ErrorBoundary } from "react-error-boundary";
 import { ErrorLayout } from "@/layouts";
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { getPlatform } from "@/lib";
 
 const App = () => {
@@ -15,9 +15,16 @@ const App = () => {
     krishnaEnabled: true,
     onKrishnaCommand: krishna.processCommand,
   });
-  const { customizable } = useAppContext();
+  const { customizable, toggleLiveVoiceMode } = useAppContext();
   const platform = getPlatform();
   const [transcriptOpen, setTranscriptOpen] = useState(false);
+
+  const isLiveMode = customizable.liveVoice?.enabled && customizable.liveVoice?.mode === "live";
+  const isClassicMode = !isLiveMode;
+
+  const handleSwitchToClassic = useCallback(() => {
+    toggleLiveVoiceMode("classic");
+  }, [toggleLiveVoiceMode]);
 
   const openDashboard = async () => {
     try {
@@ -39,7 +46,9 @@ const App = () => {
         }`}
       >
         <Card className="w-full flex flex-row items-center gap-1 p-2">
-          <KrishnaVAD />
+          {isClassicMode ? <KrishnaVAD /> : (
+            <LiveVoiceBar onSwitchToClassic={handleSwitchToClassic} />
+          )}
           <MobileVoiceButton />
           {(krishna.status === "speaking" || krishna.status === "thinking") && (
             <Button

@@ -3,12 +3,16 @@ import {
   classifyRealtimeTool,
   isRealtimeToolAllowed,
   mapFunctionNameToAction,
+  getRealtimeTools,
 } from "./live-tool-bridge";
 import { RealtimeClient } from "./realtime-client";
 import { getTool } from "@krishna/core/tools";
 import type { ToolResult } from "@krishna/core/tools";
 import { parseYesNo } from "@krishna/core/parse-yes-no";
 import { parseFastCommand as parseClassicFastCommand } from "@/lib/fast-command";
+import { generateLiveInstructions } from "./realtime-instructions";
+import { estimateRealtimeCost, formatCost } from "./realtime-cost";
+import type { LiveVoiceSettings } from "@/lib/storage/live-voice-settings.storage";
 
 export interface PendingAction {
   name: string;
@@ -45,6 +49,8 @@ export interface OrchestratorOptions {
   onConfirmationRequest?: (name: string, args: Record<string, string>) => void;
   onConfirmationResult?: (name: string, accepted: boolean) => void;
   onSensitiveBlocked?: (name: string, args: Record<string, string>) => void;
+  onFallbackToClassic?: () => void;
+  settings?: LiveVoiceSettings;
 }
 
 export class LiveOrchestrator {
@@ -57,6 +63,29 @@ export class LiveOrchestrator {
   constructor(client: RealtimeClient, options: OrchestratorOptions = {}) {
     this.client = client;
     this.options = options;
+    this.applySettings(options.settings);
+  }
+
+  private applySettings(settings?: LiveVoiceSettings): void {
+    if (!settings) return;
+
+    const instructions = generateLiveInstructions(
+      settings.language,
+      undefined,
+    );
+
+    this.client.config.instructions = instructions;
+    this.client.config.voice = settings.voice;
+    this.client.config.inactivityTimeoutMs = settings.inactivityTimeoutMs;
+    this.client.config.maxSessionDurationMs = settings.maxSessionDurationMs;
+    this.client.config.language = settings.language;
+
+    this.client.tools = [];
+    this.client.tools = getRealtimeTools();
+  }
+
+  updateSettings(settings: LiveVoiceSettings): void {
+    this.applySettings(settings);
   }
 
   get isPendingConfirmation(): boolean {
@@ -68,6 +97,7 @@ export class LiveOrchestrator {
   }
 
   async interceptToolCall(call: RealtimeFunctionCallDone): Promise<void> {
+    this.client.refreshActivity();
     let args: Record<string, string> = {};
     try {
       args = JSON.parse(call.arguments);
@@ -184,8 +214,17 @@ export class LiveOrchestrator {
     }
   }
 
+  getEstimatedCostFormatted(): string {
+    return this.client.getEstimatedCost();
+  }
+
+  getSessionDurationFormatted(): string {
+    return this.client.getSessionDurationFormatted();
+  }
+
   handleOffline(): void {
     this.client.callbacks.onStateChange?.("offline");
+    this.options.onFallbackToClassic?.();
   }
 
   handleBackOnline(): void {

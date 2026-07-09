@@ -6,6 +6,7 @@ import type {
   RealtimeFunctionDefinition,
   RealtimeFunctionCallDone,
 } from "./realtime-types";
+import { estimateRealtimeCost, formatDuration, formatCost } from "./realtime-cost";
 import { DEFAULT_REALTIME_CONFIG } from "./realtime-types";
 import {
   isTranscriptDelta,
@@ -38,11 +39,13 @@ export interface RealtimeCallbacks {
   onUserTranscript?: UserTranscriptHandler;
   onFunctionCall?: FunctionCallHandler;
   onError?: (msg: string, code?: string) => void;
+  onFallbackToClassic?: () => void;
+  onCostUpdate?: (cost: { inputTokens: number; outputTokens: number; estimatedCostUsd: number; speechSeconds: number }) => void;
 }
 
 export class RealtimeClient {
   private ws: WebSocket | null = null;
-  private config: RealtimeConfig;
+  config: RealtimeConfig;
   private apiKey: string = "";
   private _state: RealtimeSessionState = "idle";
   callbacks: RealtimeCallbacks;
@@ -50,12 +53,15 @@ export class RealtimeClient {
   private userTranscripts: string[] = [];
   private _tools: RealtimeFunctionDefinition[] = [];
   private offlineTimer: ReturnType<typeof setTimeout> | null = null;
+  private inactivityTimer: ReturnType<typeof setTimeout> | null = null;
+  private sessionDurationTimer: ReturnType<typeof setInterval> | null = null;
   private audioContext: AudioContext | null = null;
   private scriptProcessor: ScriptProcessorNode | null = null;
   private micSource: MediaStreamAudioSourceNode | null = null;
   private micStream: MediaStream | null = null;
   private nextPlayTime = 0;
   private transcriptAccumulator = "";
+  private currentUserSpeechStartMs: number | null = null;
 
   constructor(
     config?: Partial<RealtimeConfig>,
@@ -86,6 +92,11 @@ export class RealtimeClient {
       toolCallReceived: undefined,
       toolExecuted: undefined,
       disconnectStart: undefined,
+      sessionStartTime: undefined,
+      lastActivityTime: undefined,
+      inactivityFiredAt: undefined,
+      totalUserSpeechMs: 0,
+      totalAssistantSpeechMs: 0,
     };
   }
 
@@ -158,6 +169,9 @@ export class RealtimeClient {
       this.ws.onopen = () => {
         opened = true;
         this.timing.connectedAt = Date.now();
+        this.timing.sessionStartTime = Date.now();
+        this.refreshActivity();
+        this.startInactivityTimer();
         this.setState("connected");
         this.sendSessionUpdate();
         resolve();
@@ -176,19 +190,28 @@ export class RealtimeClient {
 
       this.ws.onclose = (event) => {
         this.clearOfflineTimer();
+        this.clearInactivityTimer();
+        this.stopSessionDurationTimer();
         if (!opened) {
           this.setState("error");
+          this.callbacks.onFallbackToClassic?.();
           reject(new Error(`Connection closed before ready: ${event.reason || `code ${event.code}`}`));
           return;
         }
+        if (event.code !== 1000) {
+          this.callbacks.onFallbackToClassic?.();
+        }
+        this.finalizeSessionCost();
         this.setState("idle");
         this.ws = null;
       };
 
       this.ws.onerror = () => {
         this.clearOfflineTimer();
+        this.clearInactivityTimer();
         if (!opened) {
           this.setState("error");
+          this.callbacks.onFallbackToClassic?.();
           reject(new Error("WebSocket connection error"));
           return;
         }
@@ -197,6 +220,7 @@ export class RealtimeClient {
           return;
         }
         this.setState("error");
+        this.callbacks.onFallbackToClassic?.();
       };
     });
   }
@@ -207,7 +231,10 @@ export class RealtimeClient {
     this.timing.disconnectStart = Date.now();
     this.setState("disconnecting");
     this.clearOfflineTimer();
-    this.ws.close();
+    this.clearInactivityTimer();
+    this.stopSessionDurationTimer();
+    this.finalizeSessionCost();
+    this.ws.close(1000, "Client disconnect");
   }
 
   sendAudio(base64: string): void {
@@ -250,6 +277,84 @@ export class RealtimeClient {
 
   continueResponse(): void {
     this.ws?.send(JSON.stringify({ type: "response.create" }));
+  }
+
+  private startInactivityTimer(): void {
+    this.clearInactivityTimer();
+    const timeout = this.config.inactivityTimeoutMs;
+    if (!timeout || timeout <= 0) return;
+    this.inactivityTimer = setTimeout(() => {
+      this.timing.inactivityFiredAt = Date.now();
+      this.disconnect();
+    }, timeout);
+  }
+
+  private clearInactivityTimer(): void {
+    if (this.inactivityTimer !== null) {
+      clearTimeout(this.inactivityTimer);
+      this.inactivityTimer = null;
+    }
+  }
+
+  refreshActivity(): void {
+    this.timing.lastActivityTime = Date.now();
+    if (this._state === "connected" || this._state === "speaking") {
+      this.clearInactivityTimer();
+      this.startInactivityTimer();
+    }
+  }
+
+  getSessionDurationMs(): number {
+    if (!this.timing.sessionStartTime) return 0;
+    const end = this.timing.disconnectStart ?? Date.now();
+    return end - this.timing.sessionStartTime;
+  }
+
+  getSessionDurationFormatted(): string {
+    return formatDuration(this.getSessionDurationMs());
+  }
+
+  getEstimatedCost(): string {
+    const cost = estimateRealtimeCost(
+      this.timing.totalUserSpeechMs,
+      this.timing.totalAssistantSpeechMs,
+      this.config.model,
+    );
+    return formatCost(cost.estimatedCostUsd);
+  }
+
+  private finalizeSessionCost(): void {
+    if (!this.timing.sessionStartTime) return;
+    const cost = estimateRealtimeCost(
+      this.timing.totalUserSpeechMs,
+      this.timing.totalAssistantSpeechMs,
+      this.config.model,
+    );
+    this.callbacks.onCostUpdate?.({
+      inputTokens: cost.inputTokens,
+      outputTokens: cost.outputTokens,
+      estimatedCostUsd: cost.estimatedCostUsd,
+      speechSeconds: cost.userSpeechSeconds + cost.assistantSpeechSeconds,
+    });
+  }
+
+  private startSessionDurationTimer(): void {
+    this.stopSessionDurationTimer();
+    this.sessionDurationTimer = setInterval(() => {
+      if (!this.timing.sessionStartTime) return;
+      const elapsed = Date.now() - this.timing.sessionStartTime;
+      const maxDuration = this.config.maxSessionDurationMs;
+      if (maxDuration && maxDuration > 0 && elapsed >= maxDuration) {
+        this.disconnect();
+      }
+    }, 5_000);
+  }
+
+  private stopSessionDurationTimer(): void {
+    if (this.sessionDurationTimer !== null) {
+      clearInterval(this.sessionDurationTimer);
+      this.sessionDurationTimer = null;
+    }
   }
 
   private sendSessionUpdate(): void {
@@ -304,6 +409,8 @@ export class RealtimeClient {
   }
 
   private routeEvent(parsed: RealtimeEvent): void {
+    this.refreshActivity();
+
     if (isTranscriptDelta(parsed)) {
       if (this.timing.firstTranscriptDelta === undefined) {
         this.timing.firstTranscriptDelta = Date.now();
@@ -324,6 +431,9 @@ export class RealtimeClient {
       if (this.timing.firstAudioDelta === undefined) {
         this.timing.firstAudioDelta = Date.now();
       }
+      const pcmCharLen = atob(parsed.delta).length;
+      const audioMs = Math.round((pcmCharLen / 2 / 24000) * 1000);
+      this.timing.totalAssistantSpeechMs += audioMs;
       this.playAudio(parsed.delta);
       this.callbacks.onAudio?.(parsed.delta);
       this.callbacks.onAudioDelta?.(parsed.delta);
@@ -337,12 +447,17 @@ export class RealtimeClient {
 
     if (isSpeechStarted(parsed)) {
       this.userTranscripts = [];
+      this.currentUserSpeechStartMs = parsed.audio_start_ms ?? 0;
       this.setState("speaking");
       return;
     }
 
     if (isSpeechStopped(parsed)) {
       if (this._state === "speaking") this.setState("connected");
+      const speechStartMs = this.currentUserSpeechStartMs ?? 0;
+      const speechEndMs = parsed.audio_end_ms ?? speechStartMs;
+      this.timing.totalUserSpeechMs += Math.max(0, speechEndMs - speechStartMs);
+      this.currentUserSpeechStartMs = null;
       return;
     }
 
@@ -382,6 +497,7 @@ export class RealtimeClient {
   async startRecording(stream: MediaStream): Promise<void> {
     this.micStream = stream;
     this.audioContext = this.ensureAudioContext();
+    this.startSessionDurationTimer();
     this.micSource = this.audioContext.createMediaStreamSource(stream);
     this.scriptProcessor = this.audioContext.createScriptProcessor(4096, 1, 1);
     this.micSource.connect(this.scriptProcessor);
@@ -419,6 +535,7 @@ export class RealtimeClient {
     }
     this.nextPlayTime = 0;
     this.transcriptAccumulator = "";
+    this.currentUserSpeechStartMs = null;
   }
 
   markToolExecuted(): void {

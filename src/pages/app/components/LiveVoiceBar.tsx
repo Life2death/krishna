@@ -1,0 +1,222 @@
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Button } from "@/components";
+import { RealtimeClient } from "@/lib/realtime/realtime-client";
+import { secureStorage } from "@/lib/secure-storage";
+import { getRealtimeTools } from "@/lib/realtime/live-tool-bridge";
+import { LiveOrchestrator } from "@/lib/realtime/live-orchestrator";
+import { getLiveVoiceSettings } from "@/lib/storage/live-voice-settings.storage";
+import { MicIcon, MicOffIcon, Loader2Icon, AlertCircleIcon } from "lucide-react";
+
+const STORAGE_KEY_REALTIME_KEY = "openai_realtime_api_key";
+
+interface LiveVoiceBarProps {
+  onSwitchToClassic: () => void;
+}
+
+export const LiveVoiceBar = ({ onSwitchToClassic }: LiveVoiceBarProps) => {
+  const clientRef = useRef<RealtimeClient | null>(null);
+  const orchestratorRef = useRef<LiveOrchestrator | null>(null);
+  const autoStartedRef = useRef(false);
+
+  const [state, setState] = useState<string>("idle");
+  const [apiKey, setApiKey] = useState<string | null>(null);
+  const [duration, setDuration] = useState("00:00");
+  const [costStr, setCostStr] = useState("$0.00");
+  const [transcript, setTranscript] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [hasApiKey, setHasApiKey] = useState(false);
+
+  useEffect(() => {
+    secureStorage.get(STORAGE_KEY_REALTIME_KEY).then((val) => {
+      if (val) {
+        setApiKey(val);
+        setHasApiKey(true);
+      }
+    });
+  }, []);
+
+  const isActive = state === "connected" || state === "speaking";
+  const isBusy = state === "connecting" || state === "disconnecting";
+
+  const durationIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const startDurationUpdates = useCallback(() => {
+    if (durationIntervalRef.current) clearInterval(durationIntervalRef.current);
+    durationIntervalRef.current = setInterval(() => {
+      const client = clientRef.current;
+      if (client) {
+        setDuration(client.getSessionDurationFormatted());
+        setCostStr(client.getEstimatedCost());
+      }
+    }, 1000);
+  }, []);
+
+  const stopDurationUpdates = useCallback(() => {
+    if (durationIntervalRef.current) {
+      clearInterval(durationIntervalRef.current);
+      durationIntervalRef.current = null;
+    }
+  }, []);
+
+  const handleStart = useCallback(async () => {
+    setError(null);
+    setTranscript(null);
+
+    const key = apiKey;
+    if (!key) {
+      setError("No API key configured");
+      return;
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          channelCount: 1,
+          sampleRate: 24000,
+          echoCancellation: true,
+          noiseSuppression: true,
+        },
+      });
+
+      const settings = getLiveVoiceSettings();
+      const client = new RealtimeClient({
+        voice: settings.voice,
+        instructions: "",
+        inactivityTimeoutMs: settings.inactivityTimeoutMs,
+        maxSessionDurationMs: settings.maxSessionDurationMs,
+        language: settings.language,
+      });
+      clientRef.current = client;
+
+      const orchestrator = new LiveOrchestrator(client, { settings });
+      orchestratorRef.current = orchestrator;
+
+      client.setCallbacks({
+        onStateChange: (s) => {
+          setState(s);
+        },
+        onError: (msg) => {
+          setError(msg);
+        },
+        onTranscript: (text, _isFinal) => {
+          setTranscript(text);
+        },
+        onUserTranscript: (text) => {
+          orchestrator.handleUserTranscript(text);
+        },
+        onFunctionCall: async (call) => {
+          await orchestrator.interceptToolCall(call);
+        },
+        onFallbackToClassic: () => {
+          onSwitchToClassic();
+        },
+      });
+
+      await client.connect(key);
+      await client.startRecording(stream);
+      startDurationUpdates();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setError(msg);
+    }
+  }, [apiKey, onSwitchToClassic, startDurationUpdates]);
+
+  useEffect(() => {
+    const settings = getLiveVoiceSettings();
+    if (!settings.autoStart || !apiKey || autoStartedRef.current) return;
+    autoStartedRef.current = true;
+    void handleStart();
+  }, [apiKey, handleStart]);
+
+  const handleStop = useCallback(() => {
+    const client = clientRef.current;
+    if (client) {
+      client.disconnect();
+      clientRef.current = null;
+    }
+    orchestratorRef.current = null;
+    stopDurationUpdates();
+    setState("idle");
+    setDuration("00:00");
+    setCostStr("$0.00");
+  }, [stopDurationUpdates]);
+
+  useEffect(() => {
+    return () => {
+      handleStop();
+    };
+  }, [handleStop]);
+
+  const stateColor: Record<string, string> = {
+    idle: "bg-zinc-400",
+    connecting: "bg-yellow-400 animate-pulse",
+    connected: "bg-green-400",
+    speaking: "bg-blue-400 animate-pulse",
+    disconnecting: "bg-yellow-400",
+    error: "bg-red-400",
+    offline: "bg-orange-400 animate-pulse",
+  };
+
+  const getMicButton = () => {
+    if (isBusy) {
+      return (
+        <Button size="icon" disabled className="bg-muted">
+          <Loader2Icon className="h-4 w-4 animate-spin" />
+        </Button>
+      );
+    }
+    if (isActive) {
+      return (
+        <Button
+          size="icon"
+          onClick={handleStop}
+          className="bg-red-50 hover:bg-red-100"
+          title="Stop Live Voice"
+        >
+          <MicOffIcon className="h-4 w-4 text-red-500" />
+        </Button>
+      );
+    }
+    return (
+      <Button
+        size="icon"
+        onClick={handleStart}
+        disabled={!hasApiKey}
+        className="bg-green-50 hover:bg-green-100"
+        title="Start Live Voice"
+      >
+        <MicIcon className="h-4 w-4 text-green-500" />
+      </Button>
+    );
+  };
+
+  return (
+    <>
+      {getMicButton()}
+      <div className="flex items-center gap-2 text-xs text-muted-foreground min-w-[120px]">
+        <span className={`inline-block w-2 h-2 rounded-full ${stateColor[state] || "bg-zinc-400"}`} />
+        <span className="font-mono tabular-nums">{duration}</span>
+        <span className="font-mono tabular-nums">{costStr}</span>
+      </div>
+      {transcript && (
+        <span className="text-xs text-muted-foreground truncate max-w-[120px] hidden md:inline">
+          {transcript}
+        </span>
+      )}
+      {error && !isActive && (
+        <Button
+          size="sm"
+          variant="outline"
+          className="text-xs gap-1 text-red-400 border-red-400/30"
+          onClick={onSwitchToClassic}
+        >
+          <AlertCircleIcon className="h-3 w-3" />
+          Switch to Classic
+        </Button>
+      )}
+      {!hasApiKey && state === "idle" && (
+        <span className="text-xs text-yellow-400">No API key</span>
+      )}
+    </>
+  );
+};

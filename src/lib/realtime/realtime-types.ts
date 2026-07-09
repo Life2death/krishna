@@ -39,6 +39,11 @@ export interface RealtimeConfig {
     silence_duration_ms?: number;
   };
   maxResponseOutputTokens: number | "inf";
+  inactivityTimeoutMs?: number;
+  maxSessionDurationMs?: number;
+  pushToTalk?: boolean;
+  localCommandsOnly?: boolean;
+  language?: string;
 }
 
 export const DEFAULT_REALTIME_CONFIG: RealtimeConfig = {
@@ -223,4 +228,9 @@ export interface RealtimeTimingMarks {
   toolCallReceived: number | undefined;
   toolExecuted: number | undefined;
   disconnectStart: number | undefined;
+  sessionStartTime: number | undefined;
+  lastActivityTime: number | undefined;
+  inactivityFiredAt: number | undefined;
+  totalUserSpeechMs: number;
+  totalAssistantSpeechMs: number;
 }

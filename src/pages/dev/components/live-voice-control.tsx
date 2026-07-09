@@ -8,6 +8,7 @@ import { LiveOrchestrator } from "@/lib/realtime/live-orchestrator";
 import type {
   RealtimeTimingMarks,
 } from "@/lib/realtime/realtime-types";
+import { formatDuration, formatCost } from "@/lib/realtime/realtime-cost";
 
 const STORAGE_KEY_REALTIME_KEY = "openai_realtime_api_key";
 
@@ -63,6 +64,8 @@ export const LiveVoiceControl = () => {
     string | null
   >(null);
   const [toolCalls, setToolCalls] = useState<ToolCallEvent[]>([]);
+  const [sessionDuration, setSessionDuration] = useState("00:00");
+  const [sessionCost, setSessionCost] = useState("$0.00");
 
   useEffect(() => {
     if (apiKeyLoaded) return;
@@ -71,6 +74,23 @@ export const LiveVoiceControl = () => {
       setApiKeyLoaded(true);
     });
   }, [apiKeyLoaded]);
+
+  const durationIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const startDurationUpdates = useCallback((client: RealtimeClient) => {
+    if (durationIntervalRef.current) clearInterval(durationIntervalRef.current);
+    durationIntervalRef.current = setInterval(() => {
+      setSessionDuration(client.getSessionDurationFormatted());
+      setSessionCost(client.getEstimatedCost());
+    }, 1000);
+  }, []);
+
+  const stopDurationUpdates = useCallback(() => {
+    if (durationIntervalRef.current) {
+      clearInterval(durationIntervalRef.current);
+      durationIntervalRef.current = null;
+    }
+  }, []);
 
   const addToolCall = useCallback((evt: ToolCallEvent) => {
     setToolCalls((prev) => [evt, ...prev].slice(0, 20));
@@ -153,6 +173,7 @@ export const LiveVoiceControl = () => {
 
       await client.connect(apiKey);
       await client.startRecording(stream);
+      startDurationUpdates(client);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       setError(msg);
@@ -166,8 +187,11 @@ export const LiveVoiceControl = () => {
       clientRef.current = null;
     }
     orchestratorRef.current = null;
+    stopDurationUpdates();
     setSessionState("idle");
-  }, []);
+    setSessionDuration("00:00");
+    setSessionCost("$0.00");
+  }, [stopDurationUpdates]);
 
   useEffect(() => {
     return () => {
@@ -236,8 +260,8 @@ export const LiveVoiceControl = () => {
   return (
     <div className="space-y-4">
       <Header
-        title="Live Voice (Stage 2)"
-        description="OpenAI Realtime audio session with tool orchestration"
+        title="Live Voice (Stage 3)"
+        description="OpenAI Realtime audio session with tool orchestration, cost controls, and language support"
       />
 
       <div className="flex items-center gap-3">
@@ -304,6 +328,13 @@ export const LiveVoiceControl = () => {
               className="w-full text-xs px-2 py-1 rounded border border-border/30 bg-background font-mono"
             />
           </div>
+
+          {isActive && (
+            <div className="flex items-center gap-3 text-xs text-muted-foreground">
+              <span>Session: <span className="font-mono tabular-nums">{sessionDuration}</span></span>
+              <span>Est. cost: <span className="font-mono tabular-nums">{sessionCost}</span></span>
+            </div>
+          )}
 
           {userTranscript && (
             <div className="text-xs">
