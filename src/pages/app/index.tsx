@@ -11,19 +11,23 @@ import { getPlatform } from "@/lib";
 
 const App = () => {
   const krishna = useKrishna();
+  const { customizable, toggleLiveVoiceMode } = useAppContext();
+
+  const isLiveMode = customizable.liveVoice?.enabled && customizable.liveVoice?.mode === "live";
+  const isClassicMode = !isLiveMode;
+
+  // Run the classic capture pipeline ONLY in classic mode. In Live mode the
+  // realtime session handles the mic, so keeping classic capture on made both
+  // pipelines answer the same utterance (double voices).
   const { isHidden } = useApp({
-    krishnaEnabled: true,
+    krishnaEnabled: isClassicMode,
     onKrishnaCommand: krishna.processCommand,
   });
-  const { customizable, toggleLiveVoiceMode } = useAppContext();
   const platform = getPlatform();
   const [transcriptOpen, setTranscriptOpen] = useState(false);
   const [liveStatus, setLiveStatus] = useState("idle");
   const [liveUserText, setLiveUserText] = useState<string | null>(null);
   const [liveAssistantText, setLiveAssistantText] = useState<string | null>(null);
-
-  const isLiveMode = customizable.liveVoice?.enabled && customizable.liveVoice?.mode === "live";
-  const isClassicMode = !isLiveMode;
 
   const handleSwitchToClassic = useCallback(() => {
     toggleLiveVoiceMode("classic");

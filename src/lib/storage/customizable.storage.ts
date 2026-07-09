@@ -25,13 +25,23 @@ export interface CustomizableState {
   };
 }
 
+// Desktop defaults to Live Voice (with classic as the fallback); mobile stays on
+// classic until on-device Live Voice is verified.
+const IS_MOBILE_UA =
+  typeof navigator !== "undefined" &&
+  /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+
 export const DEFAULT_CUSTOMIZABLE_STATE: CustomizableState = {
   appIcon: { isVisible: true },
   alwaysOnTop: { isEnabled: false },
   autostart: { isEnabled: true },
   cursor: { type: "invisible" },
   computerControl: { enabled: false },
-  liveVoice: { enabled: false, mode: "classic", autoStart: false },
+  liveVoice: {
+    enabled: !IS_MOBILE_UA,
+    mode: IS_MOBILE_UA ? "classic" : "live",
+    autoStart: false,
+  },
 };
 
 /**
