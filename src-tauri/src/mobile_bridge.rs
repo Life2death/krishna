@@ -54,6 +54,20 @@ pub fn get_baked_anthropic_key() -> Option<String> {
     }
 }
 
+/// Returns the build-time-baked OpenAI Realtime API key on mobile (so Live Voice
+/// works without key entry on the phone), or None on desktop.
+#[tauri::command]
+pub fn get_baked_realtime_key() -> Option<String> {
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    {
+        option_env!("OPENAI_REALTIME_API_KEY").map(|s| s.to_string())
+    }
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    {
+        None
+    }
+}
+
 // ── Sync transport fallback (Turso HTTP pipeline via reqwest) ──────────
 // Provides a Rust-backed transport used when `@libsql/client` can't run
 // (e.g. restrictive Android WebView). The TypeScript side auto-detects and

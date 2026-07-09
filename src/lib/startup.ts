@@ -96,5 +96,26 @@ export async function initializeCore(): Promise<void> {
     }
   }
 
+  // Seed the build-baked OpenAI Realtime key into the secure store so Live Voice
+  // works on mobile without typing a key. No-op on desktop (baked key is None)
+  // and never overwrites a key the user already set.
+  try {
+    const { invoke } = await import("@tauri-apps/api/core");
+    const existing = await invoke<string | null>("secure_get", {
+      key: "openai_realtime_api_key",
+    });
+    if (!existing) {
+      const baked = await invoke<string | null>("get_baked_realtime_key");
+      if (baked) {
+        await invoke("secure_set", {
+          key: "openai_realtime_api_key",
+          value: baked,
+        });
+      }
+    }
+  } catch (err) {
+    console.error("[startup] realtime key seed failed:", err);
+  }
+
   await startSync();
 }

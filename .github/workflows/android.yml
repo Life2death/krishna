@@ -108,6 +108,9 @@ jobs:
           TAURI_SIGNING_ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
           TAURI_SIGNING_ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           TAURI_SIGNING_ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          # Baked into the APK so Live Voice works without key entry on mobile.
+          OPENAI_REALTIME_API_KEY: ${{ secrets.OPENAI_REALTIME_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: npx tauri android build --apk --aab
 
       - name: Upload APK artifact (PR)

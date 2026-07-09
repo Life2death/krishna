@@ -28,8 +28,14 @@ fn main() {
         if let Ok(anthropic_key) = std::env::var("ANTHROPIC_API_KEY") {
             println!("cargo:rustc-env=ANTHROPIC_API_KEY={}", anthropic_key);
         }
+        // Bake the OpenAI Realtime key into mobile builds too, so Live Voice
+        // works on the phone without typing a long key into a mobile keyboard.
+        if let Ok(realtime_key) = std::env::var("OPENAI_REALTIME_API_KEY") {
+            println!("cargo:rustc-env=OPENAI_REALTIME_API_KEY={}", realtime_key);
+        }
     }
     println!("cargo:rerun-if-env-changed=ANTHROPIC_API_KEY");
+    println!("cargo:rerun-if-env-changed=OPENAI_REALTIME_API_KEY");
 
     tauri_build::build()
 }

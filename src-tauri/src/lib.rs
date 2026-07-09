@@ -186,6 +186,7 @@ pub fn run() {
             mobile_bridge::sync_exec,
             mobile_bridge::sync_exec_multiple,
             mobile_bridge::get_baked_anthropic_key,
+            mobile_bridge::get_baked_realtime_key,
             resolver::resolve_app,
             resolver::verify_target,
             tts::synthesize_speech_piper,
