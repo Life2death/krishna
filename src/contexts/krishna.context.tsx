@@ -43,6 +43,7 @@ import { getRecentSpeech, getDisabledLines, getBannedPhrases } from "@krishna/co
 import { matchCannedResponse } from "@/lib/canned-responses";
 import { SentenceStream } from "@/lib/sentence-stream";
 import { SpeechQueue } from "@/lib/speech-queue";
+import { parseFastCommand } from "@/lib/fast-command";
 
 export interface ConversationTurn {
   id: string;
@@ -51,13 +52,27 @@ export interface ConversationTurn {
   timestamp: number;
 }
 
+interface VoiceTimingMarks {
+  vadEndAt?: number;
+  sttDoneAt?: number;
+  voiceIdDoneAt?: number;
+  processStartAt?: number;
+}
+
+interface ProcessCommandOptions {
+  skipWakeWord?: boolean;
+  voiceVerifyResult?: VoiceVerifyResult;
+  voiceVerificationPending?: boolean;
+  voiceTiming?: VoiceTimingMarks;
+}
+
 interface KrishnaContextType {
   enabled: boolean;
   setKrishnaEnabled: (v: boolean) => void;
   status: AssistantStatus;
   lastSpoken: string;
   streamingReply: string;
-  processCommand: (transcription: string, opts?: { skipWakeWord?: boolean; voiceVerifyResult?: VoiceVerifyResult }) => Promise<void>;
+  processCommand: (transcription: string, opts?: ProcessCommandOptions) => Promise<void>;
   stopSpeaking: () => void;
   pendingCommand: string | null;
   lastError: string | null;
@@ -1171,7 +1186,7 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
   );
 
   const processCommand = useCallback(
-    async (transcription: string, opts?: { skipWakeWord?: boolean; voiceVerifyResult?: VoiceVerifyResult }) => {
+    async (transcription: string, opts?: ProcessCommandOptions) => {
       if (pendingConfirmationRef.current) {
         clearConfirmTimeout();
         const pending = pendingConfirmationRef.current;
@@ -1495,7 +1510,7 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
       const voiceResult = opts?.voiceVerifyResult;
       const isUnverified = voiceResult
         ? voiceResult.enrolled && voiceResult.mature && !voiceResult.match
-        : false;
+        : opts?.voiceVerificationPending ?? false;
 
       if (wakeWordEnabled && !opts?.skipWakeWord && !pendingConfirmationRef.current) {
         const { detected, remainder } = detectWakeWord(transcription, wakeWord);
@@ -1513,7 +1528,20 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
       setStatus("thinking");
 
       const turnTiming = new TurnTiming();
-      turnTiming.mark("end_of_speech");
+      const voiceTiming = opts?.voiceTiming;
+      if (voiceTiming?.vadEndAt !== undefined) {
+        turnTiming.markAt("vad_end", voiceTiming.vadEndAt);
+        turnTiming.markAt("end_of_speech", voiceTiming.vadEndAt);
+      } else {
+        turnTiming.mark("end_of_speech");
+      }
+      if (voiceTiming?.sttDoneAt !== undefined) {
+        turnTiming.markAt("stt_done", voiceTiming.sttDoneAt);
+      }
+      if (voiceTiming?.voiceIdDoneAt !== undefined) {
+        turnTiming.markAt("voiceid_done", voiceTiming.voiceIdDoneAt);
+      }
+      turnTiming.markAt("process_start", voiceTiming?.processStartAt ?? performance.now());
 
       // INSERT pending row immediately so it's visible in the Dashboard live view
       const captureId = crypto.randomUUID();
@@ -1564,6 +1592,87 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
         setLastError(errMsg);
         setStatus("idle");
         logOutcome(command, "failed", "ai_error", errMsg);
+        return;
+      }
+
+      const fastCommand = parseFastCommand(command);
+      if (fastCommand) {
+        turnTiming.mark("request_sent");
+
+        if (isUnverified) {
+          const prompt = fastCommand.reason === "open" && fastCommand.action.action === "open"
+            ? `Should I open ${fastCommand.action.target}?`
+            : "Should I run that command?";
+          pendingConfirmationRef.current = {
+            type: "action",
+            spokenResponse: prompt,
+            pendingResult: {
+              found: true,
+              displayName: fastCommand.reason,
+              target: "",
+              actionToResume: JSON.stringify(fastCommand.action),
+            },
+            input: command,
+            captureId: currentCaptureIdRef.current ?? undefined,
+          };
+          const thisPending = pendingConfirmationRef.current;
+          reAskRef.current = false;
+          clearConfirmTimeout();
+          confirmTimeoutRef.current = setTimeout(() => {
+            void handleConfirmDecline(thisPending, "I'll take that as a no.", "Fast command confirmation timed out (15s)");
+          }, 15000);
+          setStatus("confirming");
+          setLastSpoken(prompt);
+          setKrishnaSpeaking(true);
+          try {
+            turnTiming.mark("first_audio");
+            await speakLogged(prompt, "confirm_prompt", thisPending.captureId);
+          } finally {
+            turnTiming.mark("last_audio");
+            setKrishnaSpeaking(false);
+          }
+          turnTiming.freeze();
+          updateCommandTiming({ id: captureId, timing: turnTiming.toJSON() }).catch((err) =>
+            console.error("Failed to persist turn timing:", err)
+          );
+          emit("command-log-updated").catch(() => {});
+          return;
+        }
+
+        const result = await executeAction(fastCommand.action, llmFallback);
+        const responsePlan = decideActionResponse(result, false);
+        if (result.spokenResponse && responsePlan?.shouldSpeak) {
+          if (responsePlan.recordTurn) {
+            await recordTurn(pendingUserTextRef.current, result.spokenResponse);
+          }
+          logOutcome(
+            command,
+            responsePlan.outcome,
+            responsePlan.failureReason,
+            responsePlan.detail,
+            result.spokenResponse,
+          );
+          setStatus("speaking");
+          setLastSpoken(result.spokenResponse);
+          setKrishnaSpeaking(true);
+          try {
+            turnTiming.mark("first_audio");
+            await speakLogged(result.spokenResponse, result.kind === "status" ? "status" : "answer", captureId);
+          } finally {
+            turnTiming.mark("last_audio");
+            setKrishnaSpeaking(false);
+          }
+        } else if (result.spokenResponse) {
+          logOutcome(command, result.ok === false ? "failed" : "answered", result.ok === false ? "tool_failed" : undefined, result.errorDetail, result.spokenResponse);
+        } else {
+          logOutcome(command, "failed", "tool_failed", "fast command produced no response");
+        }
+        turnTiming.freeze();
+        updateCommandTiming({ id: captureId, timing: turnTiming.toJSON() }).catch((err) =>
+          console.error("Failed to persist turn timing:", err)
+        );
+        emit("command-log-updated").catch(() => {});
+        setStatus("idle");
         return;
       }
 

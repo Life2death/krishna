@@ -13,6 +13,8 @@ import { emit } from "@tauri-apps/api/event";
 import { verifyVoice, getVoiceStatus, isVoiceIdEnabled, considerAddSample } from "@/lib/voice-client";
 import type { VoiceVerifyResult } from "@/lib/voice-client";
 
+const VOICE_ID_GATE_TIMEOUT_MS = 500;
+
 export const KrishnaVAD = () => {
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [muted, setMuted] = useState(false);
@@ -95,44 +97,71 @@ export const KrishnaVAD = () => {
 
         setIsTranscribing(true);
 
-        // Run STT and voice-ID verification in parallel.
-        // Even when Voice ID is disabled, run verification passively so
-        // considerAddSample can top up the gallery from daily use (Option A
-        // background-fill). When disabled, the result is never acted on:
-        // no status indicator, no command gating.
+        const vadEndAt = performance.now();
+
+        // Run STT and voice-ID verification in parallel. Voice ID is kept off the
+        // critical path unless enabled, and even then only gets a short deadline.
+        // Passive learning continues in the background from normal use.
         const voiceIdEnabled = isVoiceIdEnabled();
-        const [transcription, voiceResult] = await Promise.all([
-          fetchSTTWithRetryDefault({
+        const sttPromise = fetchSTTWithRetryDefault({
             provider: providerConfig,
             selectedProvider: selectedSttProvider,
             audio: audioBlob,
-          }),
-          verifyVoice(audio, 16000).catch((err) => {
+          });
+        const voicePromise = verifyVoice(audio, 16000).catch((err) => {
             console.error("[voice-id] Verify failed (fail-open):", err);
-            return null as any;
-          }),
-        ]);
+            return null;
+          });
 
-        if (voiceResult) {
+        const transcription = await sttPromise;
+        const sttDoneAt = performance.now();
+
+        let voiceResult: VoiceVerifyResult | null = null;
+        let voiceIdTimedOut = false;
+        if (voiceIdEnabled) {
+          voiceResult = await Promise.race([
+            voicePromise,
+            new Promise<null>((resolve) => {
+              setTimeout(() => {
+                voiceIdTimedOut = true;
+                resolve(null);
+              }, VOICE_ID_GATE_TIMEOUT_MS);
+            }),
+          ]);
+        }
+        const voiceIdDoneAt = voiceResult ? performance.now() : undefined;
+
+        const processStartAt = performance.now();
+
+        voicePromise.then((result) => {
+          const voiceDoneAt = performance.now();
+          if (!result) return;
+
           console.debug(
-            `[voice-id] verify: score=${voiceResult.score?.toFixed(3)} threshold=${voiceResult.threshold?.toFixed(3)} match=${voiceResult.match} mature=${voiceResult.mature} samples=${voiceResult.sampleCount}`,
+            `[voice-id] verify: score=${result.score?.toFixed(3)} threshold=${result.threshold?.toFixed(3)} match=${result.match} mature=${result.mature} samples=${result.sampleCount} elapsed=${Math.round(voiceDoneAt - vadEndAt)}ms`,
           );
-          // Passive learning: on every verified utterance, consider adding a sample
-          // regardless of whether Voice ID is enabled (fills the meter from normal use).
-          if (voiceResult.enrolled && voiceResult.match) {
-            considerAddSample(audio, 16000, voiceResult).catch((err) =>
+
+          if (result.enrolled && result.match) {
+            considerAddSample(audio, 16000, result).catch((err) =>
               console.error("[voice-id] Passive sample add failed:", err)
             );
           }
-          // Only show status indicator and pass result when Voice ID is enabled
+
           if (voiceIdEnabled) {
-            setVoiceStatus(voiceResult);
+            setVoiceStatus(result);
           }
-        }
+        });
 
         if (transcription) {
           await krishna.processCommand(transcription, {
             voiceVerifyResult: voiceIdEnabled ? (voiceResult ?? undefined) : undefined,
+            voiceVerificationPending: voiceIdEnabled && voiceIdTimedOut,
+            voiceTiming: {
+              vadEndAt,
+              sttDoneAt,
+              voiceIdDoneAt,
+              processStartAt,
+            },
           });
         }
       } catch (error) {

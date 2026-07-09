@@ -56,6 +56,26 @@ describe("TurnTiming", () => {
     expect(data.deltas.total).toBeCloseTo(2750, -1);
   });
 
+  it("records pre-process voice pipeline marks", () => {
+    const t = new TurnTiming();
+
+    t.markAt("vad_end", 1000);
+    t.markAt("stt_done", 1800);
+    t.markAt("voiceid_done", 2300);
+    t.markAt("process_start", 1850);
+    t.markAt("end_of_speech", 1850);
+    t.markAt("request_sent", 2000);
+    t.markAt("first_audio", 2600);
+    t.markAt("last_audio", 4100);
+
+    const data = t.toData();
+    expect(data.deltas.vad_to_stt).toBe(800);
+    expect(data.deltas.vad_to_voiceid).toBe(1300);
+    expect(data.deltas.vad_to_process).toBe(850);
+    expect(data.deltas.stt_to_send).toBe(150);
+    expect(data.deltas.total).toBe(3100);
+  });
+
   it("ignores duplicate marks (first wins)", () => {
     vi.setSystemTime(0);
     const t = new TurnTiming();

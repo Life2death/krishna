@@ -80,7 +80,10 @@ export const LatencyPanel = () => {
               <tr className="text-muted-foreground border-b border-border/30">
                 <th className="text-left py-1 pr-2">#</th>
                 <th className="text-left py-1 pr-2">Transcript</th>
-                <th className="text-right py-1 pr-2" title="Speech-to-text: end of speech to request sent">STT</th>
+                <th className="text-right py-1 pr-2" title="VAD end to STT completion">STT</th>
+                <th className="text-right py-1 pr-2" title="VAD end to Voice ID completion when it finishes before the gate">Voice ID</th>
+                <th className="text-right py-1 pr-2" title="VAD end to processCommand start">Intake</th>
+                <th className="text-right py-1 pr-2" title="VAD end to AI request sent">Send</th>
                 <th className="text-right py-1 pr-2" title="Time to first token: request sent to first token received">TTFT</th>
                 <th className="text-right py-1 pr-2" title="First token to first audio played">1st Audio</th>
                 <th className="text-right py-1 pr-2" title="Generation time: first token to last token">Gen</th>
@@ -97,6 +100,15 @@ export const LatencyPanel = () => {
                   <td className="py-1 pr-2 text-muted-foreground">{i + 1}</td>
                   <td className="py-1 pr-2 max-w-[120px] truncate" title={e.transcript}>
                     {e.transcript}
+                  </td>
+                  <td className="py-1 pr-2 text-right tabular-nums">
+                    {formatDelta(e.timing.deltas.vad_to_stt ?? e.timing.deltas.stt_to_send)}
+                  </td>
+                  <td className="py-1 pr-2 text-right tabular-nums">
+                    {formatDelta(e.timing.deltas.vad_to_voiceid)}
+                  </td>
+                  <td className="py-1 pr-2 text-right tabular-nums">
+                    {formatDelta(e.timing.deltas.vad_to_process)}
                   </td>
                   <td className="py-1 pr-2 text-right tabular-nums">
                     {formatDelta(e.timing.deltas.stt_to_send)}
