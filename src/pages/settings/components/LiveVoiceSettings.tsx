@@ -1,6 +1,9 @@
 import { useState, useEffect } from "react";
 import { Switch, Label, Header, Selection } from "@/components";
 import { useApp } from "@/contexts";
+import { secureStorage } from "@/lib/secure-storage";
+
+const STORAGE_KEY_REALTIME_KEY = "openai_realtime_api_key";
 import {
   getLiveVoiceSettings,
   updateLiveVoiceMode,
@@ -24,6 +27,8 @@ export const LiveVoiceSettings = () => {
   const [inactivityMs, setInactivityMs] = useState(300000);
   const [maxDurationMs, setMaxDurationMs] = useState(1800000);
   const [settingsLoaded, setSettingsLoaded] = useState(false);
+  const [apiKey, setApiKey] = useState("");
+  const [apiKeySaved, setApiKeySaved] = useState(false);
 
   useEffect(() => {
     if (settingsLoaded) return;
@@ -35,7 +40,20 @@ export const LiveVoiceSettings = () => {
     setSettingsLoaded(true);
     setMode(liveVoice?.mode ?? "classic");
     setAutoStart(liveVoice?.autoStart ?? false);
+    secureStorage.get(STORAGE_KEY_REALTIME_KEY).then((val) => {
+      if (val) setApiKey(val);
+    });
   }, [settingsLoaded, liveVoice]);
+
+  const handleApiKeyChange = (val: string) => {
+    setApiKey(val);
+    setApiKeySaved(false);
+  };
+
+  const handleApiKeyBlur = async () => {
+    await secureStorage.set(STORAGE_KEY_REALTIME_KEY, apiKey.trim());
+    setApiKeySaved(true);
+  };
 
   const handleModeChange = (newMode: VoiceMode) => {
     setMode(newMode);
@@ -134,6 +152,25 @@ export const LiveVoiceSettings = () => {
 
       {isLive && (
         <div className="space-y-3 border border-border/20 rounded-lg p-4 bg-muted/10">
+          <div className="space-y-1">
+            <Label className="text-sm font-medium">OpenAI Realtime API key</Label>
+            <p className="text-xs text-muted-foreground">
+              Stored securely on this device. Required to start Live Voice
+              (each device needs its own key — it does not sync).
+            </p>
+            <input
+              type="password"
+              value={apiKey}
+              onChange={(e) => handleApiKeyChange(e.target.value)}
+              onBlur={handleApiKeyBlur}
+              placeholder="sk-..."
+              className="w-full max-w-md text-xs px-2 py-1.5 rounded border border-border/30 bg-background font-mono"
+            />
+            {apiKeySaved && (
+              <p className="text-xs text-green-500">Saved.</p>
+            )}
+          </div>
+
           <div className="flex items-center justify-between">
             <div>
               <Label className="text-sm font-medium">Auto-start on launch</Label>
