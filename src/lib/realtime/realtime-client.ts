@@ -1,183 +1,295 @@
 import type {
-  RealtimeSessionState,
   RealtimeConfig,
   RealtimeEvent,
+  RealtimeSessionState,
   RealtimeTimingMarks,
+  RealtimeFunctionDefinition,
+  RealtimeFunctionCallDone,
 } from "./realtime-types";
 import { DEFAULT_REALTIME_CONFIG } from "./realtime-types";
 import {
-  parseRealtimeEvent,
   isTranscriptDelta,
   isTranscriptDone,
   isAudioDelta,
   isAudioDone,
+  isSpeechStarted,
+  isSpeechStopped,
+  isUserTranscript,
+  isResponseCreated,
+  isResponseDone,
   isErrorEvent,
-  isUserTranscriptCompleted,
-  extractTranscriptText,
-  extractAudioDelta,
-  isValidStateTransition,
+  isFunctionCallDone,
+  canTransitionTo,
 } from "./realtime-events";
 
-export interface RealtimeClientCallbacks {
-  onStateChange?: (state: RealtimeSessionState) => void;
-  onError?: (message: string, code?: string) => void;
-  onTranscript?: (text: string, isFinal: boolean) => void;
-  onUserTranscript?: (text: string) => void;
-  onAudioDelta?: (base64Audio: string, isFinal: boolean) => void;
-  onEvent?: (event: RealtimeEvent) => void;
+export type RealtimeEventHandler = (event: RealtimeEvent) => void;
+export type StateChangeHandler = (state: RealtimeSessionState) => void;
+export type TranscriptHandler = (text: string, isFinal: boolean) => void;
+export type AudioHandler = (base64: string) => void;
+export type UserTranscriptHandler = (text: string) => void;
+export type FunctionCallHandler = (call: RealtimeFunctionCallDone) => void;
+
+export interface RealtimeCallbacks {
+  onEvent?: RealtimeEventHandler;
+  onStateChange?: StateChangeHandler;
+  onTranscript?: TranscriptHandler;
+  onAudio?: AudioHandler;
+  onAudioDelta?: AudioHandler;
+  onUserTranscript?: UserTranscriptHandler;
+  onFunctionCall?: FunctionCallHandler;
+  onError?: (msg: string, code?: string) => void;
 }
 
-const PCM_SAMPLE_RATE = 24000;
-const SCRIPT_PROCESSOR_BUFFER_SIZE = 4096;
-
 export class RealtimeClient {
+  private ws: WebSocket | null = null;
+  private config: RealtimeConfig;
+  private apiKey: string = "";
   private _state: RealtimeSessionState = "idle";
-  private _config: RealtimeConfig;
-  private _ws: WebSocket | null = null;
-  private _audioContext: AudioContext | null = null;
-  private _scriptProcessor: ScriptProcessorNode | null = null;
-  private _micSource: MediaStreamAudioSourceNode | null = null;
-  private _micStream: MediaStream | null = null;
-  private _nextPlayTime = 0;
-  private _transcriptAccumulator = "";
-  private _callbacks: RealtimeClientCallbacks = {};
-  private _timing: RealtimeTimingMarks = {
-    connectStart: 0,
-    connectedAt: undefined,
-    firstTranscriptDelta: undefined,
-    firstAudioDelta: undefined,
-    firstUserTranscript: undefined,
-    responseCreated: undefined,
-    responseDone: undefined,
-    disconnectStart: undefined,
-  };
+  callbacks: RealtimeCallbacks;
+  timing: RealtimeTimingMarks;
+  private userTranscripts: string[] = [];
+  private _tools: RealtimeFunctionDefinition[] = [];
+  private offlineTimer: ReturnType<typeof setTimeout> | null = null;
+  private audioContext: AudioContext | null = null;
+  private scriptProcessor: ScriptProcessorNode | null = null;
+  private micSource: MediaStreamAudioSourceNode | null = null;
+  private micStream: MediaStream | null = null;
+  private nextPlayTime = 0;
+  private transcriptAccumulator = "";
 
-  constructor(config?: Partial<RealtimeConfig>) {
-    this._config = { ...DEFAULT_REALTIME_CONFIG, ...config };
+  constructor(
+    config?: Partial<RealtimeConfig>,
+    callbacks: RealtimeCallbacks = {},
+  ) {
+    this.config = { ...this.defaultConfig(), ...config };
+    this.callbacks = callbacks;
+    this.timing = this.freshTiming();
   }
 
-  get state(): RealtimeSessionState {
-    return this._state;
+  private defaultConfig(): RealtimeConfig {
+    return DEFAULT_REALTIME_CONFIG;
   }
 
-  get timing(): RealtimeTimingMarks {
-    return { ...this._timing };
+  setCallbacks(cbs: RealtimeCallbacks): void {
+    this.callbacks = { ...this.callbacks, ...cbs };
   }
 
-  get config(): RealtimeConfig {
-    return { ...this._config };
-  }
-
-  setCallbacks(cbs: RealtimeClientCallbacks): void {
-    this._callbacks = cbs;
-  }
-
-  private _setState(state: RealtimeSessionState): void {
-    if (!isValidStateTransition(this._state, state)) {
-      console.warn(
-        `[Realtime] Invalid state transition: ${this._state} -> ${state}`,
-      );
-      return;
-    }
-    this._state = state;
-    this._callbacks.onStateChange?.(state);
-  }
-
-  private _emitError(message: string, code?: string): void {
-    this._setState("error");
-    this._callbacks.onError?.(message, code);
-  }
-
-  async connect(apiKey: string): Promise<void> {
-    if (this._state !== "idle") {
-      throw new Error(
-        `Cannot connect: current state is "${this._state}". Disconnect first.`,
-      );
-    }
-
-    this._timing = {
-      connectStart: performance.now(),
+  private freshTiming(): RealtimeTimingMarks {
+    return {
+      connectStart: Date.now(),
       connectedAt: undefined,
       firstTranscriptDelta: undefined,
       firstAudioDelta: undefined,
       firstUserTranscript: undefined,
       responseCreated: undefined,
       responseDone: undefined,
+      toolCallReceived: undefined,
+      toolExecuted: undefined,
       disconnectStart: undefined,
     };
+  }
 
-    this._setState("connecting");
+  get state(): RealtimeSessionState {
+    return this._state;
+  }
 
-    try {
-      await this._connectWebSocket(apiKey);
-    } catch (error) {
-      const msg =
-        error instanceof Error ? error.message : "Failed to connect session";
-      this._emitError(msg, "SESSION_CONNECT_FAILED");
-      throw error;
+  get tools(): RealtimeFunctionDefinition[] {
+    return this._tools;
+  }
+
+  set tools(defs: RealtimeFunctionDefinition[]) {
+    this._tools = defs;
+    if (this._state === "connected" || this._state === "speaking") {
+      this.sendSessionUpdate();
     }
   }
 
-  // Resolves once the socket is OPEN and the session update has been sent, so
-  // callers can safely start recording. Rejects if the socket fails to open.
-  private _connectWebSocket(apiKey: string): Promise<void> {
+  getTiming(): RealtimeTimingMarks {
+    return { ...this.timing };
+  }
+
+  private setState(next: RealtimeSessionState): void {
+    if (!canTransitionTo(this._state, next)) {
+      return;
+    }
+    this._state = next;
+    this.callbacks.onStateChange?.(next);
+  }
+
+  private detectOffline(): void {
+    this.setState("offline");
+    this.offlineTimer = setTimeout(() => {
+      this.disconnect();
+    }, 10_000);
+  }
+
+  private clearOfflineTimer(): void {
+    if (this.offlineTimer !== null) {
+      clearTimeout(this.offlineTimer);
+      this.offlineTimer = null;
+    }
+  }
+
+  async connect(apiKey?: string): Promise<void> {
+    if (apiKey) this.apiKey = apiKey;
+    if (!this.apiKey) {
+      this.callbacks.onError?.("No API key provided");
+      return;
+    }
+    if (this._state !== "idle") return;
+    this.timing = this.freshTiming();
+    this.setState("connecting");
+
     return new Promise<void>((resolve, reject) => {
-      const wsUrl = `wss://api.openai.com/v1/realtime?model=${encodeURIComponent(this._config.model)}`;
+      const url = `wss://api.openai.com/v1/realtime?model=${encodeURIComponent(this.config.model)}`;
+      let opened = false;
 
       try {
-        this._ws = new WebSocket(wsUrl, [
+        this.ws = new WebSocket(url, [
           "realtime",
-          `openai-insecure-api-key.${apiKey}`,
+          `openai-insecure-api-key.${this.apiKey}`,
         ]);
       } catch (error) {
-        reject(
-          error instanceof Error
-            ? error
-            : new Error("WebSocket construction failed"),
-        );
+        this.setState("error");
+        reject(error instanceof Error ? error : new Error("WebSocket construction failed"));
         return;
       }
 
-      let opened = false;
-
-      this._ws.onopen = () => {
+      this.ws.onopen = () => {
         opened = true;
-        this._sendSessionUpdate();
+        this.timing.connectedAt = Date.now();
+        this.setState("connected");
+        this.sendSessionUpdate();
         resolve();
       };
 
-      this._ws.onmessage = (event: MessageEvent) => {
-        if (typeof event.data === "string") {
-          this._handleMessage(event.data);
+      this.ws.onmessage = (msg) => {
+        if (typeof msg.data !== "string") return;
+        try {
+          const parsed: RealtimeEvent = JSON.parse(msg.data);
+          this.routeEvent(parsed);
+          this.callbacks.onEvent?.(parsed);
+        } catch {
+          // ignore malformed realtime events
         }
       };
 
-      this._ws.onerror = () => {
+      this.ws.onclose = (event) => {
+        this.clearOfflineTimer();
         if (!opened) {
+          this.setState("error");
+          reject(new Error(`Connection closed before ready: ${event.reason || `code ${event.code}`}`));
+          return;
+        }
+        this.setState("idle");
+        this.ws = null;
+      };
+
+      this.ws.onerror = () => {
+        this.clearOfflineTimer();
+        if (!opened) {
+          this.setState("error");
           reject(new Error("WebSocket connection error"));
           return;
         }
-        this._emitError("WebSocket connection error", "WS_ERROR");
-      };
-
-      this._ws.onclose = (event: CloseEvent) => {
-        const reason = event.reason || `code ${event.code}`;
-        if (!opened) {
-          reject(new Error(`Connection closed before ready: ${reason}`));
+        if (navigator.onLine === false) {
+          this.detectOffline();
           return;
         }
-        if (this._state === "connected" || this._state === "speaking") {
-          this._setState("idle");
-          this._callbacks.onError?.(`Connection closed: ${reason}`, "WS_CLOSE");
-        } else if (this._state === "disconnecting") {
-          this._setState("idle");
-        }
+        this.setState("error");
       };
     });
   }
 
-  // GA Realtime API expects the audio format as an object, not a bare string.
-  private _toGaAudioFormat(
+  disconnect(): void {
+    this.stopRecording();
+    if (!this.ws || this._state === "idle") return;
+    this.timing.disconnectStart = Date.now();
+    this.setState("disconnecting");
+    this.clearOfflineTimer();
+    this.ws.close();
+  }
+
+  sendAudio(base64: string): void {
+    if (this._state !== "connected" && this._state !== "speaking") return;
+    this.ws?.send(
+      JSON.stringify({ type: "input_audio_buffer.append", audio: base64 }),
+    );
+  }
+
+  commitAudio(): void {
+    if (this._state !== "connected" && this._state !== "speaking") return;
+    this.ws?.send(JSON.stringify({ type: "input_audio_buffer.commit" }));
+  }
+
+  clearAudioBuffer(): void {
+    this.ws?.send(JSON.stringify({ type: "input_audio_buffer.clear" }));
+  }
+
+  cancelResponse(): void {
+    this.ws?.send(JSON.stringify({ type: "response.cancel" }));
+  }
+
+  bargeIn(): void {
+    this.cancelResponse();
+    this.clearAudioBuffer();
+  }
+
+  sendFunctionResponse(callId: string, output: string): void {
+    this.ws?.send(
+      JSON.stringify({
+        type: "conversation.item.create",
+        item: {
+          type: "function_call_output",
+          call_id: callId,
+          output,
+        },
+      }),
+    );
+  }
+
+  continueResponse(): void {
+    this.ws?.send(JSON.stringify({ type: "response.create" }));
+  }
+
+  private sendSessionUpdate(): void {
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
+    const session: Record<string, unknown> = {
+      type: "realtime",
+      output_modalities: ["audio"],
+      instructions: this.config.instructions,
+      audio: {
+        input: {
+          format: this.toRealtimeAudioFormat(this.config.inputAudioFormat),
+          transcription: this.config.inputAudioTranscription,
+          turn_detection: this.config.turnDetection,
+        },
+        output: {
+          format: this.toRealtimeAudioFormat(this.config.outputAudioFormat),
+          voice: this.config.voice,
+        },
+      },
+      max_output_tokens: this.config.maxResponseOutputTokens,
+    };
+
+    if (this._tools.length > 0) {
+      session.tools = this._tools.map((t) => ({
+        type: "function" as const,
+        name: t.name,
+        description: t.description,
+        parameters: t.parameters,
+      }));
+      session.tool_choice = "auto";
+    }
+
+    const payload = {
+      type: "session.update",
+      session,
+    };
+    this.ws.send(JSON.stringify(payload));
+  }
+
+  private toRealtimeAudioFormat(
     format: RealtimeConfig["inputAudioFormat"],
   ): { type: string; rate: number } {
     switch (format) {
@@ -187,181 +299,145 @@ export class RealtimeClient {
         return { type: "audio/pcma", rate: 8000 };
       case "pcm16":
       default:
-        return { type: "audio/pcm", rate: PCM_SAMPLE_RATE };
+        return { type: "audio/pcm", rate: 24000 };
     }
   }
 
-  private _sendSessionUpdate(): void {
-    if (!this._ws || this._ws.readyState !== WebSocket.OPEN) return;
+  private routeEvent(parsed: RealtimeEvent): void {
+    if (isTranscriptDelta(parsed)) {
+      if (this.timing.firstTranscriptDelta === undefined) {
+        this.timing.firstTranscriptDelta = Date.now();
+      }
+      this.transcriptAccumulator += parsed.delta;
+      this.callbacks.onTranscript?.(this.transcriptAccumulator, false);
+      if (this._state === "connected") this.setState("speaking");
+      return;
+    }
 
-    this._timing.connectedAt = performance.now();
-    this._setState("connected");
+    if (isTranscriptDone(parsed)) {
+      this.transcriptAccumulator = parsed.transcript;
+      this.callbacks.onTranscript?.(parsed.transcript, true);
+      return;
+    }
 
-    // GA session shape (gpt-realtime): requires `type`, uses `output_modalities`,
-    // and nests audio config under `audio.input` / `audio.output`.
-    const update = {
-      type: "session.update",
-      session: {
-        type: "realtime",
-        output_modalities: ["audio"],
-        instructions: this._config.instructions,
-        audio: {
-          input: {
-            format: this._toGaAudioFormat(this._config.inputAudioFormat),
-            transcription: this._config.inputAudioTranscription,
-            turn_detection: this._config.turnDetection,
-          },
-          output: {
-            format: this._toGaAudioFormat(this._config.outputAudioFormat),
-            voice: this._config.voice,
-          },
-        },
-        max_output_tokens: this._config.maxResponseOutputTokens,
-      },
+    if (isAudioDelta(parsed)) {
+      if (this.timing.firstAudioDelta === undefined) {
+        this.timing.firstAudioDelta = Date.now();
+      }
+      this.playAudio(parsed.delta);
+      this.callbacks.onAudio?.(parsed.delta);
+      this.callbacks.onAudioDelta?.(parsed.delta);
+      if (this._state === "connected") this.setState("speaking");
+      return;
+    }
+
+    if (isAudioDone(parsed)) {
+      return;
+    }
+
+    if (isSpeechStarted(parsed)) {
+      this.userTranscripts = [];
+      this.setState("speaking");
+      return;
+    }
+
+    if (isSpeechStopped(parsed)) {
+      if (this._state === "speaking") this.setState("connected");
+      return;
+    }
+
+    if (isResponseCreated(parsed)) {
+      this.timing.responseCreated = Date.now();
+      this.transcriptAccumulator = "";
+      return;
+    }
+
+    if (isResponseDone(parsed)) {
+      this.timing.responseDone = Date.now();
+      if (this._state === "speaking") this.setState("connected");
+      return;
+    }
+
+    if (isUserTranscript(parsed)) {
+      if (this.timing.firstUserTranscript === undefined) {
+        this.timing.firstUserTranscript = Date.now();
+      }
+      this.userTranscripts.push(parsed.transcript);
+      this.callbacks.onUserTranscript?.(parsed.transcript);
+      return;
+    }
+
+    if (isFunctionCallDone(parsed)) {
+      this.timing.toolCallReceived = Date.now();
+      this.callbacks.onFunctionCall?.(parsed);
+      return;
+    }
+
+    if (isErrorEvent(parsed)) {
+      this.setState("error");
+      this.callbacks.onError?.(parsed.error.message, parsed.error.code);
+    }
+  }
+
+  async startRecording(stream: MediaStream): Promise<void> {
+    this.micStream = stream;
+    this.audioContext = this.ensureAudioContext();
+    this.micSource = this.audioContext.createMediaStreamSource(stream);
+    this.scriptProcessor = this.audioContext.createScriptProcessor(4096, 1, 1);
+    this.micSource.connect(this.scriptProcessor);
+    this.scriptProcessor.connect(this.audioContext.destination);
+
+    this.scriptProcessor.onaudioprocess = (e) => {
+      if (this._state !== "connected" && this._state !== "speaking") return;
+      const input = e.inputBuffer.getChannelData(0);
+      const pcm = this.floatTo16BitPcm(input);
+      const base64 = this.arrayBufferToBase64(pcm.buffer);
+      this.sendAudio(base64);
     };
-
-    this._ws.send(JSON.stringify(update));
   }
 
-  private _handleMessage(data: string): void {
-    const event = parseRealtimeEvent(data);
-    if (!event) return;
-
-    this._callbacks.onEvent?.(event);
-
-    switch (event.type) {
-      case "response.created":
-        this._timing.responseCreated = performance.now();
-        this._transcriptAccumulator = "";
-        if (this._state !== "error") {
-          this._setState("speaking");
-        }
-        break;
-
-      case "response.done":
-        this._timing.responseDone = performance.now();
-        if (this._state !== "error") {
-          this._setState("connected");
-        }
-        break;
-
-      case "response.audio_transcript.delta": {
-        if (this._timing.firstTranscriptDelta === undefined) {
-          this._timing.firstTranscriptDelta = performance.now();
-        }
-        if (isTranscriptDelta(event)) {
-          this._transcriptAccumulator += event.delta;
-          this._callbacks.onTranscript?.(this._transcriptAccumulator, false);
-        }
-        break;
-      }
-
-      case "response.output_audio_transcript.delta": {
-        if (this._timing.firstTranscriptDelta === undefined) {
-          this._timing.firstTranscriptDelta = performance.now();
-        }
-        if (isTranscriptDelta(event)) {
-          this._transcriptAccumulator += event.delta;
-          this._callbacks.onTranscript?.(this._transcriptAccumulator, false);
-        }
-        break;
-      }
-
-      case "response.audio_transcript.done": {
-        if (isTranscriptDone(event)) {
-          this._transcriptAccumulator = event.transcript;
-          this._callbacks.onTranscript?.(event.transcript, true);
-        }
-        break;
-      }
-
-      case "response.output_audio_transcript.done": {
-        if (isTranscriptDone(event)) {
-          this._transcriptAccumulator = event.transcript;
-          this._callbacks.onTranscript?.(event.transcript, true);
-        }
-        break;
-      }
-
-      case "response.audio.delta": {
-        if (this._timing.firstAudioDelta === undefined) {
-          this._timing.firstAudioDelta = performance.now();
-        }
-        if (isAudioDelta(event)) {
-          this._playAudio(event.delta);
-          this._callbacks.onAudioDelta?.(event.delta, false);
-        }
-        break;
-      }
-
-      case "response.audio.done": {
-        if (isAudioDone(event) && event.delta) {
-          this._playAudio(event.delta);
-          this._callbacks.onAudioDelta?.(event.delta, true);
-        }
-        break;
-      }
-
-      case "response.output_audio.delta": {
-        if (this._timing.firstAudioDelta === undefined) {
-          this._timing.firstAudioDelta = performance.now();
-        }
-        if (isAudioDelta(event)) {
-          this._playAudio(event.delta);
-          this._callbacks.onAudioDelta?.(event.delta, false);
-        }
-        break;
-      }
-
-      case "response.output_audio.done": {
-        if (isAudioDone(event) && event.delta) {
-          this._playAudio(event.delta);
-          this._callbacks.onAudioDelta?.(event.delta, true);
-        }
-        break;
-      }
-
-      case "conversation.item.input_audio_transcription.completed": {
-        if (this._timing.firstUserTranscript === undefined) {
-          this._timing.firstUserTranscript = performance.now();
-        }
-        if (isUserTranscriptCompleted(event)) {
-          this._callbacks.onUserTranscript?.(event.transcript);
-        }
-        break;
-      }
-
-      case "input_audio_buffer.speech_started":
-        break;
-
-      case "input_audio_buffer.speech_stopped":
-        break;
-
-      case "error": {
-        if (isErrorEvent(event)) {
-          this._emitError(
-            event.error.message || "Unknown Realtime error",
-            event.error.code,
-          );
-        }
-        break;
-      }
+  stopRecording(): void {
+    if (this.scriptProcessor) {
+      this.scriptProcessor.onaudioprocess = null;
+      this.scriptProcessor.disconnect();
+      this.scriptProcessor = null;
     }
+
+    if (this.micSource) {
+      this.micSource.disconnect();
+      this.micSource = null;
+    }
+
+    if (this.micStream) {
+      this.micStream.getTracks().forEach((track) => track.stop());
+      this.micStream = null;
+    }
+
+    if (this.audioContext) {
+      this.audioContext.close();
+      this.audioContext = null;
+    }
+    this.nextPlayTime = 0;
+    this.transcriptAccumulator = "";
   }
 
-  private _ensureAudioContext(): AudioContext {
-    if (!this._audioContext) {
-      this._audioContext = new AudioContext({ sampleRate: PCM_SAMPLE_RATE });
-    }
-    if (this._nextPlayTime < this._audioContext.currentTime) {
-      this._nextPlayTime = this._audioContext.currentTime;
-    }
-    return this._audioContext;
+  markToolExecuted(): void {
+    this.timing.toolExecuted = Date.now();
   }
 
-  private _playAudio(base64Audio: string): void {
+  private ensureAudioContext(): AudioContext {
+    if (!this.audioContext) {
+      this.audioContext = new AudioContext({ sampleRate: 24000 });
+    }
+    if (this.nextPlayTime < this.audioContext.currentTime) {
+      this.nextPlayTime = this.audioContext.currentTime;
+    }
+    return this.audioContext;
+  }
+
+  private playAudio(base64Audio: string): void {
     try {
-      const audioContext = this._ensureAudioContext();
+      const context = this.ensureAudioContext();
       const binary = atob(base64Audio);
       const bytes = new Uint8Array(binary.length);
       for (let i = 0; i < binary.length; i++) {
@@ -370,149 +446,49 @@ export class RealtimeClient {
 
       const sampleCount = Math.floor(bytes.byteLength / 2);
       const pcm16 = new Int16Array(bytes.buffer, bytes.byteOffset, sampleCount);
-      const buffer = audioContext.createBuffer(1, sampleCount, PCM_SAMPLE_RATE);
+      const buffer = context.createBuffer(1, sampleCount, 24000);
       const channel = buffer.getChannelData(0);
 
       for (let i = 0; i < sampleCount; i++) {
         channel[i] = pcm16[i] / 0x8000;
       }
 
-      const source = audioContext.createBufferSource();
+      const source = context.createBufferSource();
       source.buffer = buffer;
-      source.connect(audioContext.destination);
-      source.start(this._nextPlayTime);
-      this._nextPlayTime += buffer.duration;
+      source.connect(context.destination);
+      source.start(this.nextPlayTime);
+      this.nextPlayTime += buffer.duration;
     } catch (error) {
-      this._callbacks.onError?.(
+      this.callbacks.onError?.(
         error instanceof Error ? error.message : "Audio playback failed",
         "AUDIO_PLAYBACK_FAILED",
       );
     }
   }
 
-  async startRecording(stream: MediaStream): Promise<void> {
-    if (!this._ws || this._ws.readyState !== WebSocket.OPEN) {
-      throw new Error("Cannot start recording: WebSocket not connected");
+  private floatTo16BitPcm(float32Array: Float32Array): Int16Array {
+    const pcm = new Int16Array(float32Array.length);
+    for (let i = 0; i < float32Array.length; i++) {
+      const s = Math.max(-1, Math.min(1, float32Array[i]));
+      pcm[i] = s < 0 ? s * 0x8000 : s * 0x7fff;
     }
-
-    this._micStream = stream;
-
-    try {
-      this._audioContext = this._ensureAudioContext();
-      this._micSource = this._audioContext.createMediaStreamSource(stream);
-
-      this._scriptProcessor = this._audioContext.createScriptProcessor(
-        SCRIPT_PROCESSOR_BUFFER_SIZE,
-        1,
-        1,
-      );
-
-      this._micSource.connect(this._scriptProcessor);
-      this._scriptProcessor.connect(this._audioContext.destination);
-
-      this._scriptProcessor.onaudioprocess = (event: AudioProcessingEvent) => {
-        if (
-          !this._ws ||
-          this._ws.readyState !== WebSocket.OPEN
-        )
-          return;
-
-        const inputData = event.inputBuffer.getChannelData(0);
-        const pcm16 = new Int16Array(inputData.length);
-
-        for (let i = 0; i < inputData.length; i++) {
-          const clamped = Math.max(-1, Math.min(1, inputData[i]));
-          pcm16[i] = clamped < 0 ? clamped * 0x8000 : clamped * 0x7fff;
-        }
-
-        const bytes = new Uint8Array(pcm16.buffer);
-        let binary = "";
-        for (let i = 0; i < bytes.byteLength; i++) {
-          binary += String.fromCharCode(bytes[i]);
-        }
-        const base64 = btoa(binary);
-
-        this._ws.send(
-          JSON.stringify({ type: "input_audio_buffer.append", audio: base64 }),
-        );
-      };
-    } catch (error) {
-      this._emitError(
-        error instanceof Error
-          ? `Audio capture setup failed: ${error.message}`
-          : "Audio capture setup failed",
-        "AUDIO_SETUP_FAILED",
-      );
-      throw error;
-    }
+    return pcm;
   }
 
-  stopRecording(): void {
-    if (this._scriptProcessor) {
-      this._scriptProcessor.onaudioprocess = null;
-      this._scriptProcessor.disconnect();
-      this._scriptProcessor = null;
+  private arrayBufferToBase64(buffer: ArrayBuffer): string {
+    const bytes = new Uint8Array(buffer);
+    let binary = "";
+    for (let i = 0; i < bytes.byteLength; i++) {
+      binary += String.fromCharCode(bytes[i]);
     }
-
-    if (this._micSource) {
-      this._micSource.disconnect();
-      this._micSource = null;
-    }
-
-    if (this._micStream) {
-      this._micStream.getTracks().forEach((t) => t.stop());
-      this._micStream = null;
-    }
-
-    if (this._ws && this._ws.readyState === WebSocket.OPEN) {
-      this._ws.send(JSON.stringify({ type: "input_audio_buffer.commit" }));
-    }
+    return btoa(binary);
   }
 
-  disconnect(): void {
-    if (this._state === "idle" && !this._ws && !this._audioContext) {
-      return;
-    }
-
-    this._timing.disconnectStart = performance.now();
-    if (this._state !== "idle") {
-      this._setState("disconnecting");
-    }
-
-    this.stopRecording();
-
-    if (this._audioContext) {
-      this._audioContext.close().catch(() => {});
-      this._audioContext = null;
-    }
-
-    if (this._ws) {
-      this._ws.onopen = null;
-      this._ws.onmessage = null;
-      this._ws.onerror = null;
-      this._ws.onclose = null;
-
-      if (
-        this._ws.readyState === WebSocket.OPEN ||
-        this._ws.readyState === WebSocket.CONNECTING
-      ) {
-        this._ws.close(1000, "Client disconnect");
-      }
-      this._ws = null;
-    }
-
-    this._nextPlayTime = 0;
-    this._transcriptAccumulator = "";
-    this._callbacks = {};
-
-    if (this._state !== "error") {
-      this._setState("idle");
-    }
+  getTranscriptHistory(): string[] {
+    return [...this.userTranscripts];
   }
 
-  cancelResponse(): void {
-    if (this._ws && this._ws.readyState === WebSocket.OPEN) {
-      this._ws.send(JSON.stringify({ type: "response.cancel" }));
-    }
+  resetTiming(): void {
+    this.timing = this.freshTiming();
   }
 }

@@ -4,7 +4,24 @@ export type RealtimeSessionState =
   | "connected"
   | "speaking"
   | "disconnecting"
-  | "error";
+  | "error"
+  | "offline";
+
+export interface RealtimeFunctionParameter {
+  type: string;
+  description: string;
+  enum?: string[];
+}
+
+export interface RealtimeFunctionDefinition {
+  name: string;
+  description: string;
+  parameters: {
+    type: "object";
+    properties: Record<string, RealtimeFunctionParameter>;
+    required: string[];
+  };
+}
 
 export interface RealtimeConfig {
   model: string;
@@ -115,6 +132,57 @@ export interface RealtimeInputTranscriptionCompleted extends RealtimeEventBase {
   content_index?: number;
 }
 
+export interface RealtimeFunctionCallDelta extends RealtimeEventBase {
+  type: "response.function_call_arguments.delta";
+  delta: string;
+  response_id: string;
+  item_id: string;
+  output_index: number;
+  call_id: string;
+}
+
+export interface RealtimeFunctionCallDone extends RealtimeEventBase {
+  type: "response.function_call_arguments.done";
+  name: string;
+  arguments: string;
+  response_id: string;
+  item_id: string;
+  output_index: number;
+  call_id: string;
+}
+
+export interface RealtimeConversationItemCreated extends RealtimeEventBase {
+  type: "conversation.item.created";
+  previous_item_id?: string;
+  item: {
+    id: string;
+    type: string;
+    object: string;
+    status?: string;
+    name?: string;
+    arguments?: string;
+    call_id?: string;
+    output?: string;
+    role?: string;
+    content?: unknown[];
+  };
+}
+
+export interface RealtimeResponseOutputItemDone extends RealtimeEventBase {
+  type: "response.output_item.done";
+  response_id: string;
+  output_index: number;
+  item: {
+    id: string;
+    type: string;
+    object: string;
+    status?: string;
+    name?: string;
+    call_id?: string;
+    arguments?: string;
+  };
+}
+
 export interface RealtimeErrorEvent extends RealtimeEventBase {
   type: "error";
   error: {
@@ -137,6 +205,10 @@ export type RealtimeEvent =
   | RealtimeSpeechStarted
   | RealtimeSpeechStopped
   | RealtimeInputTranscriptionCompleted
+  | RealtimeFunctionCallDelta
+  | RealtimeFunctionCallDone
+  | RealtimeConversationItemCreated
+  | RealtimeResponseOutputItemDone
   | RealtimeErrorEvent
   | RealtimeEventBase;
 
@@ -148,5 +220,7 @@ export interface RealtimeTimingMarks {
   firstUserTranscript: number | undefined;
   responseCreated: number | undefined;
   responseDone: number | undefined;
+  toolCallReceived: number | undefined;
+  toolExecuted: number | undefined;
   disconnectStart: number | undefined;
 }

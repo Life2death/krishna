@@ -227,6 +227,15 @@ Goal: make Live Voice the primary low-latency experience while keeping Classic V
    - user speech should always be able to interrupt assistant speech
    - cancellation should cleanly stop audio and model response
 7. Keep local deterministic commands available outside the live model path.
+8. Add a language and voice-persona layer for Indian languages:
+   - support English, Hindi, Marathi, and mixed Hinglish as explicit assistant modes
+   - allow the user to choose a preferred spoken language
+   - allow Krishna to auto-detect Hindi/Marathi/Hinglish from the user transcript when confidence is high
+   - keep the default voice configurable, starting with `marin` and optionally `cedar`
+   - add session instructions for natural Indian Hindi and natural Marathi pronunciation
+   - avoid hardcoding claims that a built-in voice is natively Indian, Hindi, or Marathi
+   - document that OpenAI voices can speak Hindi/Marathi text, but may not sound perfectly native
+   - keep pronunciation/style instructions in the session config, not scattered through UI code
 
 ### Acceptance Criteria
 
@@ -236,17 +245,52 @@ Goal: make Live Voice the primary low-latency experience while keeping Classic V
 - The UI shows a useful session-level cost estimate.
 - The app can recover from network drops.
 - Tool execution is auditable from logs/dev panel.
+- Krishna can be configured to speak English, Hindi, Marathi, or Hinglish in Live Voice mode.
+- Hindi/Marathi voice instructions are applied through the Realtime session configuration.
+- The app does not advertise built-in voices as native Hindi/Marathi voices unless verified by official docs.
 
 ### Suggested Tests
 
 - Unit-test context truncation and session refresh policies.
 - Unit-test cost estimator.
 - Unit-test fallback selection.
+- Unit-test language preference resolution and prompt/session instruction generation.
 - Integration-test a mocked long session with transcript, tool calls, interruption, reconnect, and completion.
 
 ### Main Tradeoff
 
 Stage 3 delivers the best user experience but creates the most vendor coupling and runtime cost exposure. It should only happen after Stages 1 and 2 prove reliability locally.
+
+### Hindi, Marathi, and Hinglish Voice Notes
+
+OpenAI audio voices can speak Hindi and Marathi text, but the available built-in voices should not be described as guaranteed native Indian voices unless official documentation explicitly says so. For Stage 3, Krishna should provide a user-facing language preference and use session instructions to shape pronunciation and tone.
+
+Recommended starter voice settings:
+
+- English: `marin`
+- Hindi: `marin` or `cedar`
+- Marathi: `marin` or `cedar`
+- Hinglish: `marin`
+
+Recommended Hindi instruction:
+
+```text
+Speak in natural Indian Hindi with a warm conversational tone. Use Devanagari pronunciation when speaking Hindi words. Keep responses concise and avoid an American accent where possible.
+```
+
+Recommended Marathi instruction:
+
+```text
+Speak in natural Marathi with a warm Maharashtrian conversational tone. Use Devanagari pronunciation when speaking Marathi words. Keep responses concise and avoid an American accent where possible.
+```
+
+Recommended Hinglish instruction:
+
+```text
+Speak in natural Indian Hinglish. Mix English and Hindi only when it feels conversational. Keep responses concise and friendly.
+```
+
+Do not switch languages unexpectedly. If the user has set a preferred language, follow it unless they explicitly ask to change languages.
 
 ## Cost Model
 

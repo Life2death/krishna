@@ -3,8 +3,9 @@ import { Header } from "@/components";
 import { useApp } from "@/contexts";
 import { RealtimeClient } from "@/lib/realtime/realtime-client";
 import { secureStorage } from "@/lib/secure-storage";
+import { getRealtimeTools } from "@/lib/realtime/live-tool-bridge";
+import { LiveOrchestrator } from "@/lib/realtime/live-orchestrator";
 import type {
-  RealtimeSessionState,
   RealtimeTimingMarks,
 } from "@/lib/realtime/realtime-types";
 
@@ -26,6 +27,13 @@ interface TimingDisplay {
   value: number | undefined;
 }
 
+interface ToolCallEvent {
+  name: string;
+  args: string;
+  status: "started" | "complete" | "sensitive_blocked" | "confirmed" | "declined";
+  timestamp: number;
+}
+
 function sinceConnect(
   timing: RealtimeTimingMarks | null,
   mark: number | undefined,
@@ -39,8 +47,10 @@ export const LiveVoiceControl = () => {
   const liveVoiceEnabled = customizable.liveVoice?.enabled ?? false;
 
   const clientRef = useRef<RealtimeClient | null>(null);
+  const orchestratorRef = useRef<LiveOrchestrator | null>(null);
+
   const [sessionState, setSessionState] =
-    useState<RealtimeSessionState>("idle");
+    useState<string>("idle");
   const [apiKey, setApiKey] = useState("");
   const [apiKeyLoaded, setApiKeyLoaded] = useState(false);
   const [liveTranscript, setLiveTranscript] = useState<LiveTranscript | null>(
@@ -52,6 +62,7 @@ export const LiveVoiceControl = () => {
   const [assistantTranscript, setAssistantTranscript] = useState<
     string | null
   >(null);
+  const [toolCalls, setToolCalls] = useState<ToolCallEvent[]>([]);
 
   useEffect(() => {
     if (apiKeyLoaded) return;
@@ -61,11 +72,16 @@ export const LiveVoiceControl = () => {
     });
   }, [apiKeyLoaded]);
 
+  const addToolCall = useCallback((evt: ToolCallEvent) => {
+    setToolCalls((prev) => [evt, ...prev].slice(0, 20));
+  }, []);
+
   const handleStart = useCallback(async () => {
     setError(null);
     setLiveTranscript(null);
     setUserTranscript(null);
     setAssistantTranscript(null);
+    setToolCalls([]);
 
     if (!apiKey) {
       setError("Enter an OpenAI API key first");
@@ -87,6 +103,28 @@ export const LiveVoiceControl = () => {
       const client = new RealtimeClient();
       clientRef.current = client;
 
+      const orchestrator = new LiveOrchestrator(client, {
+        onToolCallStart: (name, args) => {
+          addToolCall({ name, args: JSON.stringify(args), status: "started", timestamp: Date.now() });
+          setTiming(client.timing);
+        },
+        onToolCallComplete: (name) => {
+          addToolCall({ name, args: "", status: "complete", timestamp: Date.now() });
+          setTiming(client.timing);
+        },
+        onConfirmationRequest: (name, args) => {
+          addToolCall({ name, args: JSON.stringify(args), status: "sensitive_blocked", timestamp: Date.now() });
+          setUserTranscript(`[Awaiting confirmation for: ${name}]`);
+        },
+        onConfirmationResult: (name, accepted) => {
+          addToolCall({ name, args: "", status: accepted ? "confirmed" : "declined", timestamp: Date.now() });
+          setUserTranscript(accepted ? `[Confirmed: ${name}]` : `[Declined: ${name}]`);
+        },
+      });
+      orchestratorRef.current = orchestrator;
+
+      client.tools = getRealtimeTools();
+
       client.setCallbacks({
         onStateChange: (state) => {
           setSessionState(state);
@@ -103,9 +141,13 @@ export const LiveVoiceControl = () => {
         onUserTranscript: (text) => {
           setUserTranscript(text);
           setTiming(client.timing);
+          orchestrator.handleUserTranscript(text);
         },
         onAudioDelta: () => {
           setTiming(client.timing);
+        },
+        onFunctionCall: async (call) => {
+          await orchestrator.interceptToolCall(call);
         },
       });
 
@@ -115,7 +157,7 @@ export const LiveVoiceControl = () => {
       const msg = err instanceof Error ? err.message : String(err);
       setError(msg);
     }
-  }, [apiKey]);
+  }, [apiKey, addToolCall]);
 
   const handleStop = useCallback(() => {
     const client = clientRef.current;
@@ -123,6 +165,7 @@ export const LiveVoiceControl = () => {
       client.disconnect();
       clientRef.current = null;
     }
+    orchestratorRef.current = null;
     setSessionState("idle");
   }, []);
 
@@ -157,6 +200,14 @@ export const LiveVoiceControl = () => {
       label: "Response done",
       value: sinceConnect(timing, timing?.responseDone),
     },
+    {
+      label: "Tool call received",
+      value: sinceConnect(timing, timing?.toolCallReceived),
+    },
+    {
+      label: "Tool executed",
+      value: sinceConnect(timing, timing?.toolExecuted),
+    },
   ];
 
   const isActive =
@@ -164,20 +215,29 @@ export const LiveVoiceControl = () => {
     sessionState === "speaking" ||
     sessionState === "connecting";
 
-  const stateColor: Record<RealtimeSessionState, string> = {
+  const stateColor: Record<string, string> = {
     idle: "text-zinc-400",
     connecting: "text-yellow-400",
     connected: "text-green-400",
     speaking: "text-blue-400",
     disconnecting: "text-yellow-400",
     error: "text-red-400",
+    offline: "text-orange-400",
+  };
+
+  const toolStatusColor: Record<string, string> = {
+    started: "text-blue-400",
+    complete: "text-green-400",
+    sensitive_blocked: "text-yellow-400",
+    confirmed: "text-green-400",
+    declined: "text-red-400",
   };
 
   return (
     <div className="space-y-4">
       <Header
-        title="Live Voice (Stage 1)"
-        description="OpenAI Realtime audio session - experimental, does not use Classic VAD/STT/TTS path"
+        title="Live Voice (Stage 2)"
+        description="OpenAI Realtime audio session with tool orchestration"
       />
 
       <div className="flex items-center gap-3">
@@ -205,10 +265,12 @@ export const LiveVoiceControl = () => {
                       ? "bg-green-400"
                       : sessionState === "speaking"
                         ? "bg-blue-400 animate-pulse"
-                        : "bg-red-400"
+                        : sessionState === "offline"
+                          ? "bg-orange-400 animate-pulse"
+                          : "bg-red-400"
               }`}
             />
-            <span className={`text-xs font-medium ${stateColor[sessionState]}`}>
+            <span className={`text-xs font-medium ${stateColor[sessionState] || "text-zinc-400"}`}>
               {sessionState.toUpperCase()}
             </span>
             {isActive && (
@@ -232,7 +294,7 @@ export const LiveVoiceControl = () => {
 
           <div>
             <label className="text-xs text-muted-foreground block mb-1">
-              OpenAI API key (stored with secureStorage; Stage 1 dev-only direct connection)
+              OpenAI API key (stored with secureStorage; dev-only direct connection)
             </label>
             <input
               type="password"
@@ -260,6 +322,29 @@ export const LiveVoiceControl = () => {
           {liveTranscript && !liveTranscript.isFinal && (
             <div className="text-xs text-muted-foreground italic animate-pulse">
               {liveTranscript.text}
+            </div>
+          )}
+
+          {toolCalls.length > 0 && (
+            <div className="pt-2 border-t border-border/10">
+              <div className="text-xs font-medium text-muted-foreground mb-1">
+                Tool Calls
+              </div>
+              <div className="space-y-0.5 max-h-32 overflow-y-auto">
+                {toolCalls.map((tc, i) => (
+                  <div key={i} className="text-xs flex items-center gap-2">
+                    <span className={toolStatusColor[tc.status]}>
+                      [{tc.status}]
+                    </span>
+                    <span className="font-mono">{tc.name}</span>
+                    {tc.args && (
+                      <span className="text-muted-foreground truncate max-w-[200px]">
+                        {tc.args}
+                      </span>
+                    )}
+                  </div>
+                ))}
+              </div>
             </div>
           )}
 
