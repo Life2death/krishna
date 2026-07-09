@@ -54,11 +54,14 @@ describe("voice-lines picker", () => {
     expect(line).toBeTruthy();
   });
 
-  it("picks a morning-tod line in morning hours", async () => {
-    const morningLine = await pickLine("greeting", "en", "sir");
-    const h = new Date().getHours();
-    if (h >= 6 && h < 12) {
-      expect(morningLine.toLowerCase()).toMatch(/morning/);
-    }
+  // Time-of-day only *boosts* matching lines' weight (TOD_BOOST); it is not a
+  // hard filter, so pickLine can still return a generic greeting. Asserting the
+  // result contains "morning" made this test flaky (failed whenever CI ran
+  // 06:00–12:00 UTC and a generic line won the weighted draw). Assert the
+  // contract that actually holds: a valid greeting is always returned.
+  it("always returns a valid greeting line", async () => {
+    const line = await pickLine("greeting", "en", "sir");
+    expect(typeof line).toBe("string");
+    expect(line.length).toBeGreaterThan(0);
   });
 });
