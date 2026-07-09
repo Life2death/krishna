@@ -21,7 +21,6 @@ export interface RealtimeConfig {
     prefix_padding_ms?: number;
     silence_duration_ms?: number;
   };
-  temperature: number;
   maxResponseOutputTokens: number | "inf";
 }
 
@@ -38,7 +37,6 @@ export const DEFAULT_REALTIME_CONFIG: RealtimeConfig = {
     prefix_padding_ms: 300,
     silence_duration_ms: 500,
   },
-  temperature: 0.8,
   maxResponseOutputTokens: "inf",
 };
 

@@ -109,7 +109,7 @@ export class RealtimeClient {
     this._setState("connecting");
 
     try {
-      this._connectWebSocket(apiKey);
+      await this._connectWebSocket(apiKey);
     } catch (error) {
       const msg =
         error instanceof Error ? error.message : "Failed to connect session";
@@ -118,50 +118,77 @@ export class RealtimeClient {
     }
   }
 
-  private _connectWebSocket(apiKey: string): void {
-    const wsUrl = `wss://api.openai.com/v1/realtime?model=${encodeURIComponent(this._config.model)}`;
+  // Resolves once the socket is OPEN and the session update has been sent, so
+  // callers can safely start recording. Rejects if the socket fails to open.
+  private _connectWebSocket(apiKey: string): Promise<void> {
+    return new Promise<void>((resolve, reject) => {
+      const wsUrl = `wss://api.openai.com/v1/realtime?model=${encodeURIComponent(this._config.model)}`;
 
-    try {
-      this._ws = new WebSocket(wsUrl, [
-        "realtime",
-        `openai-insecure-api-key.${apiKey}`,
-      ]);
-    } catch (error) {
-      this._emitError(
-        error instanceof Error ? error.message : "WebSocket construction failed",
-        "WS_CONSTRUCT_FAILED",
-      );
-      return;
-    }
-
-    this._ws.onopen = () => {
-      this._sendSessionUpdate();
-    };
-
-    this._ws.onmessage = (event: MessageEvent) => {
-      if (typeof event.data === "string") {
-        this._handleMessage(event.data);
-      }
-    };
-
-    this._ws.onerror = () => {
-      this._emitError("WebSocket connection error", "WS_ERROR");
-    };
-
-    this._ws.onclose = (event: CloseEvent) => {
-      if (
-        this._state === "connected" ||
-        this._state === "speaking"
-      ) {
-        this._setState("idle");
-        this._callbacks.onError?.(
-          `Connection closed: ${event.reason || `code ${event.code}`}`,
-          "WS_CLOSE",
+      try {
+        this._ws = new WebSocket(wsUrl, [
+          "realtime",
+          `openai-insecure-api-key.${apiKey}`,
+        ]);
+      } catch (error) {
+        reject(
+          error instanceof Error
+            ? error
+            : new Error("WebSocket construction failed"),
         );
-      } else if (this._state === "disconnecting") {
-        this._setState("idle");
+        return;
       }
-    };
+
+      let opened = false;
+
+      this._ws.onopen = () => {
+        opened = true;
+        this._sendSessionUpdate();
+        resolve();
+      };
+
+      this._ws.onmessage = (event: MessageEvent) => {
+        if (typeof event.data === "string") {
+          this._handleMessage(event.data);
+        }
+      };
+
+      this._ws.onerror = () => {
+        if (!opened) {
+          reject(new Error("WebSocket connection error"));
+          return;
+        }
+        this._emitError("WebSocket connection error", "WS_ERROR");
+      };
+
+      this._ws.onclose = (event: CloseEvent) => {
+        const reason = event.reason || `code ${event.code}`;
+        if (!opened) {
+          reject(new Error(`Connection closed before ready: ${reason}`));
+          return;
+        }
+        if (this._state === "connected" || this._state === "speaking") {
+          this._setState("idle");
+          this._callbacks.onError?.(`Connection closed: ${reason}`, "WS_CLOSE");
+        } else if (this._state === "disconnecting") {
+          this._setState("idle");
+        }
+      };
+    });
+  }
+
+  // GA Realtime API expects the audio format as an object, not a bare string.
+  private _toGaAudioFormat(
+    format: RealtimeConfig["inputAudioFormat"],
+  ): { type: string; rate: number } {
+    switch (format) {
+      case "g711_ulaw":
+        return { type: "audio/pcmu", rate: 8000 };
+      case "g711_alaw":
+        return { type: "audio/pcma", rate: 8000 };
+      case "pcm16":
+      default:
+        return { type: "audio/pcm", rate: PCM_SAMPLE_RATE };
+    }
   }
 
   private _sendSessionUpdate(): void {
@@ -170,18 +197,26 @@ export class RealtimeClient {
     this._timing.connectedAt = performance.now();
     this._setState("connected");
 
+    // GA session shape (gpt-realtime): requires `type`, uses `output_modalities`,
+    // and nests audio config under `audio.input` / `audio.output`.
     const update = {
       type: "session.update",
       session: {
-        modalities: ["text", "audio"],
+        type: "realtime",
+        output_modalities: ["audio"],
         instructions: this._config.instructions,
-        voice: this._config.voice,
-        input_audio_format: this._config.inputAudioFormat,
-        output_audio_format: this._config.outputAudioFormat,
-        input_audio_transcription: this._config.inputAudioTranscription,
-        turn_detection: this._config.turnDetection,
-        temperature: this._config.temperature,
-        max_response_output_tokens: this._config.maxResponseOutputTokens,
+        audio: {
+          input: {
+            format: this._toGaAudioFormat(this._config.inputAudioFormat),
+            transcription: this._config.inputAudioTranscription,
+            turn_detection: this._config.turnDetection,
+          },
+          output: {
+            format: this._toGaAudioFormat(this._config.outputAudioFormat),
+            voice: this._config.voice,
+          },
+        },
+        max_output_tokens: this._config.maxResponseOutputTokens,
       },
     };
 
