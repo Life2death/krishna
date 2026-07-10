@@ -627,7 +627,10 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
       for await (const chunk of fetchAIResponse({
         provider,
         selectedProvider: selectedAIProvider,
-        systemPrompt,
+        // Providers (e.g. Anthropic) build the system as stable+volatile blocks
+        // and reject an empty block — so both must be non-empty.
+        stableSystemPrompt: systemPrompt,
+        volatileSystemPrompt: "Analyse the user's messages provided below.",
         userMessage,
         maxOutputTokens: 400,
       })) {
