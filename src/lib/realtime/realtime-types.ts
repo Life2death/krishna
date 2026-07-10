@@ -37,6 +37,9 @@ export interface RealtimeConfig {
     threshold?: number;
     prefix_padding_ms?: number;
     silence_duration_ms?: number;
+    // When false, the server detects/transcribes turns but does NOT auto-reply;
+    // the client triggers response.create manually (used for wake-word gating).
+    create_response?: boolean;
   };
   maxResponseOutputTokens: number | "inf";
   inactivityTimeoutMs?: number;

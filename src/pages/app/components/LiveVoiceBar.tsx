@@ -127,6 +127,11 @@ export const LiveVoiceBar = ({
         return;
       }
 
+      // Wake-word gating (OpenAI only for now): tell the session not to
+      // auto-reply so the orchestrator can hold replies until the wake word.
+      const gateWakeWord =
+        settings.wakeWordEnabled && settings.provider === "openai";
+
       const client = createRealtimeClient(settings.provider, {
         voice: settings.voice,
         instructions: "",
@@ -134,6 +139,17 @@ export const LiveVoiceBar = ({
         maxSessionDurationMs: settings.maxSessionDurationMs,
         language: settings.language,
         ...(settings.provider === "gemini" ? { model: settings.geminiModel } : {}),
+        ...(gateWakeWord
+          ? {
+              turnDetection: {
+                type: "server_vad" as const,
+                threshold: 0.5,
+                prefix_padding_ms: 300,
+                silence_duration_ms: 500,
+                create_response: false,
+              },
+            }
+          : {}),
       });
       clientRef.current = client;
 
@@ -146,7 +162,11 @@ export const LiveVoiceBar = ({
         console.error("[LiveVoice] failed to load memories:", e);
       }
 
-      const orchestrator = new LiveOrchestrator(client, { settings, memoryBlock });
+      const orchestrator = new LiveOrchestrator(client, {
+        settings,
+        memoryBlock,
+        wakeWord: gateWakeWord ? settings.wakeWord : undefined,
+      });
       orchestratorRef.current = orchestrator;
 
       const logger = new LiveTurnLogger(client.config.model);

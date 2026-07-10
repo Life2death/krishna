@@ -10,6 +10,7 @@ import { getTool } from "@krishna/core/tools";
 import type { ToolResult } from "@krishna/core/tools";
 import { createLearnedAction } from "@/lib/database";
 import { parseYesNo } from "@krishna/core/parse-yes-no";
+import { detectWakeWord } from "@/lib/wake-word";
 import { parseFastCommand as parseClassicFastCommand } from "@/lib/fast-command";
 import { generateLiveInstructions } from "./realtime-instructions";
 import { estimateRealtimeCost, formatCost } from "./realtime-cost";
@@ -55,6 +56,10 @@ export interface OrchestratorOptions {
   // Confirmed user memories, preformatted (see formatMemoriesBlock), injected
   // into the session instructions so Live Voice can speak about them.
   memoryBlock?: string;
+  // When set, Live Voice only replies to utterances that start with this wake
+  // word (requires the session to have create_response:false). undefined = off.
+  wakeWord?: string;
+  onWakeWord?: () => void;
 }
 
 export class LiveOrchestrator {
@@ -235,6 +240,17 @@ export class LiveOrchestrator {
         return;
       }
       return;
+    }
+
+    // Wake-word gate: the session is configured create_response:false, so the
+    // model stays silent until we hear the wake word, then we trigger the reply.
+    if (this.options.wakeWord) {
+      const { detected } = detectWakeWord(text, this.options.wakeWord);
+      if (detected) {
+        this.options.onWakeWord?.();
+        this.client.continueResponse();
+      }
+      return; // ignore anything not addressed to the wake word
     }
 
     const fastCmd = parseFastCommand(text);

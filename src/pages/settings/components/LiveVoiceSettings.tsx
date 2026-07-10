@@ -15,6 +15,8 @@ import {
   updateMaxSessionDuration,
   updateLiveVoiceProvider,
   updateGeminiModel,
+  updateWakeWordEnabled,
+  updateWakeWord,
   LIVE_VOICE_OPTIONS,
 } from "@/lib/storage/live-voice-settings.storage";
 import type { VoiceMode, LiveProvider } from "@/lib/storage/live-voice-settings.storage";
@@ -36,6 +38,8 @@ export const LiveVoiceSettings = () => {
   const [geminiModel, setGeminiModel] = useState("models/gemini-2.5-flash-native-audio-preview-12-2025");
   const [geminiKey, setGeminiKey] = useState("");
   const [geminiKeySaved, setGeminiKeySaved] = useState(false);
+  const [wakeWordEnabled, setWakeWordEnabled] = useState(false);
+  const [wakeWord, setWakeWord] = useState("hey krishna");
 
   useEffect(() => {
     if (settingsLoaded) return;
@@ -46,6 +50,8 @@ export const LiveVoiceSettings = () => {
     setMaxDurationMs(settings.maxSessionDurationMs);
     setProvider(settings.provider);
     setGeminiModel(settings.geminiModel);
+    setWakeWordEnabled(settings.wakeWordEnabled);
+    setWakeWord(settings.wakeWord);
     setSettingsLoaded(true);
     setMode(liveVoice?.mode ?? "classic");
     setAutoStart(liveVoice?.autoStart ?? false);
@@ -85,6 +91,16 @@ export const LiveVoiceSettings = () => {
   const handleGeminiKeyBlur = async () => {
     await secureStorage.set(STORAGE_KEY_GEMINI_KEY, geminiKey.trim());
     setGeminiKeySaved(true);
+  };
+
+  const handleWakeToggle = (checked: boolean) => {
+    setWakeWordEnabled(checked);
+    updateWakeWordEnabled(checked);
+  };
+
+  const handleWakeWordChange = (val: string) => {
+    setWakeWord(val);
+    updateWakeWord(val.trim() || "hey krishna");
   };
 
   const handleModeChange = (newMode: VoiceMode) => {
@@ -267,6 +283,34 @@ export const LiveVoiceSettings = () => {
               aria-label="Toggle auto-start"
             />
           </div>
+
+          {provider === "openai" && (
+            <div className="space-y-2 border-t border-border/10 pt-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <Label className="text-sm font-medium">Require wake word</Label>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Krishna stays silent until you start with the wake word
+                    (OpenAI only for now).
+                  </p>
+                </div>
+                <Switch
+                  checked={wakeWordEnabled}
+                  onCheckedChange={handleWakeToggle}
+                  aria-label="Toggle wake word"
+                />
+              </div>
+              {wakeWordEnabled && (
+                <input
+                  type="text"
+                  value={wakeWord}
+                  onChange={(e) => handleWakeWordChange(e.target.value)}
+                  placeholder="hey krishna"
+                  className="w-full max-w-xs text-xs px-2 py-1.5 rounded border border-border/30 bg-background"
+                />
+              )}
+            </div>
+          )}
 
           <div className="space-y-2">
             <Label className="text-sm font-medium">Voice</Label>

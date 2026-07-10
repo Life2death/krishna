@@ -8,6 +8,8 @@ export interface LiveVoiceSettings {
   provider: LiveProvider;
   geminiModel: string;
   autoStart: boolean;
+  wakeWordEnabled: boolean;
+  wakeWord: string;
   voice: string;
   language: string;
   inactivityTimeoutMs: number;
@@ -19,6 +21,8 @@ export const DEFAULT_LIVE_VOICE_SETTINGS: LiveVoiceSettings = {
   provider: "openai",
   geminiModel: "models/gemini-2.5-flash-native-audio-preview-12-2025",
   autoStart: false,
+  wakeWordEnabled: false,
+  wakeWord: "hey krishna",
   voice: "marin",
   language: "english",
   inactivityTimeoutMs: 5 * 60 * 1000,
@@ -70,6 +74,8 @@ export const getLiveVoiceSettings = (): LiveVoiceSettings => {
       provider: parsed.provider ?? DEFAULT_LIVE_VOICE_SETTINGS.provider,
       geminiModel: parsed.geminiModel ?? DEFAULT_LIVE_VOICE_SETTINGS.geminiModel,
       autoStart: parsed.autoStart ?? DEFAULT_LIVE_VOICE_SETTINGS.autoStart,
+      wakeWordEnabled: parsed.wakeWordEnabled ?? DEFAULT_LIVE_VOICE_SETTINGS.wakeWordEnabled,
+      wakeWord: parsed.wakeWord ?? DEFAULT_LIVE_VOICE_SETTINGS.wakeWord,
       voice: parsed.voice ?? DEFAULT_LIVE_VOICE_SETTINGS.voice,
       language: parsed.language ?? DEFAULT_LIVE_VOICE_SETTINGS.language,
       inactivityTimeoutMs:
@@ -107,6 +113,20 @@ export const updateLiveVoiceProvider = (provider: LiveProvider): LiveVoiceSettin
 export const updateGeminiModel = (geminiModel: string): LiveVoiceSettings => {
   const current = getLiveVoiceSettings();
   const updated = { ...current, geminiModel };
+  setLiveVoiceSettings(updated);
+  return updated;
+};
+
+export const updateWakeWordEnabled = (wakeWordEnabled: boolean): LiveVoiceSettings => {
+  const current = getLiveVoiceSettings();
+  const updated = { ...current, wakeWordEnabled };
+  setLiveVoiceSettings(updated);
+  return updated;
+};
+
+export const updateWakeWord = (wakeWord: string): LiveVoiceSettings => {
+  const current = getLiveVoiceSettings();
+  const updated = { ...current, wakeWord };
   setLiveVoiceSettings(updated);
   return updated;
 };
