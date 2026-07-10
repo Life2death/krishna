@@ -371,7 +371,14 @@ export class RealtimeClient {
       audio: {
         input: {
           format: this.toRealtimeAudioFormat(this.config.inputAudioFormat),
-          transcription: this.config.inputAudioTranscription,
+          transcription: {
+            ...this.config.inputAudioTranscription,
+            // Pin the transcription language so English speech isn't
+            // auto-mis-detected as Hindi/Telugu/etc.
+            ...(this.transcriptionLanguage()
+              ? { language: this.transcriptionLanguage() }
+              : {}),
+          },
           turn_detection: this.config.turnDetection,
         },
         output: {
@@ -397,6 +404,17 @@ export class RealtimeClient {
       session,
     };
     this.ws.send(JSON.stringify(payload));
+  }
+
+  // Map the Live Voice language setting to an ISO-639 code for transcription.
+  private transcriptionLanguage(): string | undefined {
+    const map: Record<string, string> = {
+      english: "en",
+      hindi: "hi",
+      marathi: "mr",
+      hinglish: "en",
+    };
+    return map[this.config.language ?? ""];
   }
 
   private toRealtimeAudioFormat(
