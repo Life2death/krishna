@@ -17,7 +17,7 @@ export interface LiveVoiceSettings {
 export const DEFAULT_LIVE_VOICE_SETTINGS: LiveVoiceSettings = {
   mode: "classic",
   provider: "openai",
-  geminiModel: "models/gemini-2.0-flash-live-001",
+  geminiModel: "models/gemini-2.5-flash-native-audio-preview-12-2025",
   autoStart: false,
   voice: "marin",
   language: "english",

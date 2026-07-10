@@ -33,7 +33,7 @@ export const LiveVoiceSettings = () => {
   const [apiKey, setApiKey] = useState("");
   const [apiKeySaved, setApiKeySaved] = useState(false);
   const [provider, setProvider] = useState<LiveProvider>("openai");
-  const [geminiModel, setGeminiModel] = useState("models/gemini-2.0-flash-live-001");
+  const [geminiModel, setGeminiModel] = useState("models/gemini-2.5-flash-native-audio-preview-12-2025");
   const [geminiKey, setGeminiKey] = useState("");
   const [geminiKeySaved, setGeminiKeySaved] = useState(false);
 
@@ -241,13 +241,13 @@ export const LiveVoiceSettings = () => {
               <div className="space-y-1">
                 <Label className="text-sm font-medium">Gemini Live model</Label>
                 <p className="text-xs text-muted-foreground">
-                  e.g. models/gemini-2.0-flash-live-001
+                  e.g. models/gemini-2.5-flash-native-audio-preview-12-2025
                 </p>
                 <input
                   type="text"
                   value={geminiModel}
                   onChange={(e) => handleGeminiModelChange(e.target.value)}
-                  placeholder="models/gemini-2.0-flash-live-001"
+                  placeholder="models/gemini-2.5-flash-native-audio-preview-12-2025"
                   className="w-full max-w-md text-xs px-2 py-1.5 rounded border border-border/30 bg-background font-mono"
                 />
               </div>

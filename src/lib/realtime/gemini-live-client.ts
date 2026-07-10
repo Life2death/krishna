@@ -12,7 +12,7 @@ import type { IRealtimeClient } from "./realtime-provider";
 
 const GEMINI_WS_HOST =
   "wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent";
-const DEFAULT_GEMINI_MODEL = "models/gemini-2.0-flash-live-001";
+const DEFAULT_GEMINI_MODEL = "models/gemini-2.5-flash-native-audio-preview-12-2025";
 const INPUT_SAMPLE_RATE = 16000; // Gemini Live requires 16 kHz PCM16 input
 const DEFAULT_OUTPUT_RATE = 24000; // Gemini outputs 24 kHz (rate re-read per chunk)
 // Gemini prebuilt voices (OpenAI voice names would be rejected at setup).
