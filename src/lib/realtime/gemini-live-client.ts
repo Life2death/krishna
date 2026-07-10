@@ -91,6 +91,17 @@ export class GeminiLiveClient implements IRealtimeClient {
     this.callbacks.onStateChange?.(next);
   }
 
+  // Map the Live Voice language setting to a BCP-47 code for Gemini speechConfig.
+  private languageCode(): string | undefined {
+    const map: Record<string, string> = {
+      english: "en-US",
+      hindi: "hi-IN",
+      marathi: "mr-IN",
+      hinglish: "en-IN",
+    };
+    return map[this.config.language ?? ""];
+  }
+
   private modelId(): string {
     const m = this.config.model || "";
     if (m.startsWith("models/")) return m;
@@ -204,13 +215,19 @@ export class GeminiLiveClient implements IRealtimeClient {
     const generationConfig: Record<string, unknown> = {
       responseModalities: ["AUDIO"],
     };
-    // The shared voice picker holds OpenAI voice names (marin, cedar, …), which
-    // Gemini rejects. Only send a voice if it's a valid Gemini prebuilt voice;
-    // otherwise let Gemini use its default.
+    // Pin the language so Gemini doesn't auto-mis-detect accented English as
+    // Hindi/Telugu. The shared voice picker holds OpenAI voice names, which
+    // Gemini rejects, so only send a voice if it's a valid Gemini voice.
+    const speechConfig: Record<string, unknown> = {};
+    const langCode = this.languageCode();
+    if (langCode) speechConfig.languageCode = langCode;
     if (this.config.voice && GEMINI_VOICES.has(this.config.voice)) {
-      generationConfig.speechConfig = {
-        voiceConfig: { prebuiltVoiceConfig: { voiceName: this.config.voice } },
+      speechConfig.voiceConfig = {
+        prebuiltVoiceConfig: { voiceName: this.config.voice },
       };
+    }
+    if (Object.keys(speechConfig).length > 0) {
+      generationConfig.speechConfig = speechConfig;
     }
     const setup: Record<string, unknown> = {
       model: this.modelId(),
