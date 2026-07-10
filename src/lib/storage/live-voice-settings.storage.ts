@@ -1,9 +1,12 @@
 import { STORAGE_KEYS } from "@/config";
 
 export type VoiceMode = "classic" | "live";
+export type LiveProvider = "openai" | "gemini";
 
 export interface LiveVoiceSettings {
   mode: VoiceMode;
+  provider: LiveProvider;
+  geminiModel: string;
   autoStart: boolean;
   voice: string;
   language: string;
@@ -13,6 +16,8 @@ export interface LiveVoiceSettings {
 
 export const DEFAULT_LIVE_VOICE_SETTINGS: LiveVoiceSettings = {
   mode: "classic",
+  provider: "openai",
+  geminiModel: "models/gemini-2.0-flash-live-001",
   autoStart: false,
   voice: "marin",
   language: "english",
@@ -21,6 +26,10 @@ export const DEFAULT_LIVE_VOICE_SETTINGS: LiveVoiceSettings = {
 };
 
 export const LIVE_VOICE_OPTIONS = {
+  providers: [
+    { id: "openai", name: "OpenAI Realtime" },
+    { id: "gemini", name: "Google Gemini Live" },
+  ],
   voices: [
     { id: "marin", name: "Marin" },
     { id: "cedar", name: "Cedar" },
@@ -58,6 +67,8 @@ export const getLiveVoiceSettings = (): LiveVoiceSettings => {
 
     return {
       mode: parsed.mode ?? DEFAULT_LIVE_VOICE_SETTINGS.mode,
+      provider: parsed.provider ?? DEFAULT_LIVE_VOICE_SETTINGS.provider,
+      geminiModel: parsed.geminiModel ?? DEFAULT_LIVE_VOICE_SETTINGS.geminiModel,
       autoStart: parsed.autoStart ?? DEFAULT_LIVE_VOICE_SETTINGS.autoStart,
       voice: parsed.voice ?? DEFAULT_LIVE_VOICE_SETTINGS.voice,
       language: parsed.language ?? DEFAULT_LIVE_VOICE_SETTINGS.language,
@@ -82,6 +93,20 @@ export const setLiveVoiceSettings = (settings: LiveVoiceSettings): void => {
 export const updateLiveVoiceMode = (mode: VoiceMode): LiveVoiceSettings => {
   const current = getLiveVoiceSettings();
   const updated = { ...current, mode };
+  setLiveVoiceSettings(updated);
+  return updated;
+};
+
+export const updateLiveVoiceProvider = (provider: LiveProvider): LiveVoiceSettings => {
+  const current = getLiveVoiceSettings();
+  const updated = { ...current, provider };
+  setLiveVoiceSettings(updated);
+  return updated;
+};
+
+export const updateGeminiModel = (geminiModel: string): LiveVoiceSettings => {
+  const current = getLiveVoiceSettings();
+  const updated = { ...current, geminiModel };
   setLiveVoiceSettings(updated);
   return updated;
 };

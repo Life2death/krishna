@@ -4,6 +4,7 @@ import { useApp } from "@/contexts";
 import { secureStorage } from "@/lib/secure-storage";
 
 const STORAGE_KEY_REALTIME_KEY = "openai_realtime_api_key";
+const STORAGE_KEY_GEMINI_KEY = "gemini_realtime_api_key";
 import {
   getLiveVoiceSettings,
   updateLiveVoiceMode,
@@ -12,9 +13,11 @@ import {
   updateLiveVoiceLanguage,
   updateInactivityTimeout,
   updateMaxSessionDuration,
+  updateLiveVoiceProvider,
+  updateGeminiModel,
   LIVE_VOICE_OPTIONS,
 } from "@/lib/storage/live-voice-settings.storage";
-import type { VoiceMode } from "@/lib/storage/live-voice-settings.storage";
+import type { VoiceMode, LiveProvider } from "@/lib/storage/live-voice-settings.storage";
 
 export const LiveVoiceSettings = () => {
   const { customizable, toggleLiveVoiceMode, toggleLiveVoiceAutoStart } = useApp();
@@ -29,6 +32,10 @@ export const LiveVoiceSettings = () => {
   const [settingsLoaded, setSettingsLoaded] = useState(false);
   const [apiKey, setApiKey] = useState("");
   const [apiKeySaved, setApiKeySaved] = useState(false);
+  const [provider, setProvider] = useState<LiveProvider>("openai");
+  const [geminiModel, setGeminiModel] = useState("models/gemini-2.0-flash-live-001");
+  const [geminiKey, setGeminiKey] = useState("");
+  const [geminiKeySaved, setGeminiKeySaved] = useState(false);
 
   useEffect(() => {
     if (settingsLoaded) return;
@@ -37,11 +44,16 @@ export const LiveVoiceSettings = () => {
     setLanguage(settings.language);
     setInactivityMs(settings.inactivityTimeoutMs);
     setMaxDurationMs(settings.maxSessionDurationMs);
+    setProvider(settings.provider);
+    setGeminiModel(settings.geminiModel);
     setSettingsLoaded(true);
     setMode(liveVoice?.mode ?? "classic");
     setAutoStart(liveVoice?.autoStart ?? false);
     secureStorage.get(STORAGE_KEY_REALTIME_KEY).then((val) => {
       if (val) setApiKey(val);
+    });
+    secureStorage.get(STORAGE_KEY_GEMINI_KEY).then((val) => {
+      if (val) setGeminiKey(val);
     });
   }, [settingsLoaded, liveVoice]);
 
@@ -53,6 +65,26 @@ export const LiveVoiceSettings = () => {
   const handleApiKeyBlur = async () => {
     await secureStorage.set(STORAGE_KEY_REALTIME_KEY, apiKey.trim());
     setApiKeySaved(true);
+  };
+
+  const handleProviderChange = (p: string) => {
+    setProvider(p as LiveProvider);
+    updateLiveVoiceProvider(p as LiveProvider);
+  };
+
+  const handleGeminiModelChange = (val: string) => {
+    setGeminiModel(val);
+    updateGeminiModel(val.trim());
+  };
+
+  const handleGeminiKeyChange = (val: string) => {
+    setGeminiKey(val);
+    setGeminiKeySaved(false);
+  };
+
+  const handleGeminiKeyBlur = async () => {
+    await secureStorage.set(STORAGE_KEY_GEMINI_KEY, geminiKey.trim());
+    setGeminiKeySaved(true);
   };
 
   const handleModeChange = (newMode: VoiceMode) => {
@@ -152,24 +184,75 @@ export const LiveVoiceSettings = () => {
 
       {isLive && (
         <div className="space-y-3 border border-border/20 rounded-lg p-4 bg-muted/10">
-          <div className="space-y-1">
-            <Label className="text-sm font-medium">OpenAI Realtime API key</Label>
+          <div className="space-y-2">
+            <Label className="text-sm font-medium">Provider</Label>
             <p className="text-xs text-muted-foreground">
-              Stored securely on this device. Required to start Live Voice
-              (each device needs its own key — it does not sync).
+              Realtime backend for Live Voice.
             </p>
-            <input
-              type="password"
-              value={apiKey}
-              onChange={(e) => handleApiKeyChange(e.target.value)}
-              onBlur={handleApiKeyBlur}
-              placeholder="sk-..."
-              className="w-full max-w-md text-xs px-2 py-1.5 rounded border border-border/30 bg-background font-mono"
-            />
-            {apiKeySaved && (
-              <p className="text-xs text-green-500">Saved.</p>
-            )}
+            <div className="max-w-xs">
+              <Selection
+                selected={provider}
+                onChange={handleProviderChange}
+                options={LIVE_VOICE_OPTIONS.providers.map((p) => ({
+                  label: p.name,
+                  value: p.id,
+                }))}
+                placeholder="Select a provider"
+              />
+            </div>
           </div>
+
+          {provider === "openai" && (
+            <div className="space-y-1">
+              <Label className="text-sm font-medium">OpenAI Realtime API key</Label>
+              <p className="text-xs text-muted-foreground">
+                Stored securely on this device. Required to start Live Voice
+                (each device needs its own key — it does not sync).
+              </p>
+              <input
+                type="password"
+                value={apiKey}
+                onChange={(e) => handleApiKeyChange(e.target.value)}
+                onBlur={handleApiKeyBlur}
+                placeholder="sk-..."
+                className="w-full max-w-md text-xs px-2 py-1.5 rounded border border-border/30 bg-background font-mono"
+              />
+              {apiKeySaved && <p className="text-xs text-green-500">Saved.</p>}
+            </div>
+          )}
+
+          {provider === "gemini" && (
+            <>
+              <div className="space-y-1">
+                <Label className="text-sm font-medium">Gemini API key</Label>
+                <p className="text-xs text-muted-foreground">
+                  Google AI Studio key. Stored securely on this device.
+                </p>
+                <input
+                  type="password"
+                  value={geminiKey}
+                  onChange={(e) => handleGeminiKeyChange(e.target.value)}
+                  onBlur={handleGeminiKeyBlur}
+                  placeholder="AIza..."
+                  className="w-full max-w-md text-xs px-2 py-1.5 rounded border border-border/30 bg-background font-mono"
+                />
+                {geminiKeySaved && <p className="text-xs text-green-500">Saved.</p>}
+              </div>
+              <div className="space-y-1">
+                <Label className="text-sm font-medium">Gemini Live model</Label>
+                <p className="text-xs text-muted-foreground">
+                  e.g. models/gemini-2.0-flash-live-001
+                </p>
+                <input
+                  type="text"
+                  value={geminiModel}
+                  onChange={(e) => handleGeminiModelChange(e.target.value)}
+                  placeholder="models/gemini-2.0-flash-live-001"
+                  className="w-full max-w-md text-xs px-2 py-1.5 rounded border border-border/30 bg-background font-mono"
+                />
+              </div>
+            </>
+          )}
 
           <div className="flex items-center justify-between">
             <div>

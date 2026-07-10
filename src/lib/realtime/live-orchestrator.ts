@@ -5,7 +5,7 @@ import {
   mapFunctionNameToAction,
   getRealtimeTools,
 } from "./live-tool-bridge";
-import { RealtimeClient } from "./realtime-client";
+import type { IRealtimeClient } from "./realtime-provider";
 import { getTool } from "@krishna/core/tools";
 import type { ToolResult } from "@krishna/core/tools";
 import { createLearnedAction } from "@/lib/database";
@@ -58,14 +58,14 @@ export interface OrchestratorOptions {
 }
 
 export class LiveOrchestrator {
-  private client: RealtimeClient;
+  private client: IRealtimeClient;
   private pendingAction: PendingAction | null = null;
   private options: OrchestratorOptions;
   private proceedAfterConfirm = false;
   private recentFastActions = new Map<string, number>();
   private lastUserTranscript = "";
 
-  constructor(client: RealtimeClient, options: OrchestratorOptions = {}) {
+  constructor(client: IRealtimeClient, options: OrchestratorOptions = {}) {
     this.client = client;
     this.options = options;
     this.applySettings(options.settings);

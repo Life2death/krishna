@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components";
-import { RealtimeClient } from "@/lib/realtime/realtime-client";
+import { createRealtimeClient, type IRealtimeClient } from "@/lib/realtime/realtime-provider";
 import { secureStorage } from "@/lib/secure-storage";
 import { getRealtimeTools } from "@/lib/realtime/live-tool-bridge";
 import { LiveOrchestrator } from "@/lib/realtime/live-orchestrator";
@@ -15,6 +15,7 @@ const HANDOFF_MESSAGE =
   "Connection issue. Handing over to local Krishna.";
 
 const STORAGE_KEY_REALTIME_KEY = "openai_realtime_api_key";
+const STORAGE_KEY_GEMINI_KEY = "gemini_realtime_api_key";
 
 interface LiveVoiceBarProps {
   onSwitchToClassic: () => void;
@@ -33,7 +34,7 @@ export const LiveVoiceBar = ({
   onLiveAssistantText,
   onTurnComplete,
 }: LiveVoiceBarProps) => {
-  const clientRef = useRef<RealtimeClient | null>(null);
+  const clientRef = useRef<IRealtimeClient | null>(null);
   const orchestratorRef = useRef<LiveOrchestrator | null>(null);
   const loggerRef = useRef<LiveTurnLogger | null>(null);
   const autoStartedRef = useRef(false);
@@ -48,7 +49,10 @@ export const LiveVoiceBar = ({
   const [hasApiKey, setHasApiKey] = useState(false);
 
   useEffect(() => {
-    secureStorage.get(STORAGE_KEY_REALTIME_KEY).then((val) => {
+    const s = getLiveVoiceSettings();
+    const storageKey =
+      s.provider === "gemini" ? STORAGE_KEY_GEMINI_KEY : STORAGE_KEY_REALTIME_KEY;
+    secureStorage.get(storageKey).then((val) => {
       if (val) {
         setApiKey(val);
         setHasApiKey(true);
@@ -84,9 +88,14 @@ export const LiveVoiceBar = ({
     setTranscript(null);
     handedOffRef.current = false;
 
-    const key = apiKey;
+    const settings = getLiveVoiceSettings();
+    const storageKey =
+      settings.provider === "gemini" ? STORAGE_KEY_GEMINI_KEY : STORAGE_KEY_REALTIME_KEY;
+    const key = (await secureStorage.get(storageKey)) || apiKey;
     if (!key) {
-      setError("No API key configured");
+      setError(
+        `No ${settings.provider === "gemini" ? "Gemini" : "OpenAI"} API key configured`,
+      );
       return;
     }
 
@@ -118,13 +127,13 @@ export const LiveVoiceBar = ({
         return;
       }
 
-      const settings = getLiveVoiceSettings();
-      const client = new RealtimeClient({
+      const client = createRealtimeClient(settings.provider, {
         voice: settings.voice,
         instructions: "",
         inactivityTimeoutMs: settings.inactivityTimeoutMs,
         maxSessionDurationMs: settings.maxSessionDurationMs,
         language: settings.language,
+        ...(settings.provider === "gemini" ? { model: settings.geminiModel } : {}),
       });
       clientRef.current = client;
 
