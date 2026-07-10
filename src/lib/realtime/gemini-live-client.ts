@@ -15,6 +15,10 @@ const GEMINI_WS_HOST =
 const DEFAULT_GEMINI_MODEL = "models/gemini-2.0-flash-live-001";
 const INPUT_SAMPLE_RATE = 16000; // Gemini Live requires 16 kHz PCM16 input
 const DEFAULT_OUTPUT_RATE = 24000; // Gemini outputs 24 kHz (rate re-read per chunk)
+// Gemini prebuilt voices (OpenAI voice names would be rejected at setup).
+const GEMINI_VOICES = new Set([
+  "Puck", "Charon", "Kore", "Fenrir", "Aoede", "Leda", "Orus", "Zephyr",
+]);
 
 /** Google Gemini Live API client, conforming to the shared IRealtimeClient. */
 export class GeminiLiveClient implements IRealtimeClient {
@@ -161,7 +165,10 @@ export class GeminiLiveClient implements IRealtimeClient {
     const generationConfig: Record<string, unknown> = {
       responseModalities: ["AUDIO"],
     };
-    if (this.config.voice) {
+    // The shared voice picker holds OpenAI voice names (marin, cedar, …), which
+    // Gemini rejects. Only send a voice if it's a valid Gemini prebuilt voice;
+    // otherwise let Gemini use its default.
+    if (this.config.voice && GEMINI_VOICES.has(this.config.voice)) {
       generationConfig.speechConfig = {
         voiceConfig: { prebuiltVoiceConfig: { voiceName: this.config.voice } },
       };
