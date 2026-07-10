@@ -110,16 +110,48 @@ export class GeminiLiveClient implements IRealtimeClient {
 
     return new Promise<void>((resolve, reject) => {
       const url = `${GEMINI_WS_HOST}?key=${encodeURIComponent(this.apiKey)}`;
-      let opened = false;
+      console.info("[Gemini] connecting", this.modelId());
+      let settled = false;
+
+      // If setup never completes (bad model id / key / blocked), don't hang the
+      // UI in "connecting" forever — fail out after a bounded wait.
+      const timeout = setTimeout(() => {
+        fail(
+          new Error(
+            "Gemini setup timed out (15s). Check the model id and API key.",
+          ),
+        );
+      }, 15000);
+
+      const fail = (err: Error) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timeout);
+        console.warn("[Gemini] connect failed:", err.message);
+        this.setState("error");
+        this.callbacks.onError?.(err.message, "GEMINI_CONNECT_FAILED");
+        try {
+          this.ws?.close();
+        } catch {
+          /* ignore */
+        }
+        reject(err);
+      };
+      const succeed = () => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timeout);
+        resolve();
+      };
+
       try {
         this.ws = new WebSocket(url);
       } catch (e) {
-        reject(e instanceof Error ? e : new Error("WebSocket construction failed"));
+        fail(e instanceof Error ? e : new Error("WebSocket construction failed"));
         return;
       }
 
       this.ws.onopen = () => {
-        opened = true;
         this.sendSetup();
       };
       this.ws.onmessage = async (e: MessageEvent) => {
@@ -130,22 +162,29 @@ export class GeminiLiveClient implements IRealtimeClient {
               : e.data instanceof Blob
                 ? await e.data.text()
                 : new TextDecoder().decode(e.data);
-          this.handleMessage(text, resolve);
+          this.handleMessage(text, succeed);
         } catch {
           /* ignore malformed frame */
         }
       };
       this.ws.onerror = () => {
-        if (!opened) reject(new Error("Gemini WebSocket connection error"));
-        else {
+        if (!settled) {
+          fail(new Error("Gemini WebSocket connection error"));
+        } else {
           this.callbacks.onError?.("Gemini WebSocket error", "WS_ERROR");
           this.callbacks.onFallbackToClassic?.();
         }
       };
       this.ws.onclose = (ev: CloseEvent) => {
         this.stopDurationTimer();
-        if (!opened) {
-          reject(new Error(`Gemini connection closed before ready: ${ev.reason || ev.code}`));
+        console.warn("[Gemini] socket closed", ev.code, ev.reason);
+        if (!settled) {
+          fail(
+            new Error(
+              `Gemini closed before ready (code ${ev.code})${ev.reason ? ": " + ev.reason : ""}`,
+            ),
+          );
+          this.ws = null;
           return;
         }
         if (this._state === "connected" || this._state === "speaking") {
@@ -193,6 +232,11 @@ export class GeminiLiveClient implements IRealtimeClient {
         },
       ];
     }
+    console.info(
+      "[Gemini] sending setup",
+      this.modelId(),
+      `tools=${this._tools.length}`,
+    );
     this.ws.send(JSON.stringify({ setup }));
   }
 
@@ -201,6 +245,7 @@ export class GeminiLiveClient implements IRealtimeClient {
     this.refreshActivity();
 
     if (msg.setupComplete) {
+      console.info("[Gemini] setup complete — connected");
       this.timing.connectedAt = Date.now();
       this.timing.sessionStartTime = Date.now();
       this.setState("connected");
@@ -274,11 +319,17 @@ export class GeminiLiveClient implements IRealtimeClient {
     }
 
     if (msg.error) {
+      console.error("[Gemini] error message", msg.error);
       this.setState("error");
       this.callbacks.onError?.(
         msg.error.message ?? "Gemini error",
         String(msg.error.code ?? ""),
       );
+      return;
+    }
+
+    if (!msg.serverContent && !msg.toolCall && !msg.setupComplete) {
+      console.warn("[Gemini] unhandled message", Object.keys(msg));
     }
   }
 
