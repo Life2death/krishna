@@ -58,6 +58,38 @@ export function createTransport(config: SyncConfig): Transport {
       console.error('[sync] Failed to ensure remote schema for tables — sync will fail until this is resolved:', err);
       throw err;
     }
+
+    // Migrate tables created with an OLDER schema: `CREATE TABLE IF NOT EXISTS`
+    // above never alters an existing table, so remotes made before a column was
+    // added (notably `updated_at`) stay stale and break push/pull. Introspect
+    // each table and add any columns the current schema defines but are missing.
+    for (const table of SYNC_TABLES) {
+      const cols = TABLE_DDL[table];
+      if (!cols) continue;
+      try {
+        const info = await client.execute({ sql: `PRAGMA table_info("${table}")` });
+        const existing = new Set(
+          info.rows.map((r) => String((r as Record<string, unknown>).name)),
+        );
+        for (const def of cols.split(',').map((s) => s.trim()).filter(Boolean)) {
+          if (/primary key/i.test(def)) continue; // PK already exists; can't ALTER-add
+          const name = def.split(/\s+/)[0];
+          if (name && !existing.has(name)) {
+            try {
+              await client.execute({ sql: `ALTER TABLE "${table}" ADD COLUMN ${def}` });
+              console.info(`[sync] migrated remote "${table}": added column ${name}`);
+            } catch (e) {
+              const msg = e instanceof Error ? e.message : String(e);
+              if (!/duplicate column/i.test(msg)) {
+                console.error(`[sync] ALTER "${table}" ADD ${name} failed:`, msg);
+              }
+            }
+          }
+        }
+      } catch (e) {
+        console.error(`[sync] remote column migration failed for "${table}":`, e);
+      }
+    }
   }
 
   const initialized = ensureRemoteSchema();
