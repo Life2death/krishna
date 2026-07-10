@@ -127,10 +127,12 @@ export const LiveVoiceBar = ({
         return;
       }
 
-      // Wake-word gating (OpenAI only for now): tell the session not to
-      // auto-reply so the orchestrator can hold replies until the wake word.
-      const gateWakeWord =
-        settings.wakeWordEnabled && settings.provider === "openai";
+      // Wake-word gating. OpenAI: tell the session not to auto-reply and let the
+      // orchestrator release replies on the wake word. Gemini: the client itself
+      // suppresses replies to unaddressed speech (via config.wakeWord).
+      const wwEnabled = settings.wakeWordEnabled;
+      const openaiGate = wwEnabled && settings.provider === "openai";
+      const geminiGate = wwEnabled && settings.provider === "gemini";
 
       const client = createRealtimeClient(settings.provider, {
         voice: settings.voice,
@@ -139,7 +141,8 @@ export const LiveVoiceBar = ({
         maxSessionDurationMs: settings.maxSessionDurationMs,
         language: settings.language,
         ...(settings.provider === "gemini" ? { model: settings.geminiModel } : {}),
-        ...(gateWakeWord
+        ...(geminiGate ? { wakeWord: settings.wakeWord } : {}),
+        ...(openaiGate
           ? {
               turnDetection: {
                 type: "server_vad" as const,
@@ -165,7 +168,7 @@ export const LiveVoiceBar = ({
       const orchestrator = new LiveOrchestrator(client, {
         settings,
         memoryBlock,
-        wakeWord: gateWakeWord ? settings.wakeWord : undefined,
+        wakeWord: openaiGate ? settings.wakeWord : undefined,
       });
       orchestratorRef.current = orchestrator;
 
@@ -236,7 +239,14 @@ export const LiveVoiceBar = ({
 
   useEffect(() => {
     const settings = getLiveVoiceSettings();
-    if (!settings.autoStart || !apiKey || autoStartedRef.current) return;
+    // Auto-start when explicitly enabled, or when wake word is on (so it's
+    // always listening for the wake word without a manual mic tap).
+    if (
+      (!settings.autoStart && !settings.wakeWordEnabled) ||
+      !apiKey ||
+      autoStartedRef.current
+    )
+      return;
     autoStartedRef.current = true;
     void handleStart();
   }, [apiKey, handleStart]);

@@ -8,6 +8,7 @@ import type {
 import { DEFAULT_REALTIME_CONFIG } from "./realtime-types";
 import { canTransitionTo } from "./realtime-events";
 import { estimateRealtimeCost, formatCost, formatDuration } from "./realtime-cost";
+import { detectWakeWord } from "@/lib/wake-word";
 import type { IRealtimeClient } from "./realtime-provider";
 
 const GEMINI_WS_HOST =
@@ -38,6 +39,12 @@ export class GeminiLiveClient implements IRealtimeClient {
   private userTranscripts: string[] = [];
   private pendingCallNames = new Map<string, string>();
   private durationTimer: ReturnType<typeof setInterval> | null = null;
+  // Wake-word gate: false until the current turn is addressed with the wake word.
+  private armed = false;
+
+  private isArmed(): boolean {
+    return !this.config.wakeWord || this.armed;
+  }
 
   constructor(config?: Partial<RealtimeConfig>, callbacks: RealtimeCallbacks = {}) {
     this.config = { ...DEFAULT_REALTIME_CONFIG, ...config };
@@ -273,7 +280,27 @@ export class GeminiLiveClient implements IRealtimeClient {
 
     if (msg.serverContent) {
       const sc = msg.serverContent;
-      if (sc.outputTranscription?.text) {
+
+      // Wake-word gate: the user transcription determines whether THIS turn is
+      // addressed to Krishna. Process it first so we can suppress the reply's
+      // audio/transcript for unaddressed speech.
+      if (sc.inputTranscription?.text) {
+        if (this.timing.firstUserTranscript === undefined) {
+          this.timing.firstUserTranscript = Date.now();
+        }
+        this.userTranscripts.push(sc.inputTranscription.text);
+        if (this.config.wakeWord) {
+          this.armed = detectWakeWord(
+            sc.inputTranscription.text,
+            this.config.wakeWord,
+          ).detected;
+        }
+        this.callbacks.onUserTranscript?.(sc.inputTranscription.text);
+      }
+
+      const armed = this.isArmed();
+
+      if (armed && sc.outputTranscription?.text) {
         if (this.timing.firstTranscriptDelta === undefined) {
           this.timing.firstTranscriptDelta = Date.now();
         }
@@ -281,18 +308,12 @@ export class GeminiLiveClient implements IRealtimeClient {
         this.callbacks.onTranscript?.(this.transcriptAccumulator, false);
         if (this._state === "connected") this.setState("speaking");
       }
-      if (sc.inputTranscription?.text) {
-        if (this.timing.firstUserTranscript === undefined) {
-          this.timing.firstUserTranscript = Date.now();
-        }
-        this.userTranscripts.push(sc.inputTranscription.text);
-        this.callbacks.onUserTranscript?.(sc.inputTranscription.text);
-      }
+
       const parts: Array<{ inlineData?: { mimeType?: string; data?: string } }> =
         sc.modelTurn?.parts ?? [];
       for (const part of parts) {
         const inline = part.inlineData;
-        if (inline?.data) {
+        if (inline?.data && armed) {
           if (this.timing.firstAudioDelta === undefined) {
             this.timing.firstAudioDelta = Date.now();
           }
@@ -307,18 +328,23 @@ export class GeminiLiveClient implements IRealtimeClient {
         this.nextPlayTime = 0; // drop queued playback on barge-in
       }
       if (sc.turnComplete) {
-        this.timing.responseDone = Date.now();
-        this.callbacks.onResponseDone?.({ usage: undefined });
-        if (this.transcriptAccumulator) {
-          this.callbacks.onTranscript?.(this.transcriptAccumulator, true);
+        if (armed) {
+          this.timing.responseDone = Date.now();
+          this.callbacks.onResponseDone?.({ usage: undefined });
+          if (this.transcriptAccumulator) {
+            this.callbacks.onTranscript?.(this.transcriptAccumulator, true);
+          }
         }
         this.transcriptAccumulator = "";
+        // Re-arm requirement: each turn must be re-addressed with the wake word.
+        if (this.config.wakeWord) this.armed = false;
         if (this._state === "speaking") this.setState("connected");
       }
       return;
     }
 
     if (msg.toolCall?.functionCalls) {
+      if (!this.isArmed()) return; // ignore tool calls from unaddressed speech
       this.timing.toolCallReceived = Date.now();
       for (const fc of msg.toolCall.functionCalls) {
         if (fc.id) this.pendingCallNames.set(fc.id, fc.name);

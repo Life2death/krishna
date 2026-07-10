@@ -284,14 +284,14 @@ export const LiveVoiceSettings = () => {
             />
           </div>
 
-          {provider === "openai" && (
+          {(provider === "openai" || provider === "gemini") && (
             <div className="space-y-2 border-t border-border/10 pt-3">
               <div className="flex items-center justify-between">
                 <div>
                   <Label className="text-sm font-medium">Require wake word</Label>
                   <p className="text-xs text-muted-foreground mt-1">
-                    Krishna stays silent until you start with the wake word
-                    (OpenAI only for now).
+                    Krishna stays silent (but always listening) until you start
+                    with the wake word.
                   </p>
                 </div>
                 <Switch

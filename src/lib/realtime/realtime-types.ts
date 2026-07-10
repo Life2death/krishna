@@ -42,6 +42,9 @@ export interface RealtimeConfig {
     create_response?: boolean;
   };
   maxResponseOutputTokens: number | "inf";
+  // When set, the Gemini client suppresses replies to utterances that don't
+  // start with this wake word (OpenAI gates via turn_detection.create_response).
+  wakeWord?: string;
   inactivityTimeoutMs?: number;
   maxSessionDurationMs?: number;
   pushToTalk?: boolean;
