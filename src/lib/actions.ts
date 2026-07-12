@@ -16,6 +16,7 @@ import { createRouteWatch, getActiveRouteWatch, cancelRouteWatch, disableLine, g
 import { resolvePlace } from "@krishna/core/tools/place-resolver";
 import { controlWindowTool } from "@krishna/core/tools/computer";
 import { getAllSavedSearches } from "@krishna/core/database/saved-searches.action";
+import { isMobileDevice } from "@/lib/platform";
 
 const ACTION_REGEX = /```action\n([\s\S]*?)```/g;
 const JSON_BLOCK_REGEX = /```json\n([\s\S]*?)```/g;
@@ -807,6 +808,26 @@ export async function executeAction(
       await saveAndConfirm(result, rawTarget);
       await invoke("open_target", { target: result.target });
       return { kind: "status", spokenResponse: "Opening " + result.displayName };
+    }
+
+    // resolveTarget's resolve_app (start-menu/registry scan) is desktop-only —
+    // it never finds anything on Android, so mobile app names always fell
+    // through to "couldn't find" without ever reaching the Android launcher.
+    // The Rust open_target command does its own installed-app fuzzy match on
+    // Android, so hand it the raw name directly as a last resort there.
+    if (isMobileDevice()) {
+      try {
+        const opened = await invoke<string>("open_target", { target: rawTarget });
+        return { kind: "status", spokenResponse: opened || "Opening " + rawTarget, ok: true };
+      } catch (e) {
+        const detail = e instanceof Error ? e.message : String(e);
+        return {
+          kind: "status",
+          ok: false,
+          spokenResponse: "I couldn't find an app named \"" + rawTarget + "\"",
+          errorDetail: detail,
+        };
+      }
     }
 
     return { kind: "status", ok: false, spokenResponse: "I couldn't find an app named \"" + rawTarget + "\"" };
