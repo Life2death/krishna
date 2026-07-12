@@ -33,9 +33,14 @@ fn main() {
         if let Ok(realtime_key) = std::env::var("OPENAI_REALTIME_API_KEY") {
             println!("cargo:rustc-env=OPENAI_REALTIME_API_KEY={}", realtime_key);
         }
+        // Bake the Google Maps key so travel-time queries work on the phone.
+        if let Ok(maps_key) = std::env::var("GOOGLE_MAPS_API_KEY") {
+            println!("cargo:rustc-env=GOOGLE_MAPS_API_KEY={}", maps_key);
+        }
     }
     println!("cargo:rerun-if-env-changed=ANTHROPIC_API_KEY");
     println!("cargo:rerun-if-env-changed=OPENAI_REALTIME_API_KEY");
+    println!("cargo:rerun-if-env-changed=GOOGLE_MAPS_API_KEY");
 
     tauri_build::build()
 }

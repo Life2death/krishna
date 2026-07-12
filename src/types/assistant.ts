@@ -26,7 +26,8 @@ export type Action =
   | { action: "speech_refresh" }
   | { action: "speech_accept_vocabulary" }
   | { action: "control_window"; mode: "focus" | "move"; target: string; monitor?: string }
-  | { action: "open_saved_search"; target: string };
+  | { action: "open_saved_search"; target: string }
+  | { action: "phone_control"; control: "volume" | "media" | "torch"; command: string; value?: number };
 
 export interface StepAction {
   tool: string;

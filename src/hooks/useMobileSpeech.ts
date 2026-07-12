@@ -61,9 +61,19 @@ export function useMobileSpeech(): UseMobileSpeechReturn {
     recognition.lang = "en-US";
 
     recognition.onresult = (event: any) => {
+      // Android's recognizer emits CUMULATIVE final results (each new final
+      // contains the whole utterance so far) — blindly appending glues the
+      // sentence together many times over. If the new final extends what we
+      // have, replace; only genuinely new segments get appended.
       for (let i = event.resultIndex; i < event.results.length; i++) {
         if (event.results[i].isFinal) {
-          finalTranscriptRef.current += event.results[i][0].transcript;
+          const seg = event.results[i][0].transcript;
+          const cur = finalTranscriptRef.current;
+          if (seg.startsWith(cur) || cur.startsWith(seg)) {
+            finalTranscriptRef.current = seg.length >= cur.length ? seg : cur;
+          } else {
+            finalTranscriptRef.current = cur + seg;
+          }
         }
       }
     };
@@ -79,6 +89,10 @@ export function useMobileSpeech(): UseMobileSpeechReturn {
       const transcript = finalTranscriptRef.current.trim();
       if (transcript) {
         krishna.processCommand(transcript);
+      } else {
+        // Ending with nothing captured was previously SILENT — the user spoke,
+        // saw the button reset, and got no clue why nothing happened.
+        setError("I didn't catch that — tap and try again");
       }
     };
 

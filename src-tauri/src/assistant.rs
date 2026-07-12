@@ -32,6 +32,14 @@ pub fn open_target(app_handle: tauri::AppHandle, target: String) -> Result<Strin
         if is_dangerous_target(&target) {
             return Err(format!("Blocked dangerous target: {}", target));
         }
+        // Android: bare app names resolve against installed apps' launcher
+        // labels (PackageManager), not desktop exe paths.
+        #[cfg(target_os = "android")]
+        {
+            return crate::android_control::launch_by_name(&target)
+                .map(|label| format!("Opened: {}", label));
+        }
+        #[cfg(not(target_os = "android"))]
         open_app_safe(&app_handle, &target)
     } else {
         Err(format!("Invalid target: {}", target))

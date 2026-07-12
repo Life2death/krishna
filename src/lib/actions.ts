@@ -126,6 +126,18 @@ export function parseActions(reply: string): ParsedReply {
         if (parsed && parsed.action === "open_saved_search" && parsed.target) {
           actions.push({ action: "open_saved_search", target: parsed.target });
         }
+        if (
+          parsed && parsed.action === "phone_control" &&
+          (parsed.control === "volume" || parsed.control === "media" || parsed.control === "torch") &&
+          typeof parsed.command === "string" && parsed.command
+        ) {
+          actions.push({
+            action: "phone_control",
+            control: parsed.control,
+            command: parsed.command,
+            ...(typeof parsed.value === "number" ? { value: parsed.value } : {}),
+          });
+        }
       } catch {
         // Not valid JSON, ignore
       }
@@ -886,6 +898,38 @@ export async function executeAction(
       ok: result.success,
       errorDetail: result.success ? undefined : result.error,
     };
+  }
+
+  if (action.action === "phone_control") {
+    // Android-only device controls (volume / media transport / torch). The
+    // Rust commands return descriptive errors on desktop and on failure — the
+    // spoken line always reflects the real outcome, never a fabricated success.
+    const { invoke } = await import("@tauri-apps/api/core");
+    try {
+      if (action.control === "volume") {
+        await invoke("android_volume", {
+          action: action.command,
+          value: typeof action.value === "number" ? action.value : null,
+        });
+      } else if (action.control === "media") {
+        await invoke("android_media", { action: action.command });
+      } else {
+        await invoke("android_torch", { on: action.command === "on" });
+      }
+      const spoken =
+        action.control === "torch"
+          ? `Torch ${action.command === "on" ? "on" : "off"}, {honorific}.`
+          : `Done, {honorific}.`;
+      return { kind: "status", spokenResponse: spoken, ok: true };
+    } catch (e) {
+      const detail = e instanceof Error ? e.message : String(e);
+      return {
+        kind: "status",
+        spokenResponse: `I couldn't control the ${action.control}, {honorific}.`,
+        ok: false,
+        errorDetail: detail,
+      };
+    }
   }
 
   return { spokenResponse: "Unknown action" };

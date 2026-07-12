@@ -33,6 +33,7 @@
         { "url": "https://api.cohere.ai/**" },
         { "url": "https://api.perplexity.ai/**" },
         { "url": "https://speech.googleapis.com/**" },
+        { "url": "https://routes.googleapis.com/**" },
         { "url": "https://api.deepgram.com/**" },
         { "url": "https://*.turso.io/**" },
         { "url": "https://*.aws.turso.io/**" }

@@ -18,12 +18,31 @@ export class BrowserTTS implements TTSProvider {
   private _rate = 1.0;
   private _pitch = 1.0;
 
+  // The Android System WebView exposes no `window.speechSynthesis`. When it's
+  // absent we route speech to the native Android TextToSpeech engine over a
+  // Tauri command instead of silently doing nothing.
+  private get hasWebSpeech(): boolean {
+    return typeof window !== "undefined" && !!window.speechSynthesis;
+  }
+
   speak(text: string): Promise<void> {
+    const cleaned = sanitizeSpeech(text);
+    if (!cleaned.trim()) return Promise.resolve();
+
+    if (!this.hasWebSpeech) {
+      // Native Android TTS: fire-and-forget (the engine queues utterances in
+      // order), so resolve immediately — the frontend streams reply sentences
+      // with real gaps, and QUEUE_ADD plays them sequentially.
+      return import("@tauri-apps/api/core")
+        .then(({ invoke }) => invoke("tts_speak_android", { text: cleaned }))
+        .then(() => {})
+        .catch((e) => {
+          console.error("Native Android TTS failed:", e);
+        });
+    }
+
     return new Promise((resolve) => {
       window.speechSynthesis.cancel();
-
-      const cleaned = sanitizeSpeech(text);
-      if (!cleaned.trim()) { resolve(); return; }
 
       const utterance = new SpeechSynthesisUtterance(cleaned);
       utterance.voice = this._voice;
@@ -36,12 +55,20 @@ export class BrowserTTS implements TTSProvider {
     });
   }
 
-  stop(): void { window.speechSynthesis.cancel(); }
-  isSpeaking(): boolean { return window.speechSynthesis.speaking; }
+  stop(): void {
+    if (!this.hasWebSpeech) {
+      import("@tauri-apps/api/core")
+        .then(({ invoke }) => invoke("tts_stop_android"))
+        .catch(() => {});
+      return;
+    }
+    window.speechSynthesis.cancel();
+  }
+  isSpeaking(): boolean { return this.hasWebSpeech ? window.speechSynthesis.speaking : false; }
   setVoice(voice: SpeechSynthesisVoice | null): void { this._voice = voice; }
   setRate(rate: number): void { this._rate = rate; }
   setPitch(pitch: number): void { this._pitch = pitch; }
-  getVoices(): SpeechSynthesisVoice[] { return window.speechSynthesis.getVoices(); }
+  getVoices(): SpeechSynthesisVoice[] { return this.hasWebSpeech ? window.speechSynthesis.getVoices() : []; }
 }
 
 // ---------------------------------------------------------------------------

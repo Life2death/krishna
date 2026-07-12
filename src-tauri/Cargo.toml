@@ -50,7 +50,9 @@ rand = "0.8"
 
 [target.'cfg(target_os = "android")'.dependencies]
 jni = "0.21"
-ndk-context = "0.1"
+# tao (tauri's event-loop crate, same version tauri pins) exposes
+# main_android_context() — the JavaVM + Activity handles for our JNI bridges.
+tao = "0.35"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 tauri-plugin-macos-permissions = "2"
@@ -85,3 +87,12 @@ tauri-plugin-autostart = "2.5.0"
 # key differently (see src/secure.rs get_machine_id) and skips PostHog analytics.
 tauri-plugin-machine-uid = "0.1.2"
 tauri-plugin-posthog = "0.2.4"
+
+# Faster debug/dev builds: skip Rust DWARF/PDB debuginfo generation. We debug the
+# native layer via log() + the crash/startup marker files, not a DWARF debugger,
+# so the (large, slow-to-write) debuginfo is pure cost — it also makes Windows
+# Defender scan far less, which is the main bottleneck for `tauri android build`.
+# Flip `debug = 1` temporarily if you ever need real native stack frames.
+[profile.dev]
+debug = 0
+strip = "debuginfo"

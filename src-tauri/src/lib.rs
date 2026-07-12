@@ -8,7 +8,13 @@ mod chrome_profiles;
 mod db;
 mod gmail_oauth;
 #[cfg(target_os = "android")]
+mod android_control;
+#[cfg(target_os = "android")]
+mod android_jvm;
+#[cfg(target_os = "android")]
 mod keystore;
+#[cfg(target_os = "android")]
+mod tts_android;
 mod mobile_bridge;
 mod resolver;
 mod secure;
@@ -187,6 +193,13 @@ pub fn run() {
             mobile_bridge::sync_exec_multiple,
             mobile_bridge::get_baked_anthropic_key,
             mobile_bridge::get_baked_realtime_key,
+            mobile_bridge::get_baked_maps_key,
+            mobile_bridge::tts_speak_android,
+            mobile_bridge::tts_stop_android,
+            mobile_bridge::android_launch_app,
+            mobile_bridge::android_volume,
+            mobile_bridge::android_media,
+            mobile_bridge::android_torch,
             resolver::resolve_app,
             resolver::verify_target,
             tts::synthesize_speech_piper,

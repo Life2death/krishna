@@ -117,5 +117,75 @@ export async function initializeCore(): Promise<void> {
     console.error("[startup] realtime key seed failed:", err);
   }
 
+  // Seed the build-baked Anthropic key as the SELECTED Claude AI provider on
+  // mobile. The classic pipeline reads `provider_<id>_api_key` + the
+  // `curl_selected_ai_provider` localStorage entry — NOT the raw
+  // ANTHROPIC_API_KEY the setup wizard stores — and the first-run default is
+  // OpenRouter with no key, so without this seed every mobile AI call failed
+  // with "Missing required variable: api_key". No-op on desktop (baked key is
+  // None); never overwrites an existing key or a provider the user selected.
+  try {
+    const { invoke } = await import("@tauri-apps/api/core");
+    const baked = await invoke<string | null>("get_baked_anthropic_key");
+    if (baked) {
+      const existingKey = await invoke<string | null>("secure_get", {
+        key: "provider_claude_api_key",
+      });
+      if (!existingKey) {
+        await invoke("secure_set", {
+          key: "provider_claude_api_key",
+          value: baked,
+        });
+      }
+      // Select Claude when nothing is selected OR the selection is the
+      // first-run OpenRouter default that has no key behind it (that state can
+      // only produce "Missing required variable: api_key"). A user-configured
+      // OpenRouter (key present) is left alone.
+      const selRaw = safeLocalStorage.getItem("curl_selected_ai_provider");
+      let replaceSelection = !selRaw;
+      if (selRaw) {
+        try {
+          const sel = JSON.parse(selRaw);
+          if (sel?.provider === "openrouter") {
+            const orKey = await invoke<string | null>("secure_get", {
+              key: "provider_openrouter_api_key",
+            });
+            if (!orKey) replaceSelection = true;
+          }
+        } catch {
+          replaceSelection = true;
+        }
+      }
+      if (replaceSelection) {
+        const model =
+          (await invoke<string | null>("secure_get", { key: "KRISHNA_CLAUDE_MODEL" })) ||
+          "claude-sonnet-4-6";
+        safeLocalStorage.setItem(
+          "curl_selected_ai_provider",
+          JSON.stringify({ provider: "claude", variables: { model } })
+        );
+      }
+    }
+  } catch (err) {
+    console.error("[startup] anthropic provider seed failed:", err);
+  }
+
+  // Seed the build-baked Google Maps key (travel-time tool) on mobile.
+  // No-op on desktop; never overwrites an existing key.
+  try {
+    const { invoke } = await import("@tauri-apps/api/core");
+    const existing = await invoke<string | null>("secure_get", {
+      key: "GOOGLE_MAPS_API_KEY",
+    });
+    if (!existing) {
+      const baked = await invoke<string | null>("get_baked_maps_key");
+      if (baked) {
+        await invoke("secure_set", { key: "GOOGLE_MAPS_API_KEY", value: baked });
+      }
+    }
+  } catch (err) {
+    console.error("[startup] maps key seed failed:", err);
+  }
+
   await startSync();
 }

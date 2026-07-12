@@ -68,6 +68,118 @@ pub fn get_baked_realtime_key() -> Option<String> {
     }
 }
 
+/// Returns the build-time-baked Google Maps API key on mobile (travel-time
+/// queries), or None on desktop (key lives in the user's secure store there).
+#[tauri::command]
+pub fn get_baked_maps_key() -> Option<String> {
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    {
+        option_env!("GOOGLE_MAPS_API_KEY").map(|s| s.to_string())
+    }
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    {
+        None
+    }
+}
+
+// ── Native TTS (Android) ───────────────────────────────────────────────
+// The Android WebView has no `window.speechSynthesis` and Piper can't run on
+// Android, so speech is routed through the platform TextToSpeech engine.
+// No-ops on desktop, where the frontend uses browser/Piper/ElevenLabs TTS.
+
+#[tauri::command]
+pub fn tts_speak_android(text: String) -> Result<(), String> {
+    #[cfg(target_os = "android")]
+    {
+        crate::tts_android::speak(&text)
+    }
+    #[cfg(not(target_os = "android"))]
+    {
+        let _ = text;
+        Ok(())
+    }
+}
+
+#[tauri::command]
+pub fn tts_stop_android() -> Result<(), String> {
+    #[cfg(target_os = "android")]
+    {
+        crate::tts_android::stop()
+    }
+    #[cfg(not(target_os = "android"))]
+    {
+        Ok(())
+    }
+}
+
+// ── Android device control (app launcher / volume / media / torch) ─────
+// JNI-backed on Android (see android_control.rs); descriptive errors on
+// desktop, where these capabilities are covered by the desktop tool set.
+
+#[tauri::command]
+pub fn android_launch_app(name: String) -> Result<String, String> {
+    #[cfg(target_os = "android")]
+    {
+        crate::android_control::launch_by_name(&name)
+    }
+    #[cfg(not(target_os = "android"))]
+    {
+        let _ = name;
+        Err("android_launch_app is only available on Android".to_string())
+    }
+}
+
+#[tauri::command]
+pub fn android_volume(action: String, value: Option<i32>) -> Result<(), String> {
+    #[cfg(target_os = "android")]
+    {
+        match crate::android_control::volume(&action, value.unwrap_or(0)) {
+            Ok(true) => Ok(()),
+            Ok(false) => Err(format!("Unknown volume action: {}", action)),
+            Err(e) => Err(e),
+        }
+    }
+    #[cfg(not(target_os = "android"))]
+    {
+        let _ = (action, value);
+        Err("android_volume is only available on Android".to_string())
+    }
+}
+
+#[tauri::command]
+pub fn android_media(action: String) -> Result<(), String> {
+    #[cfg(target_os = "android")]
+    {
+        match crate::android_control::media_key(&action) {
+            Ok(true) => Ok(()),
+            Ok(false) => Err(format!("Unknown media action: {}", action)),
+            Err(e) => Err(e),
+        }
+    }
+    #[cfg(not(target_os = "android"))]
+    {
+        let _ = action;
+        Err("android_media is only available on Android".to_string())
+    }
+}
+
+#[tauri::command]
+pub fn android_torch(on: bool) -> Result<(), String> {
+    #[cfg(target_os = "android")]
+    {
+        match crate::android_control::set_torch(on) {
+            Ok(true) => Ok(()),
+            Ok(false) => Err("No back camera with a flash unit found".to_string()),
+            Err(e) => Err(e),
+        }
+    }
+    #[cfg(not(target_os = "android"))]
+    {
+        let _ = on;
+        Err("android_torch is only available on Android".to_string())
+    }
+}
+
 // ── Sync transport fallback (Turso HTTP pipeline via reqwest) ──────────
 // Provides a Rust-backed transport used when `@libsql/client` can't run
 // (e.g. restrictive Android WebView). The TypeScript side auto-detects and
