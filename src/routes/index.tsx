@@ -14,10 +14,12 @@ import {
   Presence,
   Setup,
   MobileMemories,
+  MobileHome,
 } from "@/pages";
 import { DashboardLayout } from "@/layouts";
 import { invoke } from "@tauri-apps/api/core";
 import { hasSealedKey, sealMasterKey } from "@/lib/secure-storage";
+import { isMobileDevice } from "@/lib/platform";
 
 function FirstRunGuard() {
   const [checking, setChecking] = useState(true);
@@ -57,26 +59,38 @@ export default function AppRoutes() {
   return (
     <Router>
       <Routes>
-        <Route path="/" element={<App />} />
         <Route path="/presence" element={<Presence />} />
         <Route path="/setup" element={<Setup />} />
-        <Route element={<FirstRunGuard />}>
-          <Route element={<DashboardLayout />}>
-            <Route path="/dashboard" element={<Dashboard />} />
-            <Route path="/status" element={<Status />} />
-            <Route path="/system-prompts" element={<SystemPrompts />} />
-            <Route path="/chats/view/:conversationId" element={<ViewChat />} />
-            <Route path="/shortcuts" element={<Shortcuts />} />
-            <Route path="/screenshot" element={<Screenshot />} />
-            <Route path="/settings" element={<Settings />} />
-            <Route path="/audio" element={<Audio />} />
-            <Route path="/dev-space" element={<DevSpace />} />
+        {isMobileDevice() ? (
+          // Mobile: one screen — a big tap-to-talk button. Setup-gated so a
+          // fresh install still runs the wizard first.
+          <Route element={<FirstRunGuard />}>
+            <Route path="/" element={<MobileHome />} />
             <Route path="/mobile/memories" element={<MobileMemories />} />
-            <Route path="/chats" element={<Navigate to="/dashboard" replace />} />
-            <Route path="/responses" element={<Navigate to="/settings" replace />} />
-            <Route path="*" element={<Navigate to="/dashboard" replace />} />
+            <Route path="*" element={<Navigate to="/" replace />} />
           </Route>
-        </Route>
+        ) : (
+          <>
+            <Route path="/" element={<App />} />
+            <Route element={<FirstRunGuard />}>
+              <Route element={<DashboardLayout />}>
+                <Route path="/dashboard" element={<Dashboard />} />
+                <Route path="/status" element={<Status />} />
+                <Route path="/system-prompts" element={<SystemPrompts />} />
+                <Route path="/chats/view/:conversationId" element={<ViewChat />} />
+                <Route path="/shortcuts" element={<Shortcuts />} />
+                <Route path="/screenshot" element={<Screenshot />} />
+                <Route path="/settings" element={<Settings />} />
+                <Route path="/audio" element={<Audio />} />
+                <Route path="/dev-space" element={<DevSpace />} />
+                <Route path="/mobile/memories" element={<MobileMemories />} />
+                <Route path="/chats" element={<Navigate to="/dashboard" replace />} />
+                <Route path="/responses" element={<Navigate to="/settings" replace />} />
+                <Route path="*" element={<Navigate to="/dashboard" replace />} />
+              </Route>
+            </Route>
+          </>
+        )}
       </Routes>
     </Router>
   );

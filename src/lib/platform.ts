@@ -18,6 +18,14 @@ export const getPlatform = (): "macos" | "windows" | "linux" => {
 };
 
 /**
+ * Check if running on a mobile device (Android / iOS WebView).
+ * Uses the userAgent — the same signal the push-to-talk button relies on.
+ */
+export const isMobileDevice = (): boolean =>
+  typeof navigator !== "undefined" &&
+  /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+
+/**
  * Check if current platform is macOS
  */
 export const isMacOS = (): boolean => getPlatform() === "macos";

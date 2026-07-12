@@ -4,6 +4,7 @@ import { Button, Label } from "@/components";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { secureStorage, hasSealedKey } from "@/lib/secure-storage";
+import { isMobileDevice } from "@/lib/platform";
 import { CheckIcon, ChevronRightIcon, ChevronLeftIcon, KeyIcon, SparklesIcon } from "lucide-react";
 
 type SetupStep = "welcome" | "api-key" | "master-key" | "sync" | "done";
@@ -143,7 +144,9 @@ export default function Setup() {
   };
 
   const handleFinish = () => {
-    navigate("/dashboard");
+    // Mobile lands on the minimal tap-to-talk home ("/"); desktop opens the
+    // full dashboard.
+    navigate(isMobileDevice() ? "/" : "/dashboard");
   };
 
   return (
