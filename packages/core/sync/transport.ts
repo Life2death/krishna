@@ -20,6 +20,7 @@ const TABLE_DDL: Record<string, string> = {
   system_prompts: `id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, prompt TEXT, created_at INTEGER, updated_at INTEGER`,
   reminders: `id TEXT PRIMARY KEY, text TEXT, due_at INTEGER, recurrence TEXT, skill_id TEXT, enabled INTEGER DEFAULT 1, created_at INTEGER, updated_at INTEGER`,
   voiceprint_samples: `id TEXT PRIMARY KEY, speaker TEXT DEFAULT 'primary', embedding TEXT, dims INTEGER, quality REAL, created_at INTEGER, updated_at INTEGER`,
+  device_commands: `id TEXT PRIMARY KEY, source_kind TEXT, target_kind TEXT, command_text TEXT, status TEXT DEFAULT 'pending', result TEXT, created_at INTEGER, updated_at INTEGER`,
 };
 
 function args(params?: unknown[]): InValue[] {

@@ -11,12 +11,21 @@ import { initializeCore } from "./lib/startup";
 const currentWindow = getCurrentWindow();
 const windowLabel = currentWindow.label;
 
+const isMobileUA =
+  typeof navigator !== "undefined" && /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+
 if (windowLabel === "presence") {
-  ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
-    <React.StrictMode>
-      <PresenceOverlay />
-    </React.StrictMode>
-  );
+  // The presence overlay is a desktop-only orb. On mobile the window still gets
+  // created from the static tauri.conf.json config (and Rust closes it), but
+  // until it's gone we must NOT mount PresenceOverlay — its animation loop and
+  // timers would run pointlessly in a hidden WebView.
+  if (!isMobileUA) {
+    ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
+      <React.StrictMode>
+        <PresenceOverlay />
+      </React.StrictMode>
+    );
+  }
 } else {
   initializeCore().then(() => {
     if (windowLabel.startsWith("capture-overlay-")) {

@@ -132,6 +132,58 @@ pub fn media_key(action: &str) -> Result<bool, String> {
     })
 }
 
+// ── Accessibility gestures (Phase C) ──────────────────────────────────
+
+const A11Y_CLASS: &str = "com.krishna.assistant.KrishnaAccessibilityService";
+
+/// Is the accessibility service enabled (user opt-in in system settings)?
+pub fn a11y_is_enabled() -> Result<bool, String> {
+    with_env(|env| {
+        let class = JClass::from(find_app_class(env, A11Y_CLASS)?);
+        env.call_static_method(class, "isEnabled", "()Z", &[])
+            .map_err(|e| format!("[a11y] isEnabled failed: {}", e))?
+            .z()
+            .map_err(|e| format!("[a11y] isEnabled not a bool: {}", e))
+    })
+}
+
+/// kind: "tap" | "swipe_up/down/left/right" | "zoom_in/out" | "back" | "home"
+///       | "recents" | "notifications"
+pub fn a11y_gesture(kind: &str) -> Result<bool, String> {
+    with_env(|env| {
+        let jkind = env
+            .new_string(kind)
+            .map_err(|e| format!("[a11y] new_string: {}", e))?;
+        let jkind_obj: JObject = jkind.into();
+        let class = JClass::from(find_app_class(env, A11Y_CLASS)?);
+        env.call_static_method(
+            class,
+            "gesture",
+            "(Ljava/lang/String;)Z",
+            &[JValue::Object(&jkind_obj)],
+        )
+        .map_err(|e| format!("[a11y] gesture failed: {}", e))?
+        .z()
+        .map_err(|e| format!("[a11y] gesture not a bool: {}", e))
+    })
+}
+
+/// Open the system Accessibility settings screen (for the one-time enable).
+pub fn a11y_open_settings() -> Result<(), String> {
+    with_env(|env| {
+        let context = application_context(env)?;
+        let class = JClass::from(find_app_class(env, A11Y_CLASS)?);
+        env.call_static_method(
+            class,
+            "openSettings",
+            "(Landroid/content/Context;)V",
+            &[JValue::Object(&context)],
+        )
+        .map_err(|e| format!("[a11y] openSettings failed: {}", e))?;
+        Ok(())
+    })
+}
+
 pub fn set_torch(on: bool) -> Result<bool, String> {
     with_env(|env| {
         let context = application_context(env)?;

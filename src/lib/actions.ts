@@ -129,7 +129,7 @@ export function parseActions(reply: string): ParsedReply {
         }
         if (
           parsed && parsed.action === "phone_control" &&
-          (parsed.control === "volume" || parsed.control === "media" || parsed.control === "torch") &&
+          (parsed.control === "volume" || parsed.control === "media" || parsed.control === "torch" || parsed.control === "gesture") &&
           typeof parsed.command === "string" && parsed.command
         ) {
           actions.push({
@@ -138,6 +138,13 @@ export function parseActions(reply: string): ParsedReply {
             command: parsed.command,
             ...(typeof parsed.value === "number" ? { value: parsed.value } : {}),
           });
+        }
+        if (
+          parsed && parsed.action === "relay_command" &&
+          (parsed.target === "desktop" || parsed.target === "mobile") &&
+          typeof parsed.command === "string" && parsed.command.trim()
+        ) {
+          actions.push({ action: "relay_command", target: parsed.target, command: parsed.command.trim() });
         }
       } catch {
         // Not valid JSON, ignore
@@ -934,6 +941,8 @@ export async function executeAction(
         });
       } else if (action.control === "media") {
         await invoke("android_media", { action: action.command });
+      } else if (action.control === "gesture") {
+        await invoke("android_gesture", { kind: action.command });
       } else {
         await invoke("android_torch", { on: action.command === "on" });
       }
@@ -944,9 +953,69 @@ export async function executeAction(
       return { kind: "status", spokenResponse: spoken, ok: true };
     } catch (e) {
       const detail = e instanceof Error ? e.message : String(e);
+      // One-time opt-in: gestures need the accessibility service enabled in
+      // system settings. Open that screen and tell the user what to do.
+      if (detail.includes("A11Y_NOT_ENABLED")) {
+        try {
+          await invoke("android_open_a11y_settings");
+        } catch { /* settings screen is best-effort */ }
+        return {
+          kind: "status",
+          spokenResponse:
+            `I need the accessibility permission for screen gestures, {honorific} — ` +
+            `I've opened the settings. Enable Krishna under Accessibility, then ask me again.`,
+          ok: false,
+          errorDetail: detail,
+        };
+      }
       return {
         kind: "status",
         spokenResponse: `I couldn't control the ${action.control}, {honorific}.`,
+        ok: false,
+        errorDetail: detail,
+      };
+    }
+  }
+
+  if (action.action === "relay_command") {
+    const myKind = isMobileDevice() ? "mobile" : "desktop";
+    if (action.target === myKind) {
+      return {
+        kind: "status",
+        spokenResponse: `This is already the ${myKind}, {honorific} — just ask me directly.`,
+        ok: false,
+      };
+    }
+    try {
+      const { enqueueDeviceCommand } = await import("@krishna/core/database");
+      await enqueueDeviceCommand(myKind, action.target, action.command);
+      // Best-effort immediate push so the other device sees it on its next
+      // sync pull instead of waiting a full local interval.
+      try {
+        const { getSyncEngine } = await import("@/lib/startup");
+        const engine = getSyncEngine();
+        if (!engine) {
+          return {
+            kind: "status",
+            spokenResponse: `I've queued it, {honorific}, but sync is off on this device — it won't reach the ${action.target} until sync is configured.`,
+            ok: false,
+            errorDetail: "sync engine not running",
+          };
+        }
+        void engine.syncNow();
+      } catch {
+        /* sync push is best-effort; the interval will pick it up */
+      }
+      return {
+        kind: "status",
+        spokenResponse: `Sent to your ${action.target}, {honorific} — it'll run within a minute.`,
+        ok: true,
+      };
+    } catch (e) {
+      const detail = e instanceof Error ? e.message : String(e);
+      return {
+        kind: "status",
+        spokenResponse: `I couldn't queue that for the ${action.target}, {honorific}.`,
         ok: false,
         errorDetail: detail,
       };

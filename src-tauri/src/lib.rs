@@ -193,6 +193,7 @@ pub fn run() {
             mobile_bridge::sync_exec_multiple,
             mobile_bridge::get_baked_anthropic_key,
             mobile_bridge::get_baked_realtime_key,
+            mobile_bridge::get_baked_gemini_key,
             mobile_bridge::get_baked_maps_key,
             mobile_bridge::tts_speak_android,
             mobile_bridge::tts_stop_android,
@@ -200,6 +201,8 @@ pub fn run() {
             mobile_bridge::android_volume,
             mobile_bridge::android_media,
             mobile_bridge::android_torch,
+            mobile_bridge::android_gesture,
+            mobile_bridge::android_open_a11y_settings,
             resolver::resolve_app,
             resolver::verify_target,
             tts::synthesize_speech_piper,
@@ -238,20 +241,37 @@ pub fn run() {
             #[cfg(target_os = "android")]
             keystore::init();
 
+            // The "presence" overlay is a desktop-only always-on-top orb window,
+            // but it's declared statically in tauri.conf.json so Tauri also spawns
+            // it as a hidden second WebView on mobile — a wasted renderer that adds
+            // to the memory pressure behind the Android OOM restarts. Close it.
+            #[cfg(target_os = "android")]
+            if let Some(w) = app.handle().get_webview_window("presence") {
+                let _ = w.close();
+            }
+
             #[cfg(target_os = "macos")]
             init(app.app_handle());
 
             // Pre-create dashboard window so it's ready immediately.
             // On first run, route to the setup wizard instead of the dashboard.
-            let app_handle = app.handle();
-            if app_handle.get_webview_window("dashboard").is_none() {
-                let is_first_run = secure::get_stored_value(&app_handle, "KRISHNA_BRAIN_TOKEN")
-                    .ok()
-                    .flatten()
-                    .is_none();
-                let route = if is_first_run { "/setup" } else { "/dashboard" };
-                if let Err(e) = window::create_dashboard_window(&app_handle, route) {
-                    eprintln!("Failed to pre-create dashboard window: {}", e);
+            // NOT on Android: the mobile UI lives entirely in the main window,
+            // and a second WebView renderer doubles memory — on budget phones
+            // Android OOM-kills the renderer and takes the whole app with it
+            // ("Render process kill wasn't handled ... killing application").
+            #[cfg(not(target_os = "android"))]
+            {
+                let app_handle = app.handle();
+                if app_handle.get_webview_window("dashboard").is_none() {
+                    let is_first_run =
+                        secure::get_stored_value(&app_handle, "KRISHNA_BRAIN_TOKEN")
+                            .ok()
+                            .flatten()
+                            .is_none();
+                    let route = if is_first_run { "/setup" } else { "/dashboard" };
+                    if let Err(e) = window::create_dashboard_window(&app_handle, route) {
+                        eprintln!("Failed to pre-create dashboard window: {}", e);
+                    }
                 }
             }
 

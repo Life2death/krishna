@@ -1,5 +1,9 @@
 fn main() {
     dotenv::dotenv().ok();
+    // Without this, editing .env NEVER triggers a build-script rerun (cargo
+    // has no idea the file exists) — the previously-cached rustc-env values
+    // keep getting baked in, silently missing any newly added key.
+    println!("cargo:rerun-if-changed=.env");
 
     if let Ok(payment_endpoint) = std::env::var("PAYMENT_ENDPOINT") {
         println!("cargo:rustc-env=PAYMENT_ENDPOINT={}", payment_endpoint);
@@ -33,6 +37,11 @@ fn main() {
         if let Ok(realtime_key) = std::env::var("OPENAI_REALTIME_API_KEY") {
             println!("cargo:rustc-env=OPENAI_REALTIME_API_KEY={}", realtime_key);
         }
+        // Bake the Gemini Live key too, so the Gemini Live Voice provider
+        // works on the phone without typing a long key into a mobile keyboard.
+        if let Ok(gemini_key) = std::env::var("GEMINI_REALTIME_API_KEY") {
+            println!("cargo:rustc-env=GEMINI_REALTIME_API_KEY={}", gemini_key);
+        }
         // Bake the Google Maps key so travel-time queries work on the phone.
         if let Ok(maps_key) = std::env::var("GOOGLE_MAPS_API_KEY") {
             println!("cargo:rustc-env=GOOGLE_MAPS_API_KEY={}", maps_key);
@@ -40,6 +49,7 @@ fn main() {
     }
     println!("cargo:rerun-if-env-changed=ANTHROPIC_API_KEY");
     println!("cargo:rerun-if-env-changed=OPENAI_REALTIME_API_KEY");
+    println!("cargo:rerun-if-env-changed=GEMINI_REALTIME_API_KEY");
     println!("cargo:rerun-if-env-changed=GOOGLE_MAPS_API_KEY");
 
     tauri_build::build()

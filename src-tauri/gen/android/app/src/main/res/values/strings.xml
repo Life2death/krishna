@@ -1,4 +1,5 @@
 <resources>
     <string name="app_name">Krishna</string>
     <string name="main_activity_title">Krishna</string>
+    <string name="a11y_description">Lets Krishna perform voice-requested gestures (tap, swipe, zoom, back/home) on the current screen. Only acts on your explicit voice commands.</string>
 </resources>

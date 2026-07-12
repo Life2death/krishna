@@ -14,3 +14,4 @@ export * from "./speech-log.action";
 export * from "./route-watches.action";
 export * from "./voice-lines.action";
 export * from "./saved-searches.action";
+export * from "./device-commands.action";

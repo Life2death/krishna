@@ -68,6 +68,20 @@ pub fn get_baked_realtime_key() -> Option<String> {
     }
 }
 
+/// Returns the build-time-baked Gemini Live API key on mobile, or None on
+/// desktop (where the user configures it in Settings).
+#[tauri::command]
+pub fn get_baked_gemini_key() -> Option<String> {
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    {
+        option_env!("GEMINI_REALTIME_API_KEY").map(|s| s.to_string())
+    }
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    {
+        None
+    }
+}
+
 /// Returns the build-time-baked Google Maps API key on mobile (travel-time
 /// queries), or None on desktop (key lives in the user's secure store there).
 #[tauri::command]
@@ -177,6 +191,43 @@ pub fn android_torch(on: bool) -> Result<(), String> {
     {
         let _ = on;
         Err("android_torch is only available on Android".to_string())
+    }
+}
+
+/// Screen gesture via the accessibility service. Returns a distinctive error
+/// when the service isn't enabled so the frontend can walk the user through
+/// the one-time system-settings opt-in.
+#[tauri::command]
+pub fn android_gesture(kind: String) -> Result<(), String> {
+    #[cfg(target_os = "android")]
+    {
+        match crate::android_control::a11y_is_enabled() {
+            Ok(true) => {}
+            Ok(false) => return Err("A11Y_NOT_ENABLED".to_string()),
+            Err(e) => return Err(e),
+        }
+        match crate::android_control::a11y_gesture(&kind) {
+            Ok(true) => Ok(()),
+            Ok(false) => Err(format!("Unknown or undispatchable gesture: {}", kind)),
+            Err(e) => Err(e),
+        }
+    }
+    #[cfg(not(target_os = "android"))]
+    {
+        let _ = kind;
+        Err("android_gesture is only available on Android".to_string())
+    }
+}
+
+#[tauri::command]
+pub fn android_open_a11y_settings() -> Result<(), String> {
+    #[cfg(target_os = "android")]
+    {
+        crate::android_control::a11y_open_settings()
+    }
+    #[cfg(not(target_os = "android"))]
+    {
+        Err("android_open_a11y_settings is only available on Android".to_string())
     }
 }
 

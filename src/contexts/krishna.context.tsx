@@ -45,6 +45,7 @@ import { matchCannedResponse } from "@/lib/canned-responses";
 import { SentenceStream } from "@/lib/sentence-stream";
 import { SpeechQueue } from "@/lib/speech-queue";
 import { parseFastCommand } from "@/lib/fast-command";
+import { startDeviceCommandDispatcher } from "@/lib/device-command-dispatcher";
 
 export interface ConversationTurn {
   id: string;
@@ -290,7 +291,25 @@ export const BASE_SYSTEM_PROMPT = [
   '```',
   '  (command: "on" | "off")',
   '- To open an installed app on the phone ("open WhatsApp"), use the normal open_target action with the app name — it matches installed apps automatically.',
+  '- Screen gestures on whatever app is currently on screen (maps, browser, anything): "zoom in" / "zoom out" / "scroll down" / "swipe left" / "go back" / "go home" →',
+  '```action',
+  '{"action":"phone_control","control":"gesture","command":"zoom_in"}',
+  '```',
+  '  (command: "zoom_in" | "zoom_out" | "swipe_up" | "swipe_down" | "swipe_left" | "swipe_right" | "tap" | "back" | "home" | "recents". "scroll down" = swipe_up, "scroll up" = swipe_down.)',
+  '- Gestures need a one-time accessibility permission; if missing, the settings screen opens automatically and you should relay the spoken instruction.',
   '- These are real commands — emit the block; NEVER just say you did it.',
+  '',
+  'DEVICE RELAY (run a command on the OTHER device — desktop ↔ phone):',
+  '- When the user says to do something "on my phone" / "on mobile" (and you are the desktop), or "on my desktop" / "on my computer" (and you are the phone), emit a relay_command ACTION block. The command runs on the target device with ITS local context (its location, its apps, its screen).',
+  '- "show travel time to work on my phone" (from desktop) →',
+  '```action',
+  '{"action":"relay_command","target":"mobile","command":"show travel time to work on google maps"}',
+  '```',
+  '- "open the github repo in chrome on my desktop" (from phone) →',
+  '```action',
+  '{"action":"relay_command","target":"desktop","command":"open github.com in chrome"}',
+  '```',
+  '- `command` is plain natural language — the target device\'s own assistant interprets it. Delivery takes up to a minute (sync). Acknowledge honestly ("sent to your phone, it\'ll run within a minute") — NEVER claim it already ran.',
   '',
   'MULTI-STEP TASK PLANNING (Phase 4):',
   'For complex requests like "play this song on YouTube" or "type opencode in command prompt", you can output a multi-step plan instead of a single action.',
@@ -2404,6 +2423,20 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
     });
     return () => { unlisten.then((fn) => fn()); };
   }, [status]);
+
+  // Device relay (bridge P1): execute commands queued for THIS device kind by
+  // the other device (desktop ↔ mobile) via the synced device_commands table.
+  // A ref keeps the dispatcher on the freshest processCommand without
+  // restarting the poller every render.
+  const relayProcessRef = useRef(processCommand);
+  relayProcessRef.current = processCommand;
+  useEffect(() => {
+    const stop = startDeviceCommandDispatcher((text) =>
+      // Relayed commands are already explicit — never demand the wake word.
+      relayProcessRef.current(text, { skipWakeWord: true }),
+    );
+    return stop;
+  }, []);
 
   return (
       <KrishnaContext.Provider

@@ -145,5 +145,12 @@ pub fn migrations() -> Vec<Migration> {
             sql: include_str!("migrations/saved-searches-v21.sql"),
             kind: MigrationKind::Up,
         },
+        // Migration 22: Cross-device command relay (desktop <-> mobile bridge P1)
+        Migration {
+            version: 22,
+            description: "create_device_commands_table",
+            sql: include_str!("migrations/device-commands-v22.sql"),
+            kind: MigrationKind::Up,
+        },
     ]
 }

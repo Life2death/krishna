@@ -15,6 +15,7 @@ import {
   Setup,
   MobileMemories,
   MobileHome,
+  MobileSettings,
 } from "@/pages";
 import { DashboardLayout } from "@/layouts";
 import { invoke } from "@tauri-apps/api/core";
@@ -66,6 +67,7 @@ export default function AppRoutes() {
           // fresh install still runs the wizard first.
           <Route element={<FirstRunGuard />}>
             <Route path="/" element={<MobileHome />} />
+            <Route path="/mobile/settings" element={<MobileSettings />} />
             <Route path="/mobile/memories" element={<MobileMemories />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>

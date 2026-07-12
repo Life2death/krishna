@@ -117,6 +117,24 @@ export async function initializeCore(): Promise<void> {
     console.error("[startup] realtime key seed failed:", err);
   }
 
+  // Seed the build-baked Gemini Live key (same pattern as the OpenAI Realtime
+  // key above) so the Gemini Live Voice provider works on mobile without
+  // typing a key. No-op on desktop; never overwrites an existing key.
+  try {
+    const { invoke } = await import("@tauri-apps/api/core");
+    const existing = await invoke<string | null>("secure_get", {
+      key: "gemini_realtime_api_key",
+    });
+    if (!existing) {
+      const baked = await invoke<string | null>("get_baked_gemini_key");
+      if (baked) {
+        await invoke("secure_set", { key: "gemini_realtime_api_key", value: baked });
+      }
+    }
+  } catch (err) {
+    console.error("[startup] gemini key seed failed:", err);
+  }
+
   // Seed the build-baked Anthropic key as the SELECTED Claude AI provider on
   // mobile. The classic pipeline reads `provider_<id>_api_key` + the
   // `curl_selected_ai_provider` localStorage entry — NOT the raw
