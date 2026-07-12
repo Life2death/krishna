@@ -1,8 +1,70 @@
-# RESUME HERE — Krishna handoff (updated 2026-07-08)
+# RESUME HERE — Krishna handoff (updated 2026-07-12)
 
 > **This is the single source of truth to resume from.** Reviewer (Claude), coding agent, and
 > owner (Vikram) all sync through this file. Read the whole thing before touching anything.
 > Deeper per-track detail lives in the `*_REVIEW_FINDINGS.md` and `*_PLAN.md` files referenced below.
+
+---
+
+## 0. LATEST — Android mobile voice fully working (2026-07-12), pushed `905041f`
+
+Mobile went from "asks for a key it should never need, then silent/broken" to a working
+tap-to-talk voice assistant with device control, in one session. All code pushed to
+`origin/main` (`905041f`). Full technical trail: [[android-jni-and-build-speed]],
+[[mobile-setup-baked-key]].
+
+**Fixed, verified live on-device (phone `R9ZY40XK38A`, Samsung Galaxy A06):**
+1. **Setup no longer asks for the Anthropic key on mobile** — the mechanism already existed
+   (`get_baked_anthropic_key`), it just needed a **local** build (CI never had the secret baked).
+2. **New minimal mobile home screen** (`src/pages/mobile/Home.tsx`) — one big tap-to-talk
+   button, routed via `isMobileDevice()`; desktop overlay/dashboard untouched.
+3. **Native Android TTS** — the WebView has NO `window.speechSynthesis` and Piper can't run on
+   Android (spawns a Windows exe), so mobile had zero speech. Built `TtsHelper.kt`
+   (`android.speech.tts.TextToSpeech`) + `tts_android.rs` JNI bridge. **She now speaks.**
+4. **Root-caused a long-standing silent JNI bug**: neither tauri, tao, nor wry initializes
+   `ndk-context`, so `keystore.rs`'s JNI (hardware-backed key sealing) had **never worked** —
+   every call silently failed and fell back to a device-bound key. Fixed via
+   `android_jvm.rs` using tao's public `main_android_context()`. Along the way, found and fixed
+   a startup SIGABRT: a failed JNI call left a Java exception **pending** on the thread, which
+   aborted the process on wry's next JNI call (webview creation). `with_env()` now clears
+   pending exceptions after every call.
+5. **AI provider seed** — mobile's baked Anthropic key existed but was never connected to the
+   provider system the classic pipeline actually reads (`provider_<id>_api_key` +
+   `curl_selected_ai_provider`), so every mobile AI call failed with "Missing required variable:
+   api_key". Fixed in `src/lib/startup.ts` — seeds Claude as the selected provider on mobile.
+6. **Mobile STT transcript bug** — Android's `webkitSpeechRecognition` emits CUMULATIVE final
+   results; the old code appended each one, gluing every partial into the transcript sent to
+   Claude ("hey Krishnahey Krishna good morning..." repeated ~20x). Fixed in
+   `useMobileSpeech.ts`; also now surfaces "I didn't catch that" instead of silent failure.
+
+**Phase A/B device control — built, gates green, NOT yet live-tested (blocked on owner adding
+`GOOGLE_MAPS_API_KEY` + rebuild, see §2):**
+- **Phase A — open apps by name**: `AppLauncherHelper.kt` lists installed launchable apps;
+  `android_control.rs` fuzzy-matches a spoken name (exact → prefix → substring → package) and
+  wires into the existing `open_target` Android path. "Open WhatsApp" needs zero new LLM
+  plumbing — it's the same `open` action, just resolves differently on Android.
+- **Phase B — media/volume/torch**: `MediaControlHelper.kt` (volume up/down/mute/set%, media
+  transport keys play/pause/next/prev/stop, torch on/off) + a new `phone_control` Action wired
+  through parser → executor → a PHONE CONTROL prompt section (per the window-control lesson:
+  wire every seam or the LLM never emits the action). Torch via JNI sidesteps the exact Tauri
+  plugin ACL wall that killed the earlier parked `feature/android-control` branch.
+- **Google Maps travel-time on mobile**: plumbing done (build.rs bakes `GOOGLE_MAPS_API_KEY`,
+  `get_baked_maps_key` command, startup seed, `routes.googleapis.com` added to the mobile
+  capability allowlist which was desktop-only) — just needs the key value, see §2.
+
+**Build-speed fixes (was costing ~4 hours of owner wall-clock time this session):**
+- **Windows Defender was throttling `rustc` to ~20% CPU efficiency** scanning every object file.
+  Owner added exclusions (project dir, `~/.cargo`, `rustc.exe`, `cargo.exe`) — huge win, keep them.
+- `[profile.dev] debug=0, strip="debuginfo"` in `src-tauri/Cargo.toml` — halved APK size
+  (682MB→341MB), cut compile+scan time further.
+- **Established the right iteration ladder** (was using `tauri android build`, the slow release
+  packager, for every tiny change): L0 frontend-only → desktop browser/`npm run dev`. L1 Rust
+  gate → `cargo check --target aarch64-linux-android -p krishna` (~1 min with exclusions). L2
+  device iteration → **`tauri android dev`** (native compiled once, frontend HMR to the phone in
+  ~2s). L3 `tauri android build --debug` only for final verification — never for iterating.
+
+**Session-status memories written:** [[android-jni-and-build-speed]] (the JNI mechanism + every
+gotcha), [[mobile-setup-baked-key]] (baked-key flow + minimal home screen).
 
 ---
 
@@ -37,6 +99,13 @@ recovered all 139 files instantly; `node_modules` was rebuilt via `rm -rf node_m
 
 ## 2. OWNER ACTION ITEMS — what's still on you
 
+0. **Add two keys to `src-tauri\.env`, then say so to trigger a rebuild** (2026-07-12, in
+   progress): `GOOGLE_MAPS_API_KEY=...` (Google Cloud Console → enable Routes API + Directions
+   API → Credentials → Create API key) unblocks mobile travel-time. `OPENAI_REALTIME_API_KEY=...`
+   (platform.openai.com → API keys) unblocks Live Voice/wake-word on the phone — optional, classic
+   tap-to-talk already works without it. Once added, the rebuild will pick up Phase A/B device
+   control too (open-app-by-name, volume/media/torch) — none of that has been live-tested on the
+   phone yet, only compile-gated (`cargo check` + `tsc` both clean).
 1. **~~Live-verify Window Control~~ — DONE, confirmed working (2026-07-08).** See §3a.
 2. **Live-verify the full J4 assisted-apply flow** against real LinkedIn: say "apply to the next
    job" → confirm it opens the job + clicks Easy Apply → confirm fields fill from your Application
