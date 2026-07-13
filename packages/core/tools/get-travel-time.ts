@@ -390,6 +390,22 @@ export function buildMapsUrl(
   return url.toString();
 }
 
+// ── Unresolved placeholder guard ────────────────────────────────────────
+// "home" and "work" are the only two place names this tool treats as
+// implicit shorthand (via the `from` default and common destination usage).
+// If resolvePlace() didn't find a saved address for one of them, passing the
+// bare word through to Google produces a blank/unroutable map — tell the
+// user to teach Krishna the address instead of opening a dead-end Maps link.
+const PLACEHOLDER_KEYWORDS = new Set(["home", "work"]);
+
+function unresolvedPlaceholderLabel(raw: string, resolved: string): string | null {
+  const normalized = raw.trim().toLowerCase();
+  if (resolved === raw && PLACEHOLDER_KEYWORDS.has(normalized)) {
+    return normalized;
+  }
+  return null;
+}
+
 // ── Tool ─────────────────────────────────────────────────────────────────
 
 export const getTravelTimeTool: Tool = {
@@ -416,6 +432,16 @@ export const getTravelTimeTool: Tool = {
 
     const settings = getResponseSettings();
     const honorific = settings.honorific || "sir";
+
+    const unresolvedLabel =
+      unresolvedPlaceholderLabel(rawOrigin, origin) ?? unresolvedPlaceholderLabel(rawDestination, destination);
+    if (unresolvedLabel) {
+      return {
+        success: false,
+        error: `I don't have your ${unresolvedLabel} address saved yet, ${honorific} — say "remember my ${unresolvedLabel} address is ..." and I'll use it next time.`,
+      };
+    }
+
     const apiKey = await getGoogleMapsKey();
 
     if (apiKey) {
@@ -520,13 +546,22 @@ export const suggestDepartureTimeTool: Tool = {
       return { success: false, error: `Invalid mode: ${mode}. Use car, two_wheeler, transit, bicycle, or walk.` };
     }
 
+    const settings = getResponseSettings();
+    const honorific = settings.honorific || "sir";
+
+    const unresolvedLabel =
+      unresolvedPlaceholderLabel(rawOrigin, origin) ?? unresolvedPlaceholderLabel(rawDestination, destination);
+    if (unresolvedLabel) {
+      return {
+        success: false,
+        error: `I don't have your ${unresolvedLabel} address saved yet, ${honorific} — say "remember my ${unresolvedLabel} address is ..." and I'll use it next time.`,
+      };
+    }
+
     const apiKey = await getGoogleMapsKey();
     if (!apiKey) {
       return { success: false, error: "Google Maps API key is not configured. Add one in Settings." };
     }
-
-    const settings = getResponseSettings();
-    const honorific = settings.honorific || "sir";
 
     try {
       const { samples, failures } = await sampleDepartures({

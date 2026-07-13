@@ -546,6 +546,13 @@ describe("suggestDepartureTimeTool", () => {
       voiceMaxTokens: 100,
       voiceModel: "",
     });
+    // "home"/"work" resolve to real saved addresses by default so existing
+    // tests exercise the routes-calling path, not the unresolved-placeholder
+    // guard (see dedicated guard tests below).
+    vi.mocked(getAllMemories).mockResolvedValue([
+      { id: "1", key: "home address", value: "123 Main St", confirmed: 1, source: "user", createdAt: 0, lastUsedAt: null },
+      { id: "2", key: "work address", value: "456 Oak Ave", confirmed: 1, source: "user", createdAt: 0, lastUsedAt: null },
+    ]);
   });
 
   it("returns best departure suggestion when a later sample is better", async () => {
@@ -618,6 +625,19 @@ describe("suggestDepartureTimeTool", () => {
     expect(result.error).toContain("Invalid mode");
   });
 
+  it("returns a helpful error when the destination (work) address isn't saved", async () => {
+    vi.mocked(getAllMemories).mockResolvedValue([]);
+
+    const result = await suggestDepartureTimeTool.run(
+      { from: "Somewhere Real", to: "work", mode: "car" },
+      { vars: {} },
+    );
+
+    expect(result.success).toBe(false);
+    expect(result.error).toContain("work address");
+    expect(result.error).toContain('remember my work address is');
+  });
+
   it("uses passed window_hours", async () => {
     const durations = [3200, 3000, 2800, 2600, 2400];
     for (const d of durations) {
@@ -654,6 +674,13 @@ describe("getTravelTimeTool", () => {
       voiceMaxTokens: 100,
       voiceModel: "",
     });
+    // "home"/"work" resolve to real saved addresses by default so existing
+    // tests exercise the routes-calling path, not the unresolved-placeholder
+    // guard (see dedicated guard tests below).
+    vi.mocked(getAllMemories).mockResolvedValue([
+      { id: "1", key: "home address", value: "123 Main St", confirmed: 1, source: "user", createdAt: 0, lastUsedAt: null },
+      { id: "2", key: "work address", value: "456 Oak Ave", confirmed: 1, source: "user", createdAt: 0, lastUsedAt: null },
+    ]);
   });
 
   it("returns error on missing args", async () => {
@@ -671,6 +698,47 @@ describe("getTravelTimeTool", () => {
     expect(result.error).toContain("Invalid mode");
   });
 
+  it("returns a helpful error when the origin (home) address isn't saved", async () => {
+    vi.mocked(getAllMemories).mockResolvedValue([]);
+
+    const result = await getTravelTimeTool.run(
+      { from: "home", to: "Somewhere Real" },
+      { vars: {} },
+    );
+
+    expect(result.success).toBe(false);
+    expect(result.error).toContain("home address");
+    expect(result.error).toContain('remember my home address is');
+  });
+
+  it("returns a helpful error when the destination (work) address isn't saved", async () => {
+    vi.mocked(getAllMemories).mockResolvedValue([]);
+
+    const result = await getTravelTimeTool.run(
+      { from: "Somewhere Real", to: "work" },
+      { vars: {} },
+    );
+
+    expect(result.success).toBe(false);
+    expect(result.error).toContain("work address");
+    expect(result.error).toContain('remember my work address is');
+  });
+
+  it("does not block real place names that pass through resolvePlace unchanged", async () => {
+    vi.mocked(getAllMemories).mockResolvedValue([]);
+    mockRoutesResponse([
+      { duration: "600s", staticDuration: "600s", distanceMeters: 5000, routeLabels: ["DEFAULT_ROUTE"] },
+    ]);
+
+    const result = await getTravelTimeTool.run(
+      { from: "Rahul's place", to: "Airport" },
+      { vars: {} },
+    );
+
+    expect(result.success).toBe(true);
+    expect(result.data?.fallback).toBe("false");
+  });
+
   it("falls back to URL when no API key — uses 'add key' message", async () => {
     mockGetSecret.mockResolvedValue(null);
 
@@ -683,8 +751,8 @@ describe("getTravelTimeTool", () => {
     expect(result.output).toContain("Add a Maps API key in Settings");
     expect(result.data?.fallback).toBe("true");
     expect(result.data?.url).toContain("google.com/maps/dir/");
-    expect(result.data?.url).toContain("origin=Home");
-    expect(result.data?.url).toContain("destination=Work");
+    expect(result.data?.url).toContain("origin=123"); // resolved via saved "home address" memory
+    expect(result.data?.url).toContain("destination=456"); // resolved via saved "work address" memory
     expect(result.data?.url).toContain("travelmode=driving");
   });
 
