@@ -1,12 +1,64 @@
-# RESUME HERE — Krishna handoff (updated 2026-07-12)
+# RESUME HERE — Krishna handoff (updated 2026-07-13)
 
 > **This is the single source of truth to resume from.** Reviewer (Claude), coding agent, and
 > owner (Vikram) all sync through this file. Read the whole thing before touching anything.
 > Deeper per-track detail lives in the `*_REVIEW_FINDINGS.md` and `*_PLAN.md` files referenced below.
+>
+> **Rule for every agent/LLM working any task in this repo:** before marking a task/stage done,
+> update this file's §0 (or add a dated entry) with what changed, what's verified, and what's
+> still open. This file is meant to be the ONE place any agent can read to get full current
+> context — do not let it go stale again (it drifted 1 day behind actual work as of 2026-07-13,
+> which is how this rule got added).
 
 ---
 
-## 0. LATEST — Android mobile voice fully working (2026-07-12), pushed `905041f`
+## 0. LATEST — OpenWakeWord Android build fixed + verified live; self-improvement "Upgrades" system planned (2026-07-13)
+
+**OpenWakeWord shadow-mode feature (branch `codex/openwakeword-shadow-mode`, PR #6, pushed `21cee94`):**
+- Root-caused the "hour-long build, no APK" problem: **cargo blocks on the crates.io network index
+  with no timeout** (sits at ~0.5% CPU, no rustc children — indistinguishable from "still
+  building"), and separately `tauri android build`'s `beforeBuildCommand` (`npm run build`) runs a
+  `prebuild` hook (`fetch:voiceid`) that hits the Hugging Face API with no timeout even when the
+  model already exists. Both are silent, unbounded network stalls, not compile errors.
+- Fix: build fully offline. `cargo check --target aarch64-linux-android --offline` (Rust gate,
+  ~5 min warm) → `npx vite build` directly (skips the `prebuild` fetch) → gradle direct
+  (`gradlew :app:assembleUniversalDebug -PabiList=arm64-v8a -ParchList=arm64 -PtargetList=aarch64
+  --offline` with `CARGO_NET_OFFLINE=true`; NOT `tauri android build`, which reruns
+  `beforeBuildCommand`). Full recipe + gotchas in [[android-jni-and-build-speed]].
+- **Built, installed, and launched on-device (`R9ZY40XK38A`)** — startup marker confirms clean
+  boot, no crash marker, no native crash in logcat, screenshot confirms the tap-to-talk home
+  screen renders. APK is arm64-only (sherpa `.so` libs are arm64-only anyway) — 158 MB.
+- Shadow mode only logs scores; it never acts on the wake word yet. To watch it live:
+  `adb -s R9ZY40XK38A logcat -s OWWDetector:V KrishnaHandsFree:V` and say "Hey Krishna" — look for
+  `SHADOW score=… (would-detect=…)` lines. In-app: Settings → Wake Word → "Model & diagnostics"
+  shows model version, threshold (0.5), last score, detector state, last error.
+- **Still open before this can go live** (see `docs/OPENWAKEWORD_SHADOW_MODE_HANDOFF.md` for the
+  full spec): the readiness gate (100 positive / 200 negative / 3 environments / 48h elapsed) has
+  not been collected on-device yet; local evaluation (recall ≥0.80, false-wake ≤0.10) has not been
+  run; owner has not tapped "Approve and enable"; the 30-min YouTube-Music-continuity manual check
+  (detector must not steal audio focus while idle) has not been done.
+- Working-tree cleanup done same session: 4 git worktrees (`krishna`, `krishna-agent`,
+  `krishna-agent2`, `krishna-main-merge`) were all dirty; cleaned and pushed. Debug screenshots
+  deleted (not committed — public repo). `training/openwakeword/data/` (68 MB of generated audio
+  clips) and `tmp/` added to `.gitignore` — **never commit those**, per the handoff doc's privacy
+  rule. `feature/voice-android` and `feature/android-control` were local-only branches, now
+  published to GitHub for the first time (`54009c0`, `03b007c`) — no PRs opened yet, just pushed.
+
+**New plan approved: `Automation_with_LLM.md` — Krishna self-improvement request system.**
+Lets Krishna capture "improve yourself so that…" requests, get proposals from Codex/Claude Code via
+a GitHub Actions coordinator, show them on Android+desktop, and implement only after two explicit
+approval gates (never auto-merge/release). Reviewed and amended (Turso secret names, a concrete
+kill switch, a status-ownership invariant so Android/desktop never race the coordinator on
+`upgrade_tasks.status`, a schema-parity test for the repo's known "4-places-to-register-a-sync-
+table" drift trap, untrusted-provider-output handling, narrow-scope PAT for manual dispatch,
+concrete cost/rate limits). Broken into 11 sequenced, independently-testable tasks — **see task
+tracker `UPG-0` through `UPG-6`** (each has an explicit build step + a manual USER TEST). Not
+started yet. **Today's unblocked starting point: `UPG-0`** (architecture doc + schemas + kill-switch
+spec + AGENTS.md — no runtime code, pure design artifact, nothing to build/break).
+
+---
+
+## 0a. PRIOR — Android mobile voice fully working (2026-07-12), pushed `905041f`
 
 Mobile went from "asks for a key it should never need, then silent/broken" to a working
 tap-to-talk voice assistant with device control, in one session. All code pushed to
@@ -207,6 +259,19 @@ fully built end to end. Full history/spec: `NATURAL_SPEECH_PLAN.md`.
 
 ## 4. PENDING QUEUE — priority order
 
+### 🔴 START TODAY
+0. **UPG-0 (Automation_with_LLM.md self-improvement system, Stage 0)** — architecture contract doc,
+   versioned proposal JSON schema, AGENTS.md/CLAUDE.md guidance, named GitHub secrets, concrete
+   cost limits, kill-switch spec. No runtime code — pure design artifact, fully unblocked, safe to
+   start immediately. See task tracker UPG-0..UPG-6 for the full 11-stage sequenced plan (each
+   stage has its own build step + manual USER TEST before the next stage starts).
+0b. **OpenWakeWord shadow mode (branch `codex/openwakeword-shadow-mode`, PR #6)** — code is built
+   and verified booting live on-device; what's left is DATA COLLECTION + EVALUATION, not code:
+   record ≥100 positive / ≥200 negative training clips across ≥3 environments over ≥48h (Settings →
+   Wake Word → Record buttons), run local evaluation, and if it passes (recall≥0.80,
+   falseWake≤0.10) tap "Approve and enable". Also do the 30-min YouTube-Music-continuity manual
+   check before considering this done. See §0 above and `docs/OPENWAKEWORD_SHADOW_MODE_HANDOFF.md`.
+
 ### 🟢 Unblocked, ready to pick
 1. **Naukri saved searches + Chrome profiles — N1–N3 DONE + merged (`669c6ce`, 2026-07-07
    evening).** `saved_searches` table (migration v21) + CRUD + hostname-validated URL guard,
@@ -378,30 +443,41 @@ one. See `GMAIL_RECRUITER_RADAR_REVIEW_FINDINGS.md` for the full trail.
 
 ---
 
-## 7. NEXT AGENT INSTRUCTION (paste this to resume) — updated 2026-07-07 (night)
+## 7. NEXT AGENT INSTRUCTION (paste this to resume) — updated 2026-07-13
 
-> Read `RESUME_HERE.md` in full first, then `LATENCY_FIRST_WORD_PLAN.md` (the full spec — read
-> before writing any code). `main` is green at `e14c10d`+ the two merges below —
-> `tsc --noEmit` clean, `vitest run` 731/731, `cargo test` compiles clean, all independently
-> reverified. Window Control (§3a) and Naukri N1-N3 (§4 item 1) are **DONE + MERGED** — do not
-> touch those files except via the follow-ups explicitly listed in §4. `feat/live-transcript`
-> (P1-P3) is **UNMERGED and stale** — do not touch it yet, see below for when.
+> Read `RESUME_HERE.md` §0 in full first (today's entry), then `Automation_with_LLM.md` (the full
+> self-improvement-system spec) before writing anything. `main` is green (`ci.yml` passes on
+> push). `codex/openwakeword-shadow-mode` (PR #6) is code-complete and verified live on-device —
+> do not write more code there; what's left is data collection, not code (see §4 item 0b).
+> `feature/voice-android` and `feature/android-control` are pushed but unmerged/unreviewed — do
+> not build on top of them without checking their actual diffs first, they may be stale.
+>
+> **Before marking any task done, update this file's §0** with what changed and what's still
+> open — that is the whole point of this file being a "single source of truth."
 
-### Do this now: `LATENCY_FIRST_WORD_PLAN.md` (owner's explicit top priority, reordered ahead of the transcript panel tonight)
-Branch fresh off local `main` (`git checkout -b feat/first-word-latency main` — **never
-`origin/main`**, it is stale relative to local `main`; **never `git push`**, any branch, ever —
-three branches were pushed in error earlier tonight, treat this as a zero-exception rule now).
-Build phases in order, per the plan: **L1** sentence-streaming speech (the big win — speak the
-first sentence while generation continues; new fence-aware splitter in
-`src/lib/sentence-stream.ts` + a `SpeechQueue`) → **L2** ElevenLabs streaming endpoint → **L3**
-end-of-speech earcon + earlier filler → **L4** STT watchdog+retry → **L5** latency-panel column
-label fix. Read the plan's full root-cause section (three full-completion waits in series) before
-touching `krishna.context.tsx` — don't reconstruct it from this summary.
+### Do this now: `UPG-0` (Automation_with_LLM.md, Stage 0 — architecture contract, no runtime code)
+Fully unblocked, zero risk (produces docs + a JSON schema only, nothing to build or break). Deliver:
+`docs/upgrades/ARCHITECTURE.md` (state machine + the status-ownership rule: clients only ever
+append events, the GitHub coordinator is the sole writer of `upgrade_tasks.status`/`latest_run_id`
+— this avoids an Android/desktop write race), `schemas/upgrade-proposal.v1.json` (versioned,
+matches the "Proposal runs are read-only" normalized-response fields in the plan), root
+`AGENTS.md` + `CLAUDE.md` pointer, the named GitHub secrets list (provider keys +
+`TURSO_DATABASE_URL`/`TURSO_AUTH_TOKEN` + a fine-grained dispatch PAT scoped to `actions:write`
+only — do not reuse the existing Job Hunter GitHub integration), concrete cost limits (tokens/run,
+runs/day, monthly cap — pick real numbers, don't leave them symbolic), and the kill-switch spec
+(an `UPGRADES_PAUSED` repo variable the coordinator checks first, plus a settings-page toggle).
+**USER TEST for this stage:** the owner reads the two docs and confirms the approval gates, cost
+numbers, and kill-switch behavior match intent — before any of UPG-1a's code gets written.
 
-**Only after this branch merges:** rebuild `feat/live-transcript` from scratch off the new `main`
-(`LIVE_TRANSCRIPT_PANEL_PLAN.md` — its Phase 1 has an updated note for once L1 exists: reuse L1's
-sentence/fence utilities instead of writing a second fence parser). Do not start it before then —
-both plans touch the same stream loop in series specifically to avoid two branches on one seam.
+Stage 1 (`UPG-1a` → `1b`/`1c`/`1d` in parallel) is next, but do not start it until UPG-0 is
+reviewed — each stage in this plan is a hard gate, not a suggestion (see `Automation_with_LLM.md`
+§"Required Approvals").
+
+### Separately, whenever there's a spare cycle: OpenWakeWord data collection (§4 item 0b)
+This is NOT a coding task — it's the owner recording training clips via Settings → Wake Word on
+the phone, then running the evaluation button once the readiness gate is met. An agent's role
+here, if asked, is limited to fixing any bug the owner hits during that process — not building
+new detector code.
 
 ### The lesson driving every check below (from tonight, twice)
 1. **A tool "passing its own unit tests" is not the same as "reachable from the live app."**
