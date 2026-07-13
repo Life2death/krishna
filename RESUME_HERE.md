@@ -20,11 +20,15 @@
   building"), and separately `tauri android build`'s `beforeBuildCommand` (`npm run build`) runs a
   `prebuild` hook (`fetch:voiceid`) that hits the Hugging Face API with no timeout even when the
   model already exists. Both are silent, unbounded network stalls, not compile errors.
-- Fix: build fully offline. `cargo check --target aarch64-linux-android --offline` (Rust gate,
-  ~5 min warm) → `npx vite build` directly (skips the `prebuild` fetch) → gradle direct
-  (`gradlew :app:assembleUniversalDebug -PabiList=arm64-v8a -ParchList=arm64 -PtargetList=aarch64
-  --offline` with `CARGO_NET_OFFLINE=true`; NOT `tauri android build`, which reruns
-  `beforeBuildCommand`). Full recipe + gotchas in [[android-jni-and-build-speed]].
+- Fix: build fully offline. Full step-by-step recipe (prereqs, exact commands, install/verify,
+  gotchas) is now documented in **`docs/ANDROID_FAST_BUILD_DEPLOY.md`** — this is the canonical
+  doc for every future Android build/deploy, on this track or any other; follow it instead of
+  re-deriving the steps, and update it (not just your own task notes) if you hit something new.
+  Short version: `cargo check --target aarch64-linux-android --offline` (Rust gate, ~5 min warm) →
+  `npx vite build` directly (skips the `prebuild` fetch) → gradle direct (`gradlew
+  :app:assembleUniversalDebug -PabiList=arm64-v8a -ParchList=arm64 -PtargetList=aarch64 --offline`
+  with `CARGO_NET_OFFLINE=true`; NOT `tauri android build`, which reruns `beforeBuildCommand`).
+  Background trail also in [[android-jni-and-build-speed]].
 - **Built, installed, and launched on-device (`R9ZY40XK38A`)** — startup marker confirms clean
   boot, no crash marker, no native crash in logcat, screenshot confirms the tap-to-talk home
   screen renders. APK is arm64-only (sherpa `.so` libs are arm64-only anyway) — 158 MB.
