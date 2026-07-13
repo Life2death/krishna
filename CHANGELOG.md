@@ -12,6 +12,19 @@
 
 ---
 
+## v2.1.6 (2026-07-13)
+
+- **Mobile voice, complete:** native Android TTS (`TextToSpeech` JNI bridge, since the WebView has
+  no `speechSynthesis`), device-control JNI bridge (open apps by name, volume/media/torch), a
+  minimal tap-to-talk home screen, and a native hands-free listener with wake-word gating.
+- **Google Gemini Live** added as a selectable Live Voice provider alongside OpenAI, with a
+  voice-mode selector (Classic/OpenAI/Gemini) and wake-word gating for Live mode.
+- **OpenWakeWord shadow-mode wake-word detector** — local, on-device "Hey Krishna" detection
+  (TFLite), training-data collection UI, and local evaluation, gated behind an explicit
+  readiness/approval flow before it can ever act (Settings → Wake Word).
+- Fixed a remote-sync schema drift (missing `updated_at` columns) and a mobile bug where
+  "open app by name" never reached the Android launcher.
+
 ## v1.3.0 (2026-06-19) — Phase 0: Workspace Restructure + Pluggable SqlDriver
 
 **Monorepo workspace with `packages/core/` — framework-free business logic extracted as a reusable package:**
