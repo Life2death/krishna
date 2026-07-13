@@ -35,6 +35,7 @@ export default defineConfig(async () => ({
       "@krishna/core/tools/job-queue": path.resolve(__dirname, "packages/core/tools/job-queue.ts"),
       "@krishna/core/tools/job-apply": path.resolve(__dirname, "packages/core/tools/job-apply.ts"),
       "@krishna/core/tools/job-apply-submit": path.resolve(__dirname, "packages/core/tools/job-apply-submit.ts"),
+      "@krishna/core/tools/youtube-music": path.resolve(__dirname, "packages/core/tools/youtube-music.ts"),
       "@krishna/core/tools/cdp-client": path.resolve(__dirname, "packages/core/tools/cdp-client.ts"),
       "@krishna/core/tools/field-fill": path.resolve(__dirname, "packages/core/tools/field-fill.ts"),
       "@krishna/core/tools": path.resolve(__dirname, "packages/core/tools/index.ts"),

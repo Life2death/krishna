@@ -7,6 +7,7 @@ import { getTravelTimeTool, suggestDepartureTimeTool } from "@krishna/core/tools
 import { getJobQueueTool } from "@krishna/core/tools/job-queue";
 import { getJobApplyTool } from "@krishna/core/tools/job-apply";
 import { getJobApplySubmitTool } from "@krishna/core/tools/job-apply-submit";
+import { youtubeMusicTool } from "@krishna/core/tools/youtube-music";
 import { gmailSearchMessagesTool, gmailReadMessageTool, gmailListLabelsTool, gmailSendEmailTool, gmailFetchRecruiterCandidates } from "@krishna/core/tools/gmail";
 import { getResponseSettings } from "@krishna/core/settings";
 import { runRecruiterRadar, formatRecruiterOutput, COLD_START_DAYS } from "@krishna/core/tools/recruiter-radar";
@@ -21,6 +22,11 @@ import { isMobileDevice } from "@/lib/platform";
 const ACTION_REGEX = /```action\n([\s\S]*?)```/g;
 const JSON_BLOCK_REGEX = /```json\n([\s\S]*?)```/g;
 const PLAN_REGEX = /```plan\n([\s\S]*?)```/;
+const SENSITIVE_BUTTON_LABEL_RE = /\b(?:buy|purchase|pay|send|submit|delete|remove|transfer|confirm|checkout|place order|book|uninstall)\b/i;
+
+export function isSensitiveButtonLabel(label: string): boolean {
+  return SENSITIVE_BUTTON_LABEL_RE.test(label.trim());
+}
 
 export function parseActions(reply: string): ParsedReply {
   let spokenText = reply;
@@ -60,6 +66,9 @@ export function parseActions(reply: string): ParsedReply {
         const parsed = JSON.parse(match[1].trim());
         if (parsed && parsed.action === "open" && parsed.target) {
           actions.push({ action: "open", target: parsed.target });
+        }
+        if (parsed && parsed.action === "play_music" && typeof parsed.query === "string" && parsed.query.trim()) {
+          actions.push({ action: "play_music", query: parsed.query.trim() });
         }
         if (parsed && parsed.action === "remember" && parsed.value) {
           actions.push({ action: "remember", key: parsed.key ?? null, value: parsed.value });
@@ -129,7 +138,7 @@ export function parseActions(reply: string): ParsedReply {
         }
         if (
           parsed && parsed.action === "phone_control" &&
-          (parsed.control === "volume" || parsed.control === "media" || parsed.control === "torch" || parsed.control === "gesture") &&
+          (parsed.control === "volume" || parsed.control === "media" || parsed.control === "torch" || parsed.control === "gesture" || parsed.control === "button") &&
           typeof parsed.command === "string" && parsed.command
         ) {
           actions.push({
@@ -414,6 +423,18 @@ export async function executeAction(
   llmFallback?: LlmFallbackFn,
   options?: { preConfirmed?: boolean }
 ): Promise<ExecuteActionResult> {
+  if (action.action === "play_music") {
+    const result = await youtubeMusicTool.run({ query: action.query }, { vars: {} });
+    return {
+      kind: "status",
+      spokenResponse: result.success
+        ? (result.output || "Opening YouTube Music.")
+        : (result.error || "I couldn't open YouTube Music."),
+      ok: result.success,
+      errorDetail: result.error,
+    };
+  }
+
   if (action.action === "travel_time") {
     const to = action.to || "";
     const mode = action.mode || "car";
@@ -943,12 +964,23 @@ export async function executeAction(
         await invoke("android_media", { action: action.command });
       } else if (action.control === "gesture") {
         await invoke("android_gesture", { kind: action.command });
+      } else if (action.control === "button") {
+        if (isSensitiveButtonLabel(action.command) && !options?.preConfirmed) {
+          return {
+            kind: "status",
+            ok: false,
+            spokenResponse: `I won't click \"${action.command}\" without your confirmed plan, {honorific}.`,
+          };
+        }
+        await invoke("android_click_button", { label: action.command });
       } else {
         await invoke("android_torch", { on: action.command === "on" });
       }
       const spoken =
         action.control === "torch"
           ? `Torch ${action.command === "on" ? "on" : "off"}, {honorific}.`
+          : action.control === "button"
+            ? `Clicked ${action.command}, {honorific}.`
           : `Done, {honorific}.`;
       return { kind: "status", spokenResponse: spoken, ok: true };
     } catch (e) {
@@ -1034,6 +1066,19 @@ export async function resolveActionForConfirm(
   action: Action,
   llmFallback?: LlmFallbackFn
 ): Promise<ExecuteActionResult> {
+  if (action.action === "play_music") {
+    return {
+      spokenResponse: `Play ${action.query} in YouTube Music?`,
+      needsConfirmation: true,
+      pendingResult: {
+        found: true,
+        displayName: `play_music: ${action.query}`,
+        target: "",
+        actionToResume: JSON.stringify(action),
+      } as any,
+    };
+  }
+
   if (action.action === "travel_time") {
     const from = action.from || "home";
     const to = action.to || "";

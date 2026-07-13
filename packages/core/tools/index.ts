@@ -1,5 +1,6 @@
 import { openTargetTool } from "./open-target";
 import { youtubeSearchTool } from "./youtube-search";
+import { youtubeMusicTool } from "./youtube-music";
 import { webSearchTool } from "./web-search";
 import { getTravelTimeTool, suggestDepartureTimeTool } from "./get-travel-time";
 import { getJobQueueTool } from "./job-queue";
@@ -55,6 +56,7 @@ export function registerTools(newTools: Tool[]): void {
 
 register(openTargetTool);
 register(youtubeSearchTool);
+register(youtubeMusicTool);
 register(webSearchTool);
 register(getTravelTimeTool);
 register(suggestDepartureTimeTool);

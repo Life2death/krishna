@@ -2,6 +2,7 @@ package com.krishna.assistant
 
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -11,6 +12,8 @@ import org.json.JSONObject
  * Name→package matching lives on the Rust side.
  */
 object AppLauncherHelper {
+  private const val YOUTUBE_MUSIC_PACKAGE = "com.google.android.apps.youtube.music"
+
   /** JSON array of {label, package} for every app with a launcher activity. */
   @JvmStatic
   fun listApps(context: Context): String {
@@ -38,5 +41,26 @@ object AppLauncherHelper {
     intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
     context.startActivity(intent)
     return true
+  }
+
+  /** Prefer the installed YouTube Music app, then use the device's URL handler. */
+  @JvmStatic
+  fun openYouTubeMusic(context: Context, url: String): String {
+    val uri = Uri.parse(url)
+    val pm = context.packageManager
+    val musicIntent = Intent(Intent.ACTION_VIEW, uri)
+      .setPackage(YOUTUBE_MUSIC_PACKAGE)
+      .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    if (musicIntent.resolveActivity(pm) != null) {
+      context.startActivity(musicIntent)
+      return "YOUTUBE_MUSIC"
+    }
+
+    val fallbackIntent = Intent(Intent.ACTION_VIEW, uri).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    if (fallbackIntent.resolveActivity(pm) != null) {
+      context.startActivity(fallbackIntent)
+      return "WEB_FALLBACK"
+    }
+    return "NO_HANDLER"
   }
 }

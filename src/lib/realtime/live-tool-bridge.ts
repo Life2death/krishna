@@ -6,6 +6,7 @@ const REALTIME_TOOL_NAMES = new Set([
   "open_target",
   "web_search",
   "youtube_search",
+  "play_music",
   "get_travel_time",
   "suggest_departure_time",
   "gmail_search_messages",
@@ -54,6 +55,7 @@ export function mapFunctionNameToAction(name: string): string {
     open_target: "open_target",
     web_search: "web_search",
     youtube_search: "youtube_search",
+    play_music: "play_music",
     get_travel_time: "get_travel_time",
     suggest_departure_time: "suggest_departure_time",
     gmail_search_messages: "gmail_search_messages",
@@ -99,6 +101,17 @@ export function getRealtimeTools(): RealtimeFunctionDefinition[] {
         properties: {
           query: { type: "string", description: "The search query" },
           maxResults: { type: "string", description: "Maximum number of results (optional)" },
+        },
+        required: ["query"],
+      },
+    },
+    {
+      name: "play_music",
+      description: "Play a song, artist, album, or playlist in YouTube Music",
+      parameters: {
+        type: "object",
+        properties: {
+          query: { type: "string", description: "Song, artist, album, or playlist to play" },
         },
         required: ["query"],
       },

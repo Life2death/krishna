@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { parseActions, executeAction, resolveActionForConfirm, decideActionResponse, detectPhantomSave, extractJsonArray, buildRecruiterClassify } from "@/lib/actions";
+import { parseActions, executeAction, resolveActionForConfirm, decideActionResponse, detectPhantomSave, extractJsonArray, buildRecruiterClassify, isSensitiveButtonLabel } from "@/lib/actions";
 import { resolveAppAlias } from "@/config/app-aliases";
 import type { Candidate, Classification } from "@krishna/core/tools/recruiter-radar";
 import { invoke } from "@tauri-apps/api/core";
@@ -1155,5 +1155,28 @@ describe("detectPhantomSave", () => {
     const reply = "I'll save that for you, sir.\n```action\n{\"action\":\"remember\",\"key\":\"home address\",\"value\":\"123 Main St\"}\n```";
     const { spokenText, actions } = parseActions(reply);
     expect(detectPhantomSave(REMEMBER_CMD, spokenText, actions)).toBe(false);
+  });
+});
+
+describe("Android accessibility button actions", () => {
+  it("parses a label-based button click", () => {
+    const result = parseActions('```action\n{"action":"phone_control","control":"button","command":"Search"}\n```');
+    expect(result.actions).toEqual([
+      { action: "phone_control", control: "button", command: "Search" },
+    ]);
+  });
+
+  it("classifies irreversible button labels as sensitive", () => {
+    expect(isSensitiveButtonLabel("Send message")).toBe(true);
+    expect(isSensitiveButtonLabel("Submit application")).toBe(true);
+    expect(isSensitiveButtonLabel("Search")).toBe(false);
+    expect(isSensitiveButtonLabel("Play")).toBe(false);
+  });
+});
+
+describe("music actions", () => {
+  it("parses a YouTube Music playback request", () => {
+    const result = parseActions('```action\n{"action":"play_music","query":"Tum Hi Ho"}\n```');
+    expect(result.actions).toEqual([{ action: "play_music", query: "Tum Hi Ho" }]);
   });
 });

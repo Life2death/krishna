@@ -29,6 +29,12 @@ describe("getRealtimeTools", () => {
     expect(t!.parameters.required).toContain("target");
   });
 
+  it("play_music has query as required", () => {
+    const t = getRealtimeTools().find((x) => x.name === "play_music");
+    expect(t).toBeDefined();
+    expect(t!.parameters.required).toContain("query");
+  });
+
   it("gmail_send_email has to, subject, body as required", () => {
     const t = getRealtimeTools().find((x) => x.name === "gmail_send_email");
     expect(t).toBeDefined();
@@ -45,6 +51,10 @@ describe("classifyRealtimeTool", () => {
 
   it("classifies web_search as safe", () => {
     expect(classifyRealtimeTool("web_search")).toBe("safe");
+  });
+
+  it("classifies play_music as safe", () => {
+    expect(classifyRealtimeTool("play_music")).toBe("safe");
   });
 
   it("classifies gmail_send_email as sensitive", () => {
@@ -69,6 +79,10 @@ describe("classifyRealtimeTool", () => {
 describe("mapFunctionNameToAction", () => {
   it("keeps open_target mapped to the registered core tool", () => {
     expect(mapFunctionNameToAction("open_target")).toBe("open_target");
+  });
+
+  it("keeps play_music mapped to the registered core tool", () => {
+    expect(mapFunctionNameToAction("play_music")).toBe("play_music");
   });
 
   it("keeps gmail_send_email mapped to the registered core tool", () => {

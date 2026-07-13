@@ -15,6 +15,10 @@ describe("classifyAction", () => {
     expect(classifyAction("youtube_search")).toBe("safe");
   });
 
+  it('classifies "play_music" as safe', () => {
+    expect(classifyAction("play_music")).toBe("safe");
+  });
+
   it('classifies "web_search" as safe', () => {
     expect(classifyAction("web_search")).toBe("safe");
   });

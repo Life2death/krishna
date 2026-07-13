@@ -8,6 +8,7 @@ export interface KrishnaSettings {
 
 export type Action =
   | { action: "open"; target: string }
+  | { action: "play_music"; query: string }
   | { action: "remember"; key: string | null; value: string }
   | { action: "travel_time"; from?: string; to?: string; mode?: string }
   | { action: "travel_best"; from?: string; to?: string; mode?: string; window_hours?: number }
@@ -27,7 +28,7 @@ export type Action =
   | { action: "speech_accept_vocabulary" }
   | { action: "control_window"; mode: "focus" | "move"; target: string; monitor?: string }
   | { action: "open_saved_search"; target: string }
-  | { action: "phone_control"; control: "volume" | "media" | "torch" | "gesture"; command: string; value?: number }
+  | { action: "phone_control"; control: "volume" | "media" | "torch" | "gesture" | "button"; command: string; value?: number }
   | { action: "relay_command"; target: "desktop" | "mobile"; command: string };
 
 export interface StepAction {

@@ -50,3 +50,9 @@ src-tauri/resources/brain/node/
 # Local brain DB artifacts (not for version control)
 apps/brain/krishna-brain.db-info
 apps/brain/*.presync.bak
+
+# Local wake-word training data (generated audio clips, not for version control)
+training/openwakeword/data/
+
+# Scratch / temp captures (build logs, debug screenshots)
+tmp/
