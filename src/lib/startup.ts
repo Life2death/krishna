@@ -44,8 +44,19 @@ async function startSync(): Promise<void> {
   }
 }
 
+// Boot-progress marker, readable from the WebView console / devtools so a hang
+// in any startup step can be pinpointed instead of presenting as a white screen.
+function bootStep(step: string): void {
+  try {
+    (window as unknown as { __bootStep?: string }).__bootStep = step;
+    console.log("[boot]", step);
+  } catch { /* ignore */ }
+}
+
 export async function initializeCore(): Promise<void> {
+  bootStep("db-load");
   const db = await Database.load("sqlite:krishna.db");
+  bootStep("db-loaded");
 
   setDriver({
     select: (sql, params) => db.select(sql, params),
@@ -96,6 +107,7 @@ export async function initializeCore(): Promise<void> {
     }
   }
 
+  bootStep("seed-openai");
   // Seed the build-baked OpenAI Realtime key into the secure store so Live Voice
   // works on mobile without typing a key. No-op on desktop (baked key is None)
   // and never overwrites a key the user already set.
@@ -205,5 +217,7 @@ export async function initializeCore(): Promise<void> {
     console.error("[startup] maps key seed failed:", err);
   }
 
+  bootStep("sync");
   await startSync();
+  bootStep("done");
 }

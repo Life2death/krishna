@@ -71,6 +71,10 @@ export default function MobileHome() {
   const busy = status === "thinking" || status === "speaking";
 
   const handleTap = () => {
+    if (handsFree) {
+      setHandsFree(false);
+      return;
+    }
     if (isListening) stopListening();
     else if (!busy) startListening();
   };

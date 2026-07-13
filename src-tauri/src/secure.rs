@@ -98,7 +98,9 @@ fn decrypt_storage(app: &AppHandle, data: &[u8]) -> Result<Vec<u8>, String> {
     #[cfg(target_os = "android")]
     {
         if crate::keystore::has_keystore_key() {
-            return crate::keystore::decrypt_with_keystore(data);
+            if let Ok(decrypted) = crate::keystore::decrypt_with_keystore(data) {
+                return Ok(decrypted);
+            }
         }
     }
     let key = get_key(app)?;
@@ -109,7 +111,9 @@ fn encrypt_storage(app: &AppHandle, plaintext: &[u8]) -> Result<Vec<u8>, String>
     #[cfg(target_os = "android")]
     {
         if crate::keystore::has_keystore_key() {
-            return crate::keystore::encrypt_with_keystore(plaintext);
+            if let Ok(encrypted) = crate::keystore::encrypt_with_keystore(plaintext) {
+                return Ok(encrypted);
+            }
         }
     }
     let key = get_key(app)?;

@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from "react";
+import { invoke } from "@tauri-apps/api/core";
 import { useKrishna } from "./useKrishna";
 import { detectWakeWord } from "@/lib/wake-word";
 import { getTTS } from "@/lib/tts";
@@ -61,6 +62,7 @@ export function useMobileSpeech(): UseMobileSpeechReturn {
 
   const SpeechRecognitionAPI = getSpeechRecognition();
   const isSupported = SpeechRecognitionAPI !== null;
+  const isAndroid = typeof navigator !== "undefined" && /Android/i.test(navigator.userAgent);
 
   const setHandsFree = useCallback((on: boolean) => {
     handsFreeRef.current = on;
@@ -178,10 +180,32 @@ export function useMobileSpeech(): UseMobileSpeechReturn {
 
   const startListening = useCallback(() => startRecognition(false), [startRecognition]);
 
+  useEffect(() => {
+    if (!isAndroid) return;
+    let cancelled = false;
+
+    const command = handsFree ? "android_hands_free_start" : "android_hands_free_stop";
+    void invoke(command)
+      .then(() => {
+        if (!cancelled) setIsListening(handsFree);
+      })
+      .catch((err) => {
+        if (!cancelled && handsFree) {
+          setIsListening(false);
+          setError(`Hands-free service error: ${String(err)}`);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [handsFree, isAndroid]);
+
   // Hands-free ambient loop: keep recognition alive whenever Krishna is idle.
   // Pausing while she thinks/speaks avoids transcribing her own voice.
   useEffect(() => {
     handsFreeRef.current = handsFree;
+    if (isAndroid) return;
     if (!handsFree || !isSupported) return;
     if (krishna.status !== "idle") return;
     if (recognitionRef.current) return;
@@ -192,7 +216,7 @@ export function useMobileSpeech(): UseMobileSpeechReturn {
       }
     }, 400);
     return () => clearTimeout(t);
-  }, [handsFree, isSupported, krishna.status, isListening, startRecognition]);
+  }, [handsFree, isAndroid, isSupported, krishna.status, isListening, startRecognition]);
 
   // Leaving hands-free mid-listen stops the ambient capture.
   useEffect(() => {

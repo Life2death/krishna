@@ -42,6 +42,12 @@ pub fn open_target(app_handle: tauri::AppHandle, target: String) -> Result<Strin
         #[cfg(not(target_os = "android"))]
         open_app_safe(&app_handle, &target)
     } else {
+        #[cfg(target_os = "android")]
+        {
+            return crate::android_control::launch_by_name(&target)
+                .map(|label| format!("Opened: {}", label));
+        }
+        #[cfg(not(target_os = "android"))]
         Err(format!("Invalid target: {}", target))
     }
 }

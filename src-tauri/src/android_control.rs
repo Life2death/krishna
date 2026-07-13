@@ -8,6 +8,7 @@ use jni::objects::{JClass, JObject, JValue};
 
 const LAUNCHER_CLASS: &str = "com.krishna.assistant.AppLauncherHelper";
 const MEDIA_CLASS: &str = "com.krishna.assistant.MediaControlHelper";
+const HANDS_FREE_CLASS: &str = "com.krishna.assistant.KrishnaHandsFreeService";
 
 #[derive(serde::Deserialize)]
 struct AppEntry {
@@ -181,6 +182,38 @@ pub fn a11y_open_settings() -> Result<(), String> {
         )
         .map_err(|e| format!("[a11y] openSettings failed: {}", e))?;
         Ok(())
+    })
+}
+
+pub fn hands_free_start() -> Result<bool, String> {
+    with_env(|env| {
+        let context = application_context(env)?;
+        let class = JClass::from(find_app_class(env, HANDS_FREE_CLASS)?);
+        env.call_static_method(
+            class,
+            "start",
+            "(Landroid/content/Context;)Z",
+            &[JValue::Object(&context)],
+        )
+        .map_err(|e| format!("[hands-free] start failed: {}", e))?
+        .z()
+        .map_err(|e| format!("[hands-free] start not a bool: {}", e))
+    })
+}
+
+pub fn hands_free_stop() -> Result<bool, String> {
+    with_env(|env| {
+        let context = application_context(env)?;
+        let class = JClass::from(find_app_class(env, HANDS_FREE_CLASS)?);
+        env.call_static_method(
+            class,
+            "stop",
+            "(Landroid/content/Context;)Z",
+            &[JValue::Object(&context)],
+        )
+        .map_err(|e| format!("[hands-free] stop failed: {}", e))?
+        .z()
+        .map_err(|e| format!("[hands-free] stop not a bool: {}", e))
     })
 }
 

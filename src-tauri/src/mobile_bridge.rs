@@ -231,6 +231,38 @@ pub fn android_open_a11y_settings() -> Result<(), String> {
     }
 }
 
+#[tauri::command]
+pub fn android_hands_free_start() -> Result<(), String> {
+    #[cfg(target_os = "android")]
+    {
+        match crate::android_control::hands_free_start() {
+            Ok(true) => Ok(()),
+            Ok(false) => Err("Android hands-free service did not start".to_string()),
+            Err(e) => Err(e),
+        }
+    }
+    #[cfg(not(target_os = "android"))]
+    {
+        Err("android_hands_free_start is only available on Android".to_string())
+    }
+}
+
+#[tauri::command]
+pub fn android_hands_free_stop() -> Result<(), String> {
+    #[cfg(target_os = "android")]
+    {
+        match crate::android_control::hands_free_stop() {
+            Ok(true) => Ok(()),
+            Ok(false) => Err("Android hands-free service did not stop".to_string()),
+            Err(e) => Err(e),
+        }
+    }
+    #[cfg(not(target_os = "android"))]
+    {
+        Err("android_hands_free_stop is only available on Android".to_string())
+    }
+}
+
 // ── Sync transport fallback (Turso HTTP pipeline via reqwest) ──────────
 // Provides a Rust-backed transport used when `@libsql/client` can't run
 // (e.g. restrictive Android WebView). The TypeScript side auto-detects and
