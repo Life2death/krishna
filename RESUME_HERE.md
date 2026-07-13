@@ -12,7 +12,48 @@
 
 ---
 
-## 0. LATEST — OpenWakeWord Android build fixed + verified live; self-improvement "Upgrades" system planned (2026-07-13)
+## 0. LATEST — v2.1.6 released; mobile travel/sync/CSP fixes on main (2026-07-13, later)
+
+**Desktop release `v2.1.6` cut and built (draft).** Tag pushed, GitHub Actions `release.yml`
+succeeded, both installers (`Krishna_2.1.6_x64-setup.exe`, `.msi`) attached to a **draft** release
+(not public until manually published). Version bumped in package.json / Cargo.toml / tauri.conf.json
+/ Cargo.lock + CHANGELOG entry (`aabdeb5`). CHANGELOG summarizes what landed since v2.1.5 (mobile
+voice, Gemini Live, OpenWakeWord shadow mode, sync schema fix).
+
+**Three mobile fixes landed on `main` this session, all triggered by one owner-reported phone bug**
+("how much time to work" opened a blank Google Map):
+1. **Travel-time blank-map fix (`a504b5e`, pushed).** `get_travel_time`/`suggest_departure_time`
+   defaulted origin to "home" and the LLM filled "work"; `resolvePlace()` passes unknown place
+   words through literally, so with no saved address Google got the bare word "home"/"work" →
+   blank/unroutable map. Now returns an actionable error ("say 'remember my work address is …'")
+   instead of a dead-end map. tsc + 934 tests green.
+2. **CSP `ipc.localhost` fix (`9c20b29`, committed, NOT yet pushed).** The WebView's fetch()-based
+   Tauri IPC channel hit `http://ipc.localhost`, which CSP `connect-src` didn't allow → blocked →
+   fell back to slow postMessage IPC, ~3s latency on the first AI response each launch. Added the
+   host to csp + devCsp.
+3. **Turso mobile sync baking (`8e32b76`, committed, NOT yet pushed).** ROOT CAUSE of why the phone
+   never had the addresses: the phone logged `[sync] Sync not configured — Local only mode` because
+   `KRISHNA_SYNC_URL`/`KRISHNA_SYNC_TOKEN` were never baked into the mobile build (only Anthropic/
+   Maps/Live keys were), so it never joined the Turso hub and never pulled the laptop's `memories`
+   (which IS a synced table). Wired baking + `get_baked_sync_url`/`get_baked_sync_token` commands +
+   a mobile secure-store seed before `startSync()`, mirroring the existing baked-key pattern.
+   Desktop unaffected (mobile-target-gated). Android offline rust gate clean.
+
+**⚠️ OWNER ACTION REQUIRED to finish the Turso fix (see §2 item 6):** the two sync-credential
+*values* are not on this machine — there is no real `apps/brain/.env` (only `.env.example`), and
+nothing in the working tree has a populated `KRISHNA_SYNC_URL`. The code is done and compile-clean,
+but the phone can't actually sync until the owner puts the real Turso URL+token in
+`src-tauri/.env`, then a rebuilt APK is installed. Retrieve via `turso db show <name> --url` +
+`turso db tokens create <name>`.
+
+Commits `9c20b29` + `8e32b76` are committed locally on `main` in the `krishna-main-merge` worktree
+but **NOT pushed** (holding until owner-confirmed, since push triggers CI and these want on-device
+verification first). The travel fix `a504b5e` IS pushed. Android build/deploy recipe unchanged:
+`docs/ANDROID_FAST_BUILD_DEPLOY.md`.
+
+---
+
+## 0a. EARLIER TODAY — OpenWakeWord Android build fixed + verified live; "Upgrades" system planned (2026-07-13)
 
 **OpenWakeWord shadow-mode feature (branch `codex/openwakeword-shadow-mode`, PR #6, pushed `21cee94`):**
 - Root-caused the "hour-long build, no APK" problem: **cargo blocks on the crates.io network index
@@ -62,7 +103,7 @@ spec + AGENTS.md — no runtime code, pure design artifact, nothing to build/bre
 
 ---
 
-## 0a. PRIOR — Android mobile voice fully working (2026-07-12), pushed `905041f`
+## 0b. PRIOR — Android mobile voice fully working (2026-07-12), pushed `905041f`
 
 Mobile went from "asks for a key it should never need, then silent/broken" to a working
 tap-to-talk voice assistant with device control, in one session. All code pushed to
@@ -155,6 +196,17 @@ recovered all 139 files instantly; `node_modules` was rebuilt via `rm -rf node_m
 
 ## 2. OWNER ACTION ITEMS — what's still on you
 
+6. **Add Turso sync creds to `src-tauri\.env` so the phone can sync (2026-07-13, blocking the
+   mobile-sync fix).** The code to bake+seed `KRISHNA_SYNC_URL`/`KRISHNA_SYNC_TOKEN` into the mobile
+   build is done and compile-clean (commits `8e32b76` + `9c20b29` on `main`, not yet pushed), but
+   the actual values are NOT on this machine (no real `apps/brain/.env`; nothing populated in the
+   tree). Retrieve them and paste into `src-tauri\.env`:
+   `turso db list` → `turso db show <name> --url` (→ KRISHNA_SYNC_URL, a `libsql://…` URL) →
+   `turso db tokens create <name>` (→ KRISHNA_SYNC_TOKEN). Then say go — a rebuilt APK will make the
+   phone leave "Local only mode" and pull the laptop's memories (incl. home/work addresses). Until
+   then the phone stays local-only and travel-time needs the address told to it directly on the
+   phone ("remember my work address is …"). ⚠️ Note: this bakes a hub-wide Turso token into the APK
+   (same trade-off as the existing baked keys; fine for your own sideloaded device).
 0. **Add two keys to `src-tauri\.env`, then say so to trigger a rebuild** (2026-07-12, in
    progress): `GOOGLE_MAPS_API_KEY=...` (Google Cloud Console → enable Routes API + Directions
    API → Credentials → Create API key) unblocks mobile travel-time. `OPENAI_REALTIME_API_KEY=...`
