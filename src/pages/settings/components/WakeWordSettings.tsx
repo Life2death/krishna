@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Switch, Label, Header, Button } from "@/components";
 import {
   getWakeWordSettings,
@@ -9,56 +9,95 @@ import {
   updateAudioSource,
   updateRecordingRetention,
   resetWakeWordSettings,
+  runLocalEvaluation,
+  captureClip,
+  getTrainingSummary,
   isReadinessGateMet,
 } from "@/lib/storage/wake-word-settings.storage";
 import type { WakeWordSettings as WakeWordSettingsType } from "@/lib/storage/wake-word-settings.storage";
 
 export const WakeWordSettings = () => {
-  const [settings, setSettings] = useState<WakeWordSettingsType>(getWakeWordSettings);
+  const [settings, setSettings] = useState<WakeWordSettingsType | null>(null);
+  const [loading, setLoading] = useState(true);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [showPrivacy, setShowPrivacy] = useState(false);
+  const [evaluating, setEvaluating] = useState(false);
+  const [recording, setRecording] = useState(false);
 
-  useEffect(() => {
-    setSettings(getWakeWordSettings());
+  const refresh = useCallback(async () => {
+    setLoading(true);
+    const s = await getWakeWordSettings();
+    setSettings(s);
+    setLoading(false);
   }, []);
 
-  const refresh = () => setSettings(getWakeWordSettings());
-
-  const handleShadowToggle = (checked: boolean) => {
-    updateShadowModeEnabled(checked);
+  useEffect(() => {
     refresh();
+  }, [refresh]);
+
+  const handleShadowToggle = async (checked: boolean) => {
+    const updated = await updateShadowModeEnabled(checked);
+    setSettings(updated);
   };
 
-  const handleConsentToggle = (checked: boolean) => {
-    updateTrainingConsent(checked);
-    refresh();
+  const handleConsentToggle = async (checked: boolean) => {
+    const updated = await updateTrainingConsent(checked);
+    setSettings(updated);
   };
 
-  const handleAudioSourceChange = (source: "builtin_mic" | "bluetooth_sco") => {
-    updateAudioSource(source);
-    refresh();
+  const handleAudioSourceChange = async (source: "builtin_mic" | "bluetooth_sco") => {
+    const updated = await updateAudioSource(source);
+    setSettings(updated);
   };
 
-  const handleRetentionToggle = (checked: boolean) => {
-    updateRecordingRetention(checked);
-    refresh();
+  const handleRetentionToggle = async (checked: boolean) => {
+    const updated = await updateRecordingRetention(checked);
+    setSettings(updated);
   };
 
-  const handleRunEvaluation = () => {
-    updateEvaluationStatus("passed");
-    refresh();
+  const handleRecordClip = async (label: string) => {
+    if (recording) return;
+    setRecording(true);
+    const result = await captureClip(label);
+    setRecording(false);
+    if (result.success) {
+      const updated = await getWakeWordSettings();
+      setSettings(updated);
+    } else {
+      alert("Recording failed: " + (result.error || "unknown error"));
+    }
   };
 
-  const handleApprove = () => {
-    updateActivationApproved(true);
-    refresh();
+  const handleRunEvaluation = async () => {
+    setEvaluating(true);
+    const result = await runLocalEvaluation();
+    setEvaluating(false);
+    if (result.success) {
+      const updated = await getWakeWordSettings();
+      setSettings(updated);
+    } else {
+      alert("Evaluation failed: " + (result.error || "unknown error"));
+    }
   };
 
-  const handleReset = () => {
-    resetWakeWordSettings();
+  const handleApprove = async () => {
+    const updated = await updateActivationApproved(true);
+    setSettings(updated);
+  };
+
+  const handleReset = async () => {
+    const updated = await resetWakeWordSettings();
+    setSettings(updated);
     setShowResetConfirm(false);
-    refresh();
   };
+
+  if (loading || !settings) {
+    return (
+      <div className="space-y-4 border-t pt-4">
+        <Header title="Wake Word" description="Loading..." isMainTitle />
+      </div>
+    );
+  }
 
   const readinessMet = isReadinessGateMet(settings);
   const hoursElapsed = settings.startedAt > 0
@@ -77,13 +116,13 @@ export const WakeWordSettings = () => {
         <div>
           <Label className="text-sm font-medium">Shadow mode</Label>
           <p className="text-xs text-muted-foreground mt-1">
-            {settings.shadowModeEnabled
+            {settings.enabled
               ? "OpenWakeWord detection is enabled"
               : "Wake-word detection is disabled"}
           </p>
         </div>
         <Switch
-          checked={settings.shadowModeEnabled}
+          checked={settings.enabled}
           onCheckedChange={handleShadowToggle}
           aria-label="Toggle shadow mode"
         />
@@ -93,24 +132,23 @@ export const WakeWordSettings = () => {
         <div>
           <Label className="text-sm font-medium">Training data consent</Label>
           <p className="text-xs text-muted-foreground mt-1">
-            {settings.trainingConsent
+            {settings.consentGrantedAt > 0
               ? "Consent granted — clips may be stored locally for model improvement"
               : "Opt in to save training clips for wake-word improvement"}
           </p>
         </div>
         <Switch
-          checked={settings.trainingConsent}
+          checked={settings.consentGrantedAt > 0}
           onCheckedChange={handleConsentToggle}
           aria-label="Toggle training consent"
         />
       </div>
 
-      {settings.trainingConsent && (
+      {settings.consentGrantedAt > 0 && (
         <div className="space-y-3 border border-border/20 rounded-lg p-3 bg-muted/10">
           <p className="text-xs text-muted-foreground">
-            When enabled, Krishna can store short ({'<'}3s) audio clips on this device
+            When enabled, Krishna can store short (&lt;3s) audio clips on this device
             to improve wake-word accuracy. Clips are never transmitted off-device.
-            Current storage is in app-private storage.
           </p>
 
           <div className="grid grid-cols-3 gap-2 text-xs">
@@ -128,10 +166,19 @@ export const WakeWordSettings = () => {
             </div>
           </div>
 
+          <div className="flex gap-2">
+            <Button size="sm" onClick={() => handleRecordClip("positive")} disabled={recording}>
+              {recording ? "Recording (3s)..." : "Record \"Hey Krishna\""}
+            </Button>
+            <Button size="sm" variant="outline" onClick={() => handleRecordClip("negative")} disabled={recording}>
+              {recording ? "Recording…" : "Record background"}
+            </Button>
+          </div>
+
           <div className="flex items-center justify-between">
             <Label className="text-sm font-medium">Keep recordings after evaluation</Label>
             <Switch
-              checked={settings.recordingRetention}
+              checked={settings.recordingRetentionEnabled}
               onCheckedChange={handleRetentionToggle}
               aria-label="Toggle recording retention"
             />
@@ -139,7 +186,7 @@ export const WakeWordSettings = () => {
         </div>
       )}
 
-      {settings.trainingConsent && (
+      {settings.consentGrantedAt > 0 && (
         <div className="space-y-3 border border-border/20 rounded-lg p-3 bg-muted/10">
           <Label className="text-sm font-medium">Readiness gate</Label>
           <div className="text-xs space-y-1">
@@ -158,12 +205,18 @@ export const WakeWordSettings = () => {
           </div>
 
           {readinessMet && settings.evaluationStatus === "collecting" && (
-            <Button size="sm" onClick={handleRunEvaluation}>
-              Run local evaluation
+            <Button size="sm" onClick={handleRunEvaluation} disabled={evaluating}>
+              {evaluating ? "Evaluating…" : "Run local evaluation"}
             </Button>
           )}
 
-          {settings.evaluationStatus === "passed" && !settings.activationApproved && (
+          {settings.evaluationResult.sampleCount > 0 && (
+            <div className="text-xs space-y-1 text-muted-foreground font-mono mt-2">
+              <p>Last evaluation: recall={settings.evaluationResult.recall.toFixed(3)} falseWakeRate={settings.evaluationResult.falseWakeRate.toFixed(3)} samples={settings.evaluationResult.sampleCount} model={settings.evaluationResult.modelVersion}</p>
+            </div>
+          )}
+
+          {settings.evaluationStatus === "passed" && settings.activationApprovedAt === 0 && (
             <div className="space-y-2">
               <p className="text-xs text-green-600">Evaluation passed. Awaiting your approval.</p>
               <Button size="sm" onClick={handleApprove}>
@@ -172,7 +225,7 @@ export const WakeWordSettings = () => {
             </div>
           )}
 
-          {settings.activationApproved && (
+          {settings.activationApprovedAt > 0 && (
             <p className="text-xs text-green-600">OpenWakeWord is approved and active.</p>
           )}
 

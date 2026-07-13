@@ -231,6 +231,57 @@ pub fn android_open_a11y_settings() -> Result<(), String> {
     }
 }
 
+/// Open a YouTube Music URL, preferring the installed YouTube Music Android app.
+#[tauri::command]
+pub fn android_open_youtube_music(url: String) -> Result<String, String> {
+    #[cfg(target_os = "android")]
+    {
+        let url = url.trim();
+        if !url.starts_with("https://music.youtube.com/") {
+            return Err("Only canonical YouTube Music URLs are allowed".to_string());
+        }
+        crate::android_control::open_youtube_music(url)
+    }
+    #[cfg(not(target_os = "android"))]
+    {
+        let _ = url;
+        Err("android_open_youtube_music is only available on Android".to_string())
+    }
+}
+
+/// Click a uniquely matched visible Android accessibility node by label.
+#[tauri::command]
+pub fn android_click_button(label: String) -> Result<(), String> {
+    #[cfg(target_os = "android")]
+    {
+        let label = label.trim();
+        if label.is_empty() || label.len() > 80 {
+            return Err("Button label must contain 1 to 80 characters".to_string());
+        }
+        match crate::android_control::a11y_is_enabled() {
+            Ok(true) => {}
+            Ok(false) => return Err("A11Y_NOT_ENABLED".to_string()),
+            Err(e) => return Err(e),
+        }
+        let result = crate::android_control::a11y_click_button(label)?;
+        match result.as_str() {
+            "CLICKED" => Ok(()),
+            "NOT_FOUND" => Err(format!("No visible button named '{}' was found", label)),
+            "AMBIGUOUS" => Err(format!("More than one visible button named '{}' was found", label)),
+            "NO_ACTIVE_WINDOW" => Err("No active app window is available".to_string()),
+            "SERVICE_UNAVAILABLE" => Err("Krishna Accessibility is not connected".to_string()),
+            "INVALID_LABEL" => Err("The button label is invalid".to_string()),
+            "CLICK_FAILED" => Err(format!("Android could not click '{}'", label)),
+            other => Err(format!("Unknown Accessibility click result: {}", other)),
+        }
+    }
+    #[cfg(not(target_os = "android"))]
+    {
+        let _ = label;
+        Err("android_click_button is only available on Android".to_string())
+    }
+}
+
 #[tauri::command]
 pub fn android_hands_free_start() -> Result<(), String> {
     #[cfg(target_os = "android")]
@@ -260,6 +311,100 @@ pub fn android_hands_free_stop() -> Result<(), String> {
     #[cfg(not(target_os = "android"))]
     {
         Err("android_hands_free_stop is only available on Android".to_string())
+    }
+}
+
+// ── Wake-word profile (native SharedPreferences) ──────────────────────
+// These commands let the React frontend read/write the WakeWordProfile
+// stored in Android SharedPreferences through WakeWordBridgeHelper.
+// On desktop they return empty defaults; wake-word is mobile-only.
+
+#[tauri::command]
+pub fn android_get_wake_word_profile() -> String {
+    #[cfg(target_os = "android")]
+    {
+        crate::android_control::wake_word_get_profile().unwrap_or_default()
+    }
+    #[cfg(not(target_os = "android"))]
+    {
+        "{}".to_string()
+    }
+}
+
+#[tauri::command]
+pub fn android_update_wake_word_field(field: String, value: String) -> bool {
+    #[cfg(target_os = "android")]
+    {
+        crate::android_control::wake_word_update_field(field, value).unwrap_or(false)
+    }
+    #[cfg(not(target_os = "android"))]
+    {
+        let _ = (field, value);
+        false
+    }
+}
+
+#[tauri::command]
+pub fn android_reset_wake_word_profile() -> bool {
+    #[cfg(target_os = "android")]
+    {
+        crate::android_control::wake_word_reset().unwrap_or(false)
+    }
+    #[cfg(not(target_os = "android"))]
+    {
+        false
+    }
+}
+
+#[tauri::command]
+pub fn android_get_wake_word_detector_state() -> String {
+    #[cfg(target_os = "android")]
+    {
+        crate::android_control::wake_word_get_detector_state().unwrap_or_default()
+    }
+    #[cfg(not(target_os = "android"))]
+    {
+        "{}".to_string()
+    }
+}
+
+#[tauri::command]
+pub fn android_run_wake_word_evaluation() -> String {
+    #[cfg(target_os = "android")]
+    {
+        crate::android_control::wake_word_run_evaluation().unwrap_or_else(|e| {
+            format!("{{\"success\":false,\"error\":\"{}\"}}", e)
+        })
+    }
+    #[cfg(not(target_os = "android"))]
+    {
+        "{\"success\":false,\"error\":\"Only available on Android\"}".to_string()
+    }
+}
+
+#[tauri::command]
+pub fn android_capture_clip(label: String) -> String {
+    #[cfg(target_os = "android")]
+    {
+        crate::android_control::wake_word_capture_clip(label).unwrap_or_else(|e| {
+            format!("{{\"success\":false,\"error\":\"{}\"}}", e)
+        })
+    }
+    #[cfg(not(target_os = "android"))]
+    {
+        "{\"success\":false,\"error\":\"Only available on Android\"}".to_string()
+    }
+}
+
+#[tauri::command]
+pub fn android_training_summary() -> String {
+    #[cfg(target_os = "android")]
+    {
+        crate::android_control::wake_word_training_summary().unwrap_or_default()
+    }
+    #[cfg(not(target_os = "android"))]
+    {
+        "{}".to_string()
     }
 }
 

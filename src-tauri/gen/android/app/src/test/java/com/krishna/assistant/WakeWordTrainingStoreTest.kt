@@ -24,7 +24,7 @@ class WakeWordTrainingStoreTest {
     assertEquals("/data/clip_001.pcm", clip.filePath)
     assertEquals("abc123", clip.sha256)
     assertEquals(now, clip.recordedAt)
-    assertEquals(3000L, clip.durationMs)
+    assertEquals(3000, clip.durationMs)
     assertEquals(16000, clip.sampleRate)
   }
 
@@ -58,7 +58,7 @@ class WakeWordTrainingStoreTest {
 
   @Test
   fun `getTotalStorageFormatted returns 0 B for empty store`() {
-    assertEquals(48, "0 B".length) // placeholder: formatting check
+    assertEquals(3, "0 B".length)
     assertTrue("0 B".matches(Regex("\\d+\\s*[BKMGTP]?B")))
   }
 

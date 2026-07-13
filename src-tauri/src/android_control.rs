@@ -4,11 +4,12 @@
 #![cfg(target_os = "android")]
 
 use crate::android_jvm::{application_context, find_app_class, with_env};
-use jni::objects::{JClass, JObject, JValue};
+use jni::objects::{JClass, JObject, JString, JValue};
 
 const LAUNCHER_CLASS: &str = "com.krishna.assistant.AppLauncherHelper";
 const MEDIA_CLASS: &str = "com.krishna.assistant.MediaControlHelper";
 const HANDS_FREE_CLASS: &str = "com.krishna.assistant.KrishnaHandsFreeService";
+const WAKE_WORD_BRIDGE: &str = "com.krishna.assistant.WakeWordBridgeHelper";
 
 #[derive(serde::Deserialize)]
 struct AppEntry {
@@ -85,6 +86,37 @@ pub fn launch_by_name(query: &str) -> Result<String, String> {
         }
         None => Err(format!("No installed app matches '{}'", query)),
     }
+}
+
+/// Open a canonical YouTube Music URL, preferring the installed Android app.
+pub fn open_youtube_music(url: &str) -> Result<String, String> {
+    with_env(|env| {
+        let context = application_context(env)?;
+        let jurl = env
+            .new_string(url)
+            .map_err(|e| format!("[launcher] music URL string: {}", e))?;
+        let jurl_obj: JObject = jurl.into();
+        let class = JClass::from(find_app_class(env, LAUNCHER_CLASS)?);
+        let result = env
+            .call_static_method(
+                class,
+                "openYouTubeMusic",
+                "(Landroid/content/Context;Ljava/lang/String;)Ljava/lang/String;",
+                &[JValue::Object(&context), JValue::Object(&jurl_obj)],
+            )
+            .map_err(|e| format!("[launcher] openYouTubeMusic failed: {}", e))?
+            .l()
+            .map_err(|e| format!("[launcher] openYouTubeMusic not a string: {}", e))?;
+        let destination: String = env
+            .get_string(&JString::from(result))
+            .map_err(|e| format!("[launcher] openYouTubeMusic string conversion: {}", e))?
+            .into();
+        match destination.as_str() {
+            "YOUTUBE_MUSIC" | "WEB_FALLBACK" => Ok(destination),
+            "NO_HANDLER" => Err("No application can open YouTube Music".to_string()),
+            other => Err(format!("Unknown YouTube Music launch result: {}", other)),
+        }
+    })
 }
 
 /// action: "up" | "down" | "mute" | "unmute" | "set" (value = percent for "set")
@@ -169,6 +201,34 @@ pub fn a11y_gesture(kind: &str) -> Result<bool, String> {
     })
 }
 
+/// Click one uniquely matched visible button by its text, content description,
+/// or final resource-id segment. The Android service returns a stable result
+/// code so the caller can report an actionable failure.
+pub fn a11y_click_button(label: &str) -> Result<String, String> {
+    with_env(|env| {
+        let jlabel = env
+            .new_string(label)
+            .map_err(|e| format!("[a11y] new label string: {}", e))?;
+        let jlabel_obj: JObject = jlabel.into();
+        let class = JClass::from(find_app_class(env, A11Y_CLASS)?);
+        let result = env
+            .call_static_method(
+                class,
+                "clickButton",
+                "(Ljava/lang/String;)Ljava/lang/String;",
+                &[JValue::Object(&jlabel_obj)],
+            )
+            .map_err(|e| format!("[a11y] clickButton failed: {}", e))?
+            .l()
+            .map_err(|e| format!("[a11y] clickButton not a string: {}", e))?;
+        let value: String = env
+            .get_string(&JString::from(result))
+            .map_err(|e| format!("[a11y] clickButton string conversion: {}", e))?
+            .into();
+        Ok(value)
+    })
+}
+
 /// Open the system Accessibility settings screen (for the one-time enable).
 pub fn a11y_open_settings() -> Result<(), String> {
     with_env(|env| {
@@ -230,5 +290,164 @@ pub fn set_torch(on: bool) -> Result<bool, String> {
         .map_err(|e| format!("[media] setTorch failed: {}", e))?
         .z()
         .map_err(|e| format!("[media] setTorch not a bool: {}", e))
+    })
+}
+
+pub fn wake_word_get_profile() -> Result<String, String> {
+    with_env(|env| {
+        let context = application_context(env)?;
+        let class = JClass::from(find_app_class(env, WAKE_WORD_BRIDGE)?);
+        let result = env
+            .call_static_method(
+                class,
+                "getProfileJson",
+                "(Landroid/content/Context;)Ljava/lang/String;",
+                &[JValue::Object(&context)],
+            )
+            .map_err(|e| format!("[ww] getProfileJson failed: {}", e))?
+            .l()
+            .map_err(|e| format!("[ww] getProfileJson not string: {}", e))?;
+        let value: String = env
+            .get_string(&JString::from(result))
+            .map_err(|e| format!("[ww] getProfileJson string conv: {}", e))?
+            .into();
+        Ok(value)
+    })
+}
+
+pub fn wake_word_update_field(field: String, value: String) -> Result<bool, String> {
+    with_env(|env| {
+        let context = application_context(env)?;
+        let jfield = env
+            .new_string(&field)
+            .map_err(|e| format!("[ww] new_string field: {}", e))?;
+        let jvalue = env
+            .new_string(&value)
+            .map_err(|e| format!("[ww] new_string value: {}", e))?;
+        let class = JClass::from(find_app_class(env, WAKE_WORD_BRIDGE)?);
+        let result = env
+            .call_static_method(
+                class,
+                "updateProfileField",
+                "(Landroid/content/Context;Ljava/lang/String;Ljava/lang/String;)Z",
+                &[
+                    JValue::Object(&context),
+                    JValue::Object(&jfield.into()),
+                    JValue::Object(&jvalue.into()),
+                ],
+            )
+            .map_err(|e| format!("[ww] updateProfileField failed: {}", e))?
+            .z()
+            .map_err(|e| format!("[ww] updateProfileField not bool: {}", e))?;
+        Ok(result)
+    })
+}
+
+pub fn wake_word_reset() -> Result<bool, String> {
+    with_env(|env| {
+        let context = application_context(env)?;
+        let class = JClass::from(find_app_class(env, WAKE_WORD_BRIDGE)?);
+        let result = env
+            .call_static_method(
+                class,
+                "resetProfile",
+                "(Landroid/content/Context;)Z",
+                &[JValue::Object(&context)],
+            )
+            .map_err(|e| format!("[ww] resetProfile failed: {}", e))?
+            .z()
+            .map_err(|e| format!("[ww] resetProfile not bool: {}", e))?;
+        Ok(result)
+    })
+}
+
+pub fn wake_word_get_detector_state() -> Result<String, String> {
+    with_env(|env| {
+        let context = application_context(env)?;
+        let class = JClass::from(find_app_class(env, WAKE_WORD_BRIDGE)?);
+        let result = env
+            .call_static_method(
+                class,
+                "getDetectorState",
+                "(Landroid/content/Context;)Ljava/lang/String;",
+                &[JValue::Object(&context)],
+            )
+            .map_err(|e| format!("[ww] getDetectorState failed: {}", e))?
+            .l()
+            .map_err(|e| format!("[ww] getDetectorState not string: {}", e))?;
+        let value: String = env
+            .get_string(&JString::from(result))
+            .map_err(|e| format!("[ww] getDetectorState string conv: {}", e))?
+            .into();
+        Ok(value)
+    })
+}
+
+pub fn wake_word_run_evaluation() -> Result<String, String> {
+    with_env(|env| {
+        let context = application_context(env)?;
+        let class = JClass::from(find_app_class(env, WAKE_WORD_BRIDGE)?);
+        let result = env
+            .call_static_method(
+                class,
+                "runEvaluation",
+                "(Landroid/content/Context;)Ljava/lang/String;",
+                &[JValue::Object(&context)],
+            )
+            .map_err(|e| format!("[ww] runEvaluation failed: {}", e))?
+            .l()
+            .map_err(|e| format!("[ww] runEvaluation not string: {}", e))?;
+        let value: String = env
+            .get_string(&JString::from(result))
+            .map_err(|e| format!("[ww] runEvaluation string conv: {}", e))?
+            .into();
+        Ok(value)
+    })
+}
+
+pub fn wake_word_capture_clip(label: String) -> Result<String, String> {
+    with_env(|env| {
+        let context = application_context(env)?;
+        let jlabel = env
+            .new_string(&label)
+            .map_err(|e| format!("[ww] new_string label: {}", e))?;
+        let class = JClass::from(find_app_class(env, WAKE_WORD_BRIDGE)?);
+        let result = env
+            .call_static_method(
+                class,
+                "captureClip",
+                "(Landroid/content/Context;Ljava/lang/String;)Ljava/lang/String;",
+                &[JValue::Object(&context), JValue::Object(&jlabel.into())],
+            )
+            .map_err(|e| format!("[ww] captureClip failed: {}", e))?
+            .l()
+            .map_err(|e| format!("[ww] captureClip not string: {}", e))?;
+        let value: String = env
+            .get_string(&JString::from(result))
+            .map_err(|e| format!("[ww] captureClip string conv: {}", e))?
+            .into();
+        Ok(value)
+    })
+}
+
+pub fn wake_word_training_summary() -> Result<String, String> {
+    with_env(|env| {
+        let context = application_context(env)?;
+        let class = JClass::from(find_app_class(env, WAKE_WORD_BRIDGE)?);
+        let result = env
+            .call_static_method(
+                class,
+                "getTrainingSummary",
+                "(Landroid/content/Context;)Ljava/lang/String;",
+                &[JValue::Object(&context)],
+            )
+            .map_err(|e| format!("[ww] getTrainingSummary failed: {}", e))?
+            .l()
+            .map_err(|e| format!("[ww] getTrainingSummary not string: {}", e))?;
+        let value: String = env
+            .get_string(&JString::from(result))
+            .map_err(|e| format!("[ww] getTrainingSummary string conv: {}", e))?
+            .into();
+        Ok(value)
     })
 }
