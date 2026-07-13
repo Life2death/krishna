@@ -46,11 +46,23 @@ fn main() {
         if let Ok(maps_key) = std::env::var("GOOGLE_MAPS_API_KEY") {
             println!("cargo:rustc-env=GOOGLE_MAPS_API_KEY={}", maps_key);
         }
+        // Bake the Turso sync credentials so the phone joins the sync hub and
+        // pulls memories/conversations from the desktop. Without these the phone
+        // runs "Local only mode" and never receives synced data (e.g. saved
+        // home/work addresses). Desktop enters these in its own secure store.
+        if let Ok(sync_url) = std::env::var("KRISHNA_SYNC_URL") {
+            println!("cargo:rustc-env=KRISHNA_SYNC_URL={}", sync_url);
+        }
+        if let Ok(sync_token) = std::env::var("KRISHNA_SYNC_TOKEN") {
+            println!("cargo:rustc-env=KRISHNA_SYNC_TOKEN={}", sync_token);
+        }
     }
     println!("cargo:rerun-if-env-changed=ANTHROPIC_API_KEY");
     println!("cargo:rerun-if-env-changed=OPENAI_REALTIME_API_KEY");
     println!("cargo:rerun-if-env-changed=GEMINI_REALTIME_API_KEY");
     println!("cargo:rerun-if-env-changed=GOOGLE_MAPS_API_KEY");
+    println!("cargo:rerun-if-env-changed=KRISHNA_SYNC_URL");
+    println!("cargo:rerun-if-env-changed=KRISHNA_SYNC_TOKEN");
 
     tauri_build::build()
 }

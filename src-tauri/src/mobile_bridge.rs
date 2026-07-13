@@ -96,6 +96,36 @@ pub fn get_baked_maps_key() -> Option<String> {
     }
 }
 
+/// Returns the build-time-baked Turso sync URL on mobile, or None on desktop
+/// (where the user configures sync in their own secure store). Seeded into the
+/// mobile secure store at startup so the phone joins the sync hub instead of
+/// running "Local only mode".
+#[tauri::command]
+pub fn get_baked_sync_url() -> Option<String> {
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    {
+        option_env!("KRISHNA_SYNC_URL").map(|s| s.to_string())
+    }
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    {
+        None
+    }
+}
+
+/// Returns the build-time-baked Turso sync auth token on mobile, or None on
+/// desktop. Paired with get_baked_sync_url.
+#[tauri::command]
+pub fn get_baked_sync_token() -> Option<String> {
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    {
+        option_env!("KRISHNA_SYNC_TOKEN").map(|s| s.to_string())
+    }
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    {
+        None
+    }
+}
+
 // ── Native TTS (Android) ───────────────────────────────────────────────
 // The Android WebView has no `window.speechSynthesis` and Piper can't run on
 // Android, so speech is routed through the platform TextToSpeech engine.

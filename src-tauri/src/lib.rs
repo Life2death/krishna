@@ -195,6 +195,8 @@ pub fn run() {
             mobile_bridge::get_baked_realtime_key,
             mobile_bridge::get_baked_gemini_key,
             mobile_bridge::get_baked_maps_key,
+            mobile_bridge::get_baked_sync_url,
+            mobile_bridge::get_baked_sync_token,
             mobile_bridge::tts_speak_android,
             mobile_bridge::tts_stop_android,
             mobile_bridge::android_launch_app,

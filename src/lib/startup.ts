@@ -217,6 +217,29 @@ export async function initializeCore(): Promise<void> {
     console.error("[startup] maps key seed failed:", err);
   }
 
+  // Seed the build-baked Turso sync credentials on mobile so the phone joins
+  // the sync hub (instead of "Local only mode") and pulls memories/conversations
+  // from the desktop. Must run BEFORE startSync() below, which reads these two
+  // keys via getSecret. No-op on desktop (baked values are None); never
+  // overwrites credentials the user already configured.
+  try {
+    const { invoke } = await import("@tauri-apps/api/core");
+    for (const [secretKey, bakedCmd] of [
+      ["KRISHNA_SYNC_URL", "get_baked_sync_url"],
+      ["KRISHNA_SYNC_TOKEN", "get_baked_sync_token"],
+    ] as const) {
+      const existing = await invoke<string | null>("secure_get", { key: secretKey });
+      if (!existing) {
+        const baked = await invoke<string | null>(bakedCmd);
+        if (baked) {
+          await invoke("secure_set", { key: secretKey, value: baked });
+        }
+      }
+    }
+  } catch (err) {
+    console.error("[startup] sync credential seed failed:", err);
+  }
+
   bootStep("sync");
   await startSync();
   bootStep("done");
