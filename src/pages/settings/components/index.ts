@@ -16,3 +16,4 @@ export * from "./JobHunterSettings";
 export * from "./VoicePhrasesSettings";
 export * from "./NaukriSearchesSettings";
 export * from "./LiveVoiceSettings";
+export * from "./WakeWordSettings";

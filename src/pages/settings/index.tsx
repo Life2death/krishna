@@ -25,7 +25,7 @@ import {
   VoiceMaxTokensInput,
   VoiceModelInput,
 } from "@/pages/responses/components";
-import { CreateSkillDialog, PersonaSelector, LiveVoiceSettings } from "./components";
+import { CreateSkillDialog, PersonaSelector, LiveVoiceSettings, WakeWordSettings } from "./components";
 import { PageLayout } from "@/layouts";
 import { Button, Header } from "@/components";
 import { SaveIcon, CheckIcon } from "lucide-react";
@@ -123,6 +123,9 @@ const Settings = () => {
 
       {/* Brain Connection */}
       <BrainConnection />
+
+      {/* Wake Word */}
+      <WakeWordSettings />
 
       {/* Live Voice */}
       <LiveVoiceSettings />

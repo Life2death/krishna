@@ -1,0 +1,10 @@
+{
+  "modelVersion": "oww-v1.0.0",
+  "sha256": "placeholder-run-training-openwakeword-train_model-py-to-generate",
+  "sampleRate": 16000,
+  "frameLength": 1280,
+  "inputFeatures": 128,
+  "outputLabels": ["non_wake_word", "hey_krishna"],
+  "trainingDate": "2026-07-13",
+  "trainerVersion": "openwakeword-0.1.0"
+}

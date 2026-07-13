@@ -23,6 +23,7 @@ class KrishnaHandsFreeService : Service(), RecognitionListener {
     private const val NOTIFICATION_ID = 4101
     private const val ACTION_START = "com.krishna.assistant.HANDS_FREE_START"
     private const val ACTION_STOP = "com.krishna.assistant.HANDS_FREE_STOP"
+    private const val USE_SHERP_DEV_SWITCH = false
 
     @JvmStatic
     fun start(context: Context): Boolean {
@@ -44,7 +45,14 @@ class KrishnaHandsFreeService : Service(), RecognitionListener {
 
   private val handler = Handler(Looper.getMainLooper())
   private var recognizer: SpeechRecognizer? = null
+  private var owwDetector: OpenWakeWordDetector? = null
+  private var sherpaDetector: SherpaWakeWordDetector? = null
   private var destroyed = false
+  private var wakeDetectorActive = false
+
+  private val safeDirectButtons = setOf(
+    "play", "pause", "next", "previous", "search", "close", "cancel", "dismiss", "skip", "retry",
+  )
 
   override fun onBind(intent: Intent?): IBinder? = null
 
@@ -55,7 +63,7 @@ class KrishnaHandsFreeService : Service(), RecognitionListener {
     }
     startForeground(NOTIFICATION_ID, createNotification())
     ensureRecognizer()
-    scheduleListening(0)
+    startWakeWordDetection()
     return START_STICKY
   }
 
@@ -65,6 +73,10 @@ class KrishnaHandsFreeService : Service(), RecognitionListener {
     recognizer?.cancel()
     recognizer?.destroy()
     recognizer = null
+    owwDetector?.release()
+    owwDetector = null
+    sherpaDetector?.release()
+    sherpaDetector = null
     super.onDestroy()
   }
 
@@ -73,8 +85,58 @@ class KrishnaHandsFreeService : Service(), RecognitionListener {
     recognizer = SpeechRecognizer.createSpeechRecognizer(this).also { it.setRecognitionListener(this) }
   }
 
-  private fun scheduleListening(delayMs: Long) {
+  private fun startWakeWordDetection(delayMs: Long = 0) {
     handler.removeCallbacksAndMessages(null)
+    handler.postDelayed({
+      if (destroyed) return@postDelayed
+      wakeDetectorActive = true
+      val profile = WakeWordProfileStore(this).load()
+      if (profile.enabled && profile.activationApprovedAt > 0L) {
+        startOpenWakeWord()
+      } else if (USE_SHERP_DEV_SWITCH && SherpaWakeWordDetector.isAvailable(this)) {
+        startSherpaDetector()
+      } else {
+        startDirectRecognition()
+      }
+    }, delayMs)
+  }
+
+  private fun startOpenWakeWord() {
+    try {
+      if (owwDetector == null) {
+        owwDetector = OpenWakeWordDetector(this) {
+          handler.post(::startCommandRecognition)
+        }
+      }
+      if (owwDetector?.start() != true) {
+        Log.w(TAG, "OpenWakeWord unavailable, falling back to direct recognition")
+        startDirectRecognition()
+      }
+    } catch (error: Exception) {
+      Log.e(TAG, "Unable to start OpenWakeWord detector", error)
+      startDirectRecognition()
+    }
+  }
+
+  private fun startSherpaDetector() {
+    try {
+      if (sherpaDetector == null) {
+        sherpaDetector = SherpaWakeWordDetector(this) {
+          handler.post(::startCommandRecognition)
+        }
+      }
+      if (sherpaDetector?.start() != true) {
+        Log.w(TAG, "Sherpa unavailable")
+        startDirectRecognition()
+      }
+    } catch (error: Exception) {
+      Log.e(TAG, "Unable to start Sherpa detector", error)
+      startDirectRecognition()
+    }
+  }
+
+  private fun startDirectRecognition() {
+    Log.d(TAG, "Starting direct speech recognition (no wake-word gate)")
     handler.postDelayed({
       if (destroyed || recognizer == null) return@postDelayed
       try {
@@ -86,21 +148,40 @@ class KrishnaHandsFreeService : Service(), RecognitionListener {
         )
       } catch (error: Exception) {
         Log.w(TAG, "Unable to start recognition", error)
-        scheduleListening(1_500)
+        startDirectRecognition()
       }
-    }, delayMs)
+    }, 100)
+  }
+
+  private fun startCommandRecognition() {
+    if (destroyed) return
+    wakeDetectorActive = false
+    owwDetector?.stop()
+    sherpaDetector?.stop()
+    ensureRecognizer()
+    try {
+      recognizer?.startListening(
+        Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
+          .putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+          .putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.getDefault().toLanguageTag())
+          .putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, false)
+      )
+    } catch (error: Exception) {
+      Log.w(TAG, "Unable to start command recognition", error)
+      startWakeWordDetection(1_500)
+    }
   }
 
   override fun onResults(results: android.os.Bundle?) {
     val phrases = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION).orEmpty()
     phrases.firstOrNull()?.let(::handleTranscript)
-    scheduleListening(350)
+    startWakeWordDetection(350)
   }
 
   override fun onError(error: Int) {
     val delay = if (error == SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS) 5_000L else 700L
     Log.d(TAG, "Recognition ended with error $error")
-    scheduleListening(delay)
+    startWakeWordDetection(delay)
   }
 
   private fun handleTranscript(transcript: String) {
@@ -108,7 +189,23 @@ class KrishnaHandsFreeService : Service(), RecognitionListener {
       .lowercase(Locale.US)
       .replace(Regex("^\\s*(?:hey\\s+)?krishna\\b[,.!\\s]*"), "")
       .trim()
-    if (command == transcript.lowercase(Locale.US).trim() || command.isEmpty()) return
+    if (command.isEmpty()) return
+
+    HandsFreeCommandParser.extractButtonLabel(command)?.let { label ->
+      if (label !in safeDirectButtons) {
+        Log.w(TAG, "Blocked direct click for non-safe label '$label'")
+        return
+      }
+      val result = KrishnaAccessibilityService.clickButton(label)
+      Log.i(TAG, "Command '$command' -> click '$label' result=$result")
+      return
+    }
+
+    HandsFreeCommandParser.extractMediaAction(command)?.let { action ->
+      val dispatched = MediaControlHelper.mediaKey(this, action)
+      Log.i(TAG, "Command '$command' -> media '$action' dispatched=$dispatched")
+      return
+    }
 
     val gesture = when {
       command.contains("zoom in") -> "zoom_in"
@@ -137,7 +234,7 @@ class KrishnaHandsFreeService : Service(), RecognitionListener {
     return Notification.Builder(this, CHANNEL_ID)
       .setSmallIcon(R.mipmap.ic_launcher)
       .setContentTitle("Krishna hands-free is active")
-      .setContentText("Listening for ‘Hey Krishna’ commands")
+      .setContentText("Listening for 'Hey Krishna' commands")
       .setOngoing(true)
       .build()
   }
@@ -149,4 +246,30 @@ class KrishnaHandsFreeService : Service(), RecognitionListener {
   override fun onEndOfSpeech() = Unit
   override fun onPartialResults(partialResults: android.os.Bundle?) = Unit
   override fun onEvent(eventType: Int, params: android.os.Bundle?) = Unit
+}
+
+internal object HandsFreeCommandParser {
+  private val buttonCommand = Regex("^(?:click|tap|press|select)\\s+(.+)$")
+  private val leadingButtonWords = Regex("^(?:(?:on|the)\\s+)+")
+  private val trailingButtonWords = Regex("\\s+(?:button|control|icon)\\s*$")
+
+  fun extractButtonLabel(command: String): String? {
+    val match = buttonCommand.matchEntire(command) ?: return null
+    val label = match.groupValues[1]
+      .replace(leadingButtonWords, "")
+      .replace(trailingButtonWords, "")
+      .trim()
+      .lowercase(Locale.US)
+    return label.takeIf { it.isNotEmpty() && it !in setOf("button", "control", "icon") }
+  }
+
+  fun extractMediaAction(command: String): String? = when (command) {
+    "play", "play music", "play the music", "play song", "play the song",
+    "resume", "resume music", "resume the music", "resume song", "resume the song",
+    "continue", "continue music", "continue the music", "continue the song" -> "play"
+    "pause", "pause music", "pause the music", "pause song", "pause the song" -> "pause"
+    "next", "next song", "skip", "skip song" -> "next"
+    "previous", "previous song", "go back a song" -> "previous"
+    else -> null
+  }
 }

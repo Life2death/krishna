@@ -1,0 +1,43 @@
+# Third-Party Attributions
+
+Krishna uses the following third-party components:
+
+## TensorFlow Lite (LiteRT)
+
+Used for on-device wake-word model inference.
+- License: Apache 2.0
+- Source: https://github.com/tensorflow/tensorflow
+
+Copyright 2023 The TensorFlow Authors. All rights reserved.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+
+## Sherpa-ONNX
+
+Used for development-only diagnostic wake-word detection (not in production builds).
+- License: Apache 2.0
+- Source: https://github.com/k2-fsa/sherpa-onnx
+
+Copyright 2022-2024 The Sherpa-ONNX Authors.
+
+Licensed under the Apache License, Version 2.0.
+
+## OpenWakeWord (training tooling)
+
+Reference architecture for synthetic wake-word model training.
+- License: Apache 2.0
+- Source: https://github.com/sensory-ai/openwakeword
+
+Copyright 2023 Sensory Inc.
+
+Licensed under the Apache License, Version 2.0.
