@@ -54,18 +54,21 @@ object WakeWordBridgeHelper {
   fun updateProfileField(context: Context, field: String, value: String): Boolean {
     return try {
       val store = WakeWordProfileStore(context)
-      val current = store.load()
       when (field) {
         "enabled" -> store.setEnabled(value.toBoolean())
         "audioSource" -> store.setAudioSource(value)
-        "consentGranted" -> if (value.toBoolean()) store.setConsentGranted() else current
-        "activationApproved" -> if (value.toBoolean()) store.setActivationApproved() else current
+        "consentGranted" -> if (value.toBoolean()) store.setConsentGranted()
+        "activationApproved" -> {
+          if (!value.toBoolean()) return true
+          val result = store.setActivationApproved()
+          if (result == null) {
+            Log.w(TAG, "Activation approval denied: ${store.load().lastError}")
+            return false
+          }
+        }
         "recordingRetention" -> store.setRecordingRetention(value.toBoolean())
         "evaluationStatus" -> store.setEvaluationStatus(value)
-        else -> {
-          Log.w(TAG, "Unknown profile field: $field")
-          current
-        }
+        else -> Log.w(TAG, "Unknown profile field: $field")
       }
       true
     } catch (e: Exception) {

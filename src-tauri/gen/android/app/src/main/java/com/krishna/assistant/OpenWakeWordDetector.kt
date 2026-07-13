@@ -9,10 +9,12 @@ import android.util.Log
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.nio.ShortBuffer
+import java.security.MessageDigest
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
 import kotlin.concurrent.thread
 import org.json.JSONObject
+import org.tensorflow.lite.DataType
 import org.tensorflow.lite.Interpreter
 import org.tensorflow.lite.support.common.FileUtil
 
@@ -186,8 +188,10 @@ class OpenWakeWordDetector(
         return false
       }
 
-      val inputShape = interpreter?.getInputTensor(0)?.shape() ?: intArrayOf()
-      val outputShape = interpreter?.getOutputTensor(0)?.shape() ?: intArrayOf()
+      val inputTensor = interpreter!!.getInputTensor(0)
+      val outputTensor = interpreter!!.getOutputTensor(0)
+      val inputShape = inputTensor.shape()
+      val outputShape = outputTensor.shape()
       val manifestError = manifest!!.validate(inputShape, outputShape)
       if (manifestError != null) {
         validationError = "Model-manifest mismatch: $manifestError"
@@ -197,6 +201,50 @@ class OpenWakeWordDetector(
         interpreter = null
         return false
       }
+
+      // Dtype verification
+      if (inputTensor.dataType() != DataType.FLOAT32) {
+        validationError = "Input dtype mismatch: expected FLOAT32, got ${inputTensor.dataType()}"
+        lastError = validationError!!
+        Log.e(TAG, lastError)
+        interpreter?.close()
+        interpreter = null
+        return false
+      }
+      if (outputTensor.dataType() != DataType.FLOAT32) {
+        validationError = "Output dtype mismatch: expected FLOAT32, got ${outputTensor.dataType()}"
+        lastError = validationError!!
+        Log.e(TAG, lastError)
+        interpreter?.close()
+        interpreter = null
+        return false
+      }
+
+      // SHA-256 verification
+      if (manifest!!.sha256.isNotEmpty()) {
+        try {
+          val modelBytes = context.assets.open(config.modelPath).use { it.readBytes() }
+          val digest = MessageDigest.getInstance("SHA-256")
+          val actualSha = digest.digest(modelBytes).joinToString("") { "%02x".format(it) }
+          if (actualSha != manifest!!.sha256) {
+            validationError = "Model SHA-256 mismatch: expected ${manifest!!.sha256}, got $actualSha"
+            lastError = validationError!!
+            Log.e(TAG, lastError)
+            interpreter?.close()
+            interpreter = null
+            return false
+          }
+          Log.i(TAG, "SHA-256 verified: $actualSha")
+        } catch (e: Exception) {
+          validationError = "SHA-256 verification failed: ${e.message}"
+          lastError = validationError!!
+          Log.e(TAG, lastError)
+          interpreter?.close()
+          interpreter = null
+          return false
+        }
+      }
+
       Log.i(TAG, "Model validated: version=${manifest!!.modelVersion}, input=${
         inputShape.joinToString()}, output=${outputShape.joinToString()}")
 
@@ -303,7 +351,6 @@ class OpenWakeWordDetector(
 
         // Copy ring buffer into contiguous normalized float array
         if (ringFilled) {
-          val tailLen = contextSamples - ringWritePos
           for (i in 0 until contextSamples) {
             val srcIdx = (ringWritePos + i) % contextSamples
             inputFloat[i] = ringBuffer[srcIdx] / 32768.0f

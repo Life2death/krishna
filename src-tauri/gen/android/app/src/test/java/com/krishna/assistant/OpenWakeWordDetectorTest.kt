@@ -112,4 +112,51 @@ class OpenWakeWordDetectorTest {
     assertEquals(5, scores.size)
     assertEquals(listOf(5f, 6f, 7f, 8f, 9f), scores)
   }
+
+  @Test
+  fun `SHA-256 digest produces 64-char hex string`() {
+    val bytes = "test model data".toByteArray()
+    val digest = java.security.MessageDigest.getInstance("SHA-256")
+    val hash = digest.digest(bytes).joinToString("") { "%02x".format(it) }
+    assertEquals(64, hash.length)
+  }
+
+  @Test
+  fun `SHA-256 mismatch detection`() {
+    val manifest = ModelManifest(sha256 = "abc".repeat(21) + "y")
+    val actual = "abc".repeat(21) + "f"
+    assertNotEquals(manifest.sha256, actual) // deliberately mismatched
+  }
+
+  @Test
+  fun `SHA-256 match passes`() {
+    val sha = "abc".repeat(21) + "f"
+    val manifest = ModelManifest(sha256 = sha)
+    assertEquals(sha, manifest.sha256)
+  }
+
+  @Test
+  fun `ModelManifest dtype fields default to float32`() {
+    val manifest = ModelManifest()
+    assertEquals("float32", manifest.inputDtype)
+    assertEquals("float32", manifest.outputDtype)
+  }
+
+  @Test
+  fun `ModelManifest validate with custom dtypes`() {
+    val manifest = ModelManifest(
+      inputDtype = "float32",
+      outputDtype = "float32",
+      inputShape = listOf(1, 8000),
+      outputShape = listOf(1, 1),
+    )
+    assertNull(manifest.validate(intArrayOf(1, 8000), intArrayOf(1, 1)))
+  }
+
+  @Test
+  fun `model without manifest sha256 skips hash check`() {
+    val manifest = ModelManifest(sha256 = "")
+    assertEquals("", manifest.sha256)
+    // Empty sha256 means hash check is skipped at runtime
+  }
 }

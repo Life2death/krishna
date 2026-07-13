@@ -5,95 +5,152 @@ import org.junit.Test
 
 class WakeWordProfileStoreTest {
 
+  private fun makeProfile(
+    evaluationStatus: String = "ready_for_approval",
+    modelVersion: String = "krishna-waveform-v1.0.0",
+    recall: Float = 0.85f,
+    falseWakeRate: Float = 0.05f,
+    positiveCount: Int = 150,
+    negativeCount: Int = 300,
+    environmentCount: Int = 5,
+    startedAt: Long = System.currentTimeMillis() - 72L * 3_600_000L,
+    recordingRetentionEnabled: Boolean = true,
+    evalModelVersion: String? = null,
+  ): WakeWordProfile {
+    return WakeWordProfile(
+      evaluationStatus = evaluationStatus,
+      modelVersion = modelVersion,
+      positiveCount = positiveCount,
+      negativeCount = negativeCount,
+      environmentCount = environmentCount,
+      startedAt = startedAt,
+      recordingRetentionEnabled = recordingRetentionEnabled,
+      evaluationResult = EvaluationResult(
+        recall = recall,
+        falseWakeRate = falseWakeRate,
+        modelVersion = evalModelVersion ?: modelVersion,
+      ),
+    )
+  }
+
   @Test
-  fun `default profile has correct initial values`() {
+  fun `valid profile passes all gates`() {
+    val profile = makeProfile()
+    assertNull(WakeWordProfileStore.validateActivationApproval(profile))
+  }
+
+  @Test
+  fun `wrong evaluation status is rejected`() {
+    val profile = makeProfile(evaluationStatus = "collecting")
+    val error = WakeWordProfileStore.validateActivationApproval(profile)
+    assertNotNull(error)
+    assertTrue(error!!.contains("evaluation status"))
+  }
+
+  @Test
+  fun `collecting status is rejected`() {
+    val profile = makeProfile(evaluationStatus = "collecting")
+    assertNotNull(WakeWordProfileStore.validateActivationApproval(profile))
+  }
+
+  @Test
+  fun `failed status is rejected`() {
+    val profile = makeProfile(evaluationStatus = "failed")
+    assertNotNull(WakeWordProfileStore.validateActivationApproval(profile))
+  }
+
+  @Test
+  fun `approved status is rejected (must not re-approve)`() {
+    val profile = makeProfile(evaluationStatus = "approved")
+    assertNotNull(WakeWordProfileStore.validateActivationApproval(profile))
+  }
+
+  @Test
+  fun `recall below 0-80 is rejected`() {
+    val profile = makeProfile(recall = 0.62f)
+    val error = WakeWordProfileStore.validateActivationApproval(profile)
+    assertNotNull(error)
+    assertTrue(error!!.contains("recall"))
+  }
+
+  @Test
+  fun `recall exactly 0-80 is accepted`() {
+    val profile = makeProfile(recall = 0.80f)
+    assertNull(WakeWordProfileStore.validateActivationApproval(profile))
+  }
+
+  @Test
+  fun `false-wake rate above 0-10 is rejected`() {
+    val profile = makeProfile(falseWakeRate = 0.30f)
+    val error = WakeWordProfileStore.validateActivationApproval(profile)
+    assertNotNull(error)
+    assertTrue(error!!.contains("false-wake rate"))
+  }
+
+  @Test
+  fun `false-wake rate exactly 0-10 is accepted`() {
+    val profile = makeProfile(falseWakeRate = 0.10f)
+    assertNull(WakeWordProfileStore.validateActivationApproval(profile))
+  }
+
+  @Test
+  fun `model version mismatch is rejected`() {
+    val profile = makeProfile(evalModelVersion = "old-model-v2.0.0")
+    val error = WakeWordProfileStore.validateActivationApproval(profile)
+    assertNotNull(error)
+    assertTrue(error!!.contains("model"))
+  }
+
+  @Test
+  fun `empty model version is rejected`() {
+    val profile = makeProfile(modelVersion = "")
+    assertNotNull(WakeWordProfileStore.validateActivationApproval(profile))
+  }
+
+  @Test
+  fun `recording retention disabled is rejected`() {
+    val profile = makeProfile(recordingRetentionEnabled = false)
+    val error = WakeWordProfileStore.validateActivationApproval(profile)
+    assertNotNull(error)
+    assertTrue(error!!.contains("retention"))
+  }
+
+  @Test
+  fun `insufficient positive clips is rejected`() {
+    val profile = makeProfile(positiveCount = 50)
+    val error = WakeWordProfileStore.validateActivationApproval(profile)
+    assertNotNull(error)
+    assertTrue(error!!.contains("positive"))
+  }
+
+  @Test
+  fun `insufficient negative clips is rejected`() {
+    val profile = makeProfile(negativeCount = 50)
+    val error = WakeWordProfileStore.validateActivationApproval(profile)
+    assertNotNull(error)
+    assertTrue(error!!.contains("negative"))
+  }
+
+  @Test
+  fun `insufficient environments is rejected`() {
+    val profile = makeProfile(environmentCount = 1)
+    val error = WakeWordProfileStore.validateActivationApproval(profile)
+    assertNotNull(error)
+    assertTrue(error!!.contains("environments"))
+  }
+
+  @Test
+  fun `insufficient hours elapsed is rejected`() {
+    val profile = makeProfile(startedAt = System.currentTimeMillis() - 1L)
+    val error = WakeWordProfileStore.validateActivationApproval(profile)
+    assertNotNull(error)
+    assertTrue(error!!.contains("hours"))
+  }
+
+  @Test
+  fun `default profile is collecting and fails all gates`() {
     val profile = WakeWordProfile()
-    assertFalse(profile.enabled)
-    assertEquals("", profile.modelVersion)
-    assertEquals(0L, profile.consentGrantedAt)
-    assertEquals(0, profile.positiveCount)
-    assertEquals(0, profile.negativeCount)
-    assertEquals(0, profile.environmentCount)
-    assertEquals(0L, profile.startedAt)
     assertEquals("collecting", profile.evaluationStatus)
-    assertEquals(0L, profile.activationApprovedAt)
-    assertEquals("", profile.lastError)
-    assertEquals("builtin_mic", profile.audioSource)
-    assertEquals(0.5f, profile.threshold, 0.001f)
-    assertEquals(0f, profile.lastScore, 0.001f)
-    assertEquals(0, profile.lastFrameCount)
-    assertEquals("idle", profile.lastDetectorState)
-    assertFalse(profile.recordingRetentionEnabled)
-  }
-
-  @Test
-  fun `profile copy correctly creates modified instance`() {
-    val profile = WakeWordProfile()
-    val modified = profile.copy(enabled = true, positiveCount = 100)
-    assertTrue(modified.enabled)
-    assertEquals(100, modified.positiveCount)
-    assertEquals(0, modified.negativeCount)
-  }
-
-  @Test
-  fun `readiness gate fails with insufficient samples`() {
-    val profile = WakeWordProfile()
-    assertFalse(
-      profile.positiveCount >= 100 &&
-      profile.negativeCount >= 200 &&
-      profile.environmentCount >= 3
-    )
-  }
-
-  @Test
-  fun `readiness gate passes with sufficient samples`() {
-    val profile = WakeWordProfile(
-      positiveCount = 100,
-      negativeCount = 200,
-      environmentCount = 5,
-    )
-    assertTrue(
-      profile.positiveCount >= 100 &&
-      profile.negativeCount >= 200 &&
-      profile.environmentCount >= 3
-    )
-  }
-
-  @Test
-  fun `readiness gate requires at least 48 hours`() {
-    val startedAt = 0L
-    val hoursElapsed = if (startedAt > 0L) {
-      (System.currentTimeMillis() - startedAt) / 3_600_000L
-    } else 0L
-    assertFalse(hoursElapsed >= 48)
-  }
-
-  @Test
-  fun `evaluationStatus transitions are valid`() {
-    val collecting = WakeWordProfile(evaluationStatus = "collecting")
-    assertEquals("collecting", collecting.evaluationStatus)
-    val ready = collecting.copy(evaluationStatus = "ready_for_evaluation")
-    assertEquals("ready_for_evaluation", ready.evaluationStatus)
-    val passed = ready.copy(evaluationStatus = "passed")
-    assertEquals("passed", passed.evaluationStatus)
-    val failed = ready.copy(evaluationStatus = "failed")
-    assertEquals("failed", failed.evaluationStatus)
-  }
-
-  @Test
-  fun `copy preserves unmodified fields`() {
-    val profile = WakeWordProfile(
-      enabled = true,
-      modelVersion = "v1.0",
-      consentGrantedAt = 1000L,
-      positiveCount = 50,
-      lastError = "test error",
-    )
-    val modified = profile.copy(negativeCount = 25)
-    assertEquals("v1.0", modified.modelVersion)
-    assertEquals(1000L, modified.consentGrantedAt)
-    assertEquals(50, modified.positiveCount)
-    assertEquals(25, modified.negativeCount)
-    assertEquals("test error", modified.lastError)
+    assertNotNull(WakeWordProfileStore.validateActivationApproval(profile))
   }
 }

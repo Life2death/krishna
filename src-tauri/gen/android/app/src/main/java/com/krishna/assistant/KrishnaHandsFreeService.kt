@@ -97,8 +97,15 @@ class KrishnaHandsFreeService : Service(), RecognitionListener {
     handler.removeCallbacksAndMessages(null)
     handler.postDelayed({
       if (destroyed) return@postDelayed
-      wakeDetectorActive = true
+
       val profile = WakeWordProfileStore(this).load()
+      if (!profile.enabled) {
+        Log.i(TAG, "Wake word is disabled in settings — not starting detector")
+        updateNotification("Enable Wake Word in Settings to start hands-free", error = true)
+        return@postDelayed
+      }
+
+      wakeDetectorActive = true
 
       if (!OpenWakeWordDetector.isAvailable(this)) {
         Log.w(TAG, "OpenWakeWord model not available — stopping hands-free")
@@ -120,9 +127,6 @@ class KrishnaHandsFreeService : Service(), RecognitionListener {
           )
         }
         owwDetector!!.setMode(detectorMode)
-        if (detectorMode == DetectorMode.SHADOW && !profile.enabled) {
-          owwDetector!!.profileStore.setEnabled(true)
-        }
         if (owwDetector!!.start()) {
           Log.i(TAG, "OpenWakeWord started: mode=$detectorMode")
           updateNotification(

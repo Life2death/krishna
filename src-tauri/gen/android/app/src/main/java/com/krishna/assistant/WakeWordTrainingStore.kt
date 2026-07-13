@@ -68,12 +68,17 @@ class WakeWordTrainingStore(context: Context) {
 
     try {
       val totalSamples = sampleRate * durationMs / 1000
+      if (totalSamples <= 0) {
+        Log.w(TAG, "Invalid duration: $durationMs ms at $sampleRate Hz")
+        return null
+      }
+
       val minBuffer = AudioRecord.getMinBufferSize(
         sampleRate, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT,
       )
       if (minBuffer <= 0) {
-        Log.w(TAG, "AudioRecord minBuffer invalid ($minBuffer); using silence fallback")
-        return writeSilenceClip(id, label, wavFile, labelFile, totalSamples, sampleRate)
+        Log.w(TAG, "AudioRecord minBuffer invalid ($minBuffer)")
+        return null
       }
 
       val recorder = AudioRecord(
@@ -84,9 +89,9 @@ class WakeWordTrainingStore(context: Context) {
         minBuffer * 4,
       )
       if (recorder.state != AudioRecord.STATE_INITIALIZED) {
-        Log.w(TAG, "AudioRecord not initialized; using silence fallback")
+        Log.w(TAG, "AudioRecord not initialized")
         recorder.release()
-        return writeSilenceClip(id, label, wavFile, labelFile, totalSamples, sampleRate)
+        return null
       }
 
       recorder.startRecording()
@@ -99,6 +104,11 @@ class WakeWordTrainingStore(context: Context) {
       }
       recorder.stop()
       recorder.release()
+
+      if (totalRead < totalSamples / 2) {
+        Log.w(TAG, "Incomplete capture: read $totalRead/$totalSamples samples")
+        return null
+      }
 
       writeWavFromShorts(pcmShorts, wavFile, sampleRate)
       labelFile.writeText(label.trim())
@@ -114,29 +124,7 @@ class WakeWordTrainingStore(context: Context) {
       Log.e(TAG, "AudioRecord capture failed", e)
       try { wavFile.delete() } catch (_: Exception) {}
       try { labelFile.delete() } catch (_: Exception) {}
-      return writeSilenceClip(id, label, wavFile, labelFile, sampleRate * durationMs / 1000, sampleRate)
-    }
-  }
-
-  private fun writeSilenceClip(
-    id: String, label: String, wavFile: File, labelFile: File,
-    totalSamples: Int, sampleRate: Int,
-  ): TrainingClip? {
-    return try {
-      val pcm = ShortArray(totalSamples)
-      writeWavFromShorts(pcm, wavFile, sampleRate)
-      labelFile.writeText(label.trim())
-      val sha256 = computeSha256(wavFile)
-      val clip = TrainingClip(
-        id = id, label = label.trim(), filePath = wavFile.absolutePath,
-        sha256 = sha256, recordedAt = System.currentTimeMillis(),
-        durationMs = totalSamples * 1000 / sampleRate, sampleRate = sampleRate,
-      )
-      Log.i(TAG, "Silence fallback clip: $id label=$label")
-      clip
-    } catch (e: Exception) {
-      Log.e(TAG, "Silence fallback also failed", e)
-      null
+      return null
     }
   }
 

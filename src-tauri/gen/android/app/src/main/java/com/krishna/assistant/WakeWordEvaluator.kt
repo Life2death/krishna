@@ -44,9 +44,7 @@ class WakeWordEvaluator(private val context: Context) {
       interpreter.allocateTensors()
 
       val inp = interpreter.getInputTensor(0)
-      val out = interpreter.getOutputTensor(0)
       val inpShape = inp.shape()
-      val outShape = out.shape()
 
       // Validate input shape matches expected [1, 8000]
       if (inpShape.size != 2 || inpShape[0] != 1 || inpShape[1] != CONTEXT_SAMPLES) {

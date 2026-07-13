@@ -1,6 +1,6 @@
 import { STORAGE_KEYS } from "@/config";
 
-export type EvaluationStatus = "collecting" | "ready_for_evaluation" | "passed" | "failed";
+export type EvaluationStatus = "collecting" | "ready_for_approval" | "approved" | "failed";
 export type AudioSource = "builtin_mic" | "bluetooth_sco";
 
 export interface EvaluationResult {
@@ -184,20 +184,23 @@ export const updateEvaluationStatus = async (status: EvaluationStatus): Promise<
 
 export const updateActivationApproved = async (approved: boolean): Promise<WakeWordSettings> => {
   if (isAndroid()) {
-    try {
-      await bridgeInvoke("android_update_wake_word_field", {
-        field: "activationApproved",
-        value: String(approved),
-      });
-    } catch { /* fallback */ }
+    const success = await bridgeInvoke<boolean>("android_update_wake_word_field", {
+      field: "activationApproved",
+      value: String(approved),
+    });
+    const current = await getWakeWordSettings();
+    if (!success) {
+      throw new Error(current.lastError || "Activation approval denied");
+    }
+    return current;
   }
   const current = await getWakeWordSettings();
   const updated = {
     ...current,
     activationApprovedAt: approved ? Date.now() : 0,
-    evaluationStatus: approved ? "passed" : current.evaluationStatus,
+    evaluationStatus: approved ? "approved" : current.evaluationStatus,
   };
-  if (!isAndroid()) saveLocal(updated);
+  saveLocal(updated);
   return updated;
 };
 

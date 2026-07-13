@@ -81,8 +81,14 @@ export const WakeWordSettings = () => {
   };
 
   const handleApprove = async () => {
-    const updated = await updateActivationApproved(true);
-    setSettings(updated);
+    try {
+      const updated = await updateActivationApproved(true);
+      setSettings(updated);
+    } catch (err: unknown) {
+      alert("Approval denied: " + (err instanceof Error ? err.message : String(err)));
+      const updated = await getWakeWordSettings();
+      setSettings(updated);
+    }
   };
 
   const handleReset = async () => {
@@ -211,29 +217,52 @@ export const WakeWordSettings = () => {
           )}
 
           {settings.evaluationResult.sampleCount > 0 && (
-            <div className="text-xs space-y-1 text-muted-foreground font-mono mt-2">
-              <p>Last evaluation: recall={settings.evaluationResult.recall.toFixed(3)} falseWakeRate={settings.evaluationResult.falseWakeRate.toFixed(3)} samples={settings.evaluationResult.sampleCount} model={settings.evaluationResult.modelVersion}</p>
+            <div className="text-xs space-y-1 font-mono mt-2">
+              <p className="text-muted-foreground">Last evaluation: recall={settings.evaluationResult.recall.toFixed(3)} falseWakeRate={settings.evaluationResult.falseWakeRate.toFixed(3)} samples={settings.evaluationResult.sampleCount} model={settings.evaluationResult.modelVersion}</p>
             </div>
           )}
 
-          {settings.evaluationStatus === "passed" && settings.activationApprovedAt === 0 && (
+          {settings.evaluationStatus === "ready_for_approval" && settings.activationApprovedAt === 0 && (
             <div className="space-y-2">
               <p className="text-xs text-green-600">Evaluation passed. Awaiting your approval.</p>
-              <Button size="sm" onClick={handleApprove}>
-                Approve and enable OpenWakeWord
+              {!settings.recordingRetentionEnabled && (
+                <p className="text-xs text-amber-500">Enable "Keep recordings" above before approving.</p>
+              )}
+              <Button
+                size="sm"
+                onClick={handleApprove}
+                disabled={!settings.recordingRetentionEnabled}
+              >
+                Approve and activate wake word
               </Button>
             </div>
           )}
 
-          {settings.activationApprovedAt > 0 && (
-            <p className="text-xs text-green-600">OpenWakeWord is approved and active.</p>
+          {settings.evaluationStatus === "approved" && (
+            <p className="text-xs text-green-600">Wake word is approved and active.</p>
           )}
 
           {settings.evaluationStatus === "failed" && (
-            <p className="text-xs text-red-500">
-              Evaluation did not meet quality targets. Collect more samples and try again.
-            </p>
+            <div className="space-y-2">
+              <p className="text-xs text-red-500">
+                Evaluation did not meet quality targets. Current model has recall={settings.evaluationResult.recall.toFixed(3)} and falseWakeRate={settings.evaluationResult.falseWakeRate.toFixed(3)} — targets are recall≥0.80 and falseWakeRate≤0.10. Collect more high-quality clips then retrain (see below).
+              </p>
+            </div>
           )}
+
+          <div className="mt-3 space-y-2 border-t border-border/10 pt-3">
+            <p className="text-xs font-medium">Retraining workflow</p>
+            <p className="text-xs text-muted-foreground">
+              Local clips do not automatically improve the model. To retrain:
+            </p>
+            <ol className="text-xs text-muted-foreground space-y-1 list-decimal list-inside">
+              <li>Pull clips from device: <code className="bg-muted/20 px-1">adb pull /sdcard/Android/data/com.krishna.assistant/files/wake_word_training/ training/data/</code></li>
+              <li>Run training: <code className="bg-muted/20 px-1">python training/openwakeword/train_model.py</code></li>
+              <li>Verify: <code className="bg-muted/20 px-1">python training/openwakeword/verify_export.py</code></li>
+              <li>Copy <code className="bg-muted/20 px-1">export/model.tflite</code> and <code className="bg-muted/20 px-1">export/manifest.json</code> to Android assets</li>
+              <li>Rebuild and re-run evaluation</li>
+            </ol>
+          </div>
         </div>
       )}
 

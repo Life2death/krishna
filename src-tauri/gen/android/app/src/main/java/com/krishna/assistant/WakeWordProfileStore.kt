@@ -38,6 +38,30 @@ class WakeWordProfileStore(context: Context) {
     private const val TAG = "WakeWordProfile"
     private const val PREFS_NAME = "krishna_wake_word_profile"
     private const val KEY_PROFILE_JSON = "profile_json"
+
+    fun validateActivationApproval(profile: WakeWordProfile): String? {
+      if (profile.evaluationStatus != "ready_for_approval") {
+        return "Cannot approve: evaluation status is '${profile.evaluationStatus}', need 'ready_for_approval'"
+      }
+      if (!profile.recordingRetentionEnabled) {
+        return "Cannot approve: recording retention must be enabled to keep evaluation clips"
+      }
+      if (profile.modelVersion.isEmpty() || profile.evaluationResult.modelVersion != profile.modelVersion) {
+        return "Cannot approve: evaluation version '${profile.evaluationResult.modelVersion}' does not match current model '${profile.modelVersion}'"
+      }
+      if (profile.evaluationResult.recall < 0.80f) {
+        return "Cannot approve: recall ${profile.evaluationResult.recall} < 0.80 required"
+      }
+      if (profile.evaluationResult.falseWakeRate > 0.10f) {
+        return "Cannot approve: false-wake rate ${profile.evaluationResult.falseWakeRate} > 0.10 required"
+      }
+      val hoursElapsed = if (profile.startedAt > 0L) (System.currentTimeMillis() - profile.startedAt) / 3_600_000L else 0L
+      if (profile.positiveCount < 100) return "Readiness gate not met: ${profile.positiveCount}/100 positive clips"
+      if (profile.negativeCount < 200) return "Readiness gate not met: ${profile.negativeCount}/200 negative clips"
+      if (profile.environmentCount < 3) return "Readiness gate not met: ${profile.environmentCount}/3 environments"
+      if (hoursElapsed < 48) return "Readiness gate not met: $hoursElapsed/48 hours elapsed"
+      return null
+    }
   }
 
   private val prefs: SharedPreferences =
@@ -171,11 +195,17 @@ class WakeWordProfileStore(context: Context) {
     return cachedProfile!!
   }
 
-  fun setActivationApproved(): WakeWordProfile {
+  fun setActivationApproved(): WakeWordProfile? {
     val current = load()
+    val error = validateActivationApproval(current)
+    if (error != null) {
+      Log.w(TAG, error)
+      save(current.copy(lastError = error))
+      return null
+    }
     save(current.copy(
       activationApprovedAt = System.currentTimeMillis(),
-      evaluationStatus = "passed",
+      evaluationStatus = "approved",
     ))
     return cachedProfile!!
   }
@@ -221,7 +251,7 @@ class WakeWordProfileStore(context: Context) {
     val passed = eval.recall >= 0.8f && eval.falseWakeRate <= 0.1f
     save(current.copy(
       evaluationResult = eval,
-      evaluationStatus = if (passed) "ready_for_evaluation" else "failed",
+      evaluationStatus = if (passed) "ready_for_approval" else "failed",
     ))
     return cachedProfile!!
   }

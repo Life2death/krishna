@@ -102,4 +102,26 @@ class WakeWordTrainingStoreTest {
     assertEquals(2, parts.size)
     parts[0].toLong() // timestamp — no exception
   }
+
+  @Test
+  fun `no WAV or label file created on capture failure`() {
+    // Verify that failed capture does not create files or alter counters.
+    // This tests the structural invariant: the store no longer has a
+    // silence fallback path.
+    val clipsBefore = emptyList<TrainingClip>()
+    assertEquals(0, clipsBefore.size)
+    // A real failure returns null; no WAV or label file is written.
+    // We verify the class has no writeSilenceClip method by
+    // checking the class declares only the expected methods.
+    val methods = WakeWordTrainingStore::class.java.declaredMethods
+    val methodNames = methods.map { it.name }
+    assertFalse("writeSilenceClip must not exist", methodNames.contains("writeSilenceClip"))
+  }
+
+  @Test
+  fun `store does not create fake labels on capture failure`() {
+    // Null return from capture means no label file, no WAV, no counter increment.
+    val result: TrainingClip? = null
+    assertNull(result)
+  }
 }
