@@ -1,0 +1,2 @@
+Dev placeholder. Real bundle is produced by 'npm run build:bundle' (gitignored).
+In dev the app uses the externally-run brain on 127.0.0.1:8787.
