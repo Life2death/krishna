@@ -21,6 +21,11 @@ export default defineConfig(async () => ({
       "@krishna/core/types/saved-search": path.resolve(__dirname, "packages/core/types/saved-search.ts"),
       "@krishna/core/database/driver": path.resolve(__dirname, "packages/core/database/driver.ts"),
       "@krishna/core/database": path.resolve(__dirname, "packages/core/database/index.ts"),
+      // The sync engine also calls getDatabase() — without these two aliases it resolves via the
+      // node_modules symlink into its own duplicate driver chunk, so setDriver() from startup.ts
+      // never reaches it and every sync cycle fails with "SqlDriver not set" (mobile especially).
+      "@krishna/core/sync/create-transport": path.resolve(__dirname, "packages/core/sync/create-transport.ts"),
+      "@krishna/core/sync": path.resolve(__dirname, "packages/core/sync/index.ts"),
       "@krishna/core/http": path.resolve(__dirname, "packages/core/http.ts"),
       "@krishna/core/settings": path.resolve(__dirname, "packages/core/settings.ts"),
       "@krishna/core/secrets": path.resolve(__dirname, "packages/core/secrets.ts"),

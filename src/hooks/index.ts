@@ -22,3 +22,4 @@ export * from "./useMobileSpeech";
 export * from "./useSystemHealth";
 export * from "./useVoiceStatus";
 export * from "./useVoiceEnroll";
+export * from "./useLiveVoiceSession";

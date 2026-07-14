@@ -77,6 +77,7 @@ interface KrishnaContextType {
   processCommand: (transcription: string, opts?: ProcessCommandOptions) => Promise<void>;
   stopSpeaking: () => void;
   maybeLearnStyle: () => Promise<void>;
+  forceStyleLearn: () => Promise<boolean>;
   pendingCommand: string | null;
   lastError: string | null;
   clearLastError: () => void;
@@ -654,13 +655,16 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
   // Passively distil how the user talks into a style-profile memory. Throttled
   // internally; safe to call after every turn (classic or live). Uses the
   // configured AI provider for a short one-shot summary.
-  const maybeLearnStyle = useCallback(async () => {
-    if (!selectedAIProvider?.provider) return;
+  // Builds an LLM caller bound to the configured provider, or null if no
+  // provider is selected/available. Shared by the passive loop and the
+  // "Improve now" button so provider logic lives in one place.
+  const buildStyleRunLLM = useCallback((): RunLLM | null => {
+    if (!selectedAIProvider?.provider) return null;
     const provider = allAiProviders.find(
       (p) => p.id === selectedAIProvider.provider,
     );
-    if (!provider) return;
-    const runLLM: RunLLM = async (systemPrompt, userMessage) => {
+    if (!provider) return null;
+    return async (systemPrompt, userMessage) => {
       let out = "";
       for await (const chunk of fetchAIResponse({
         provider,
@@ -676,8 +680,22 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
       }
       return out;
     };
-    await runStyleDistillation(runLLM);
   }, [selectedAIProvider, allAiProviders]);
+
+  const maybeLearnStyle = useCallback(async () => {
+    const runLLM = buildStyleRunLLM();
+    if (!runLLM) return;
+    await runStyleDistillation(runLLM);
+  }, [buildStyleRunLLM]);
+
+  // Force an immediate style distillation (bypasses throttling and the passive
+  // toggle). Returns whether the profile was updated. Used by the
+  // Self-Improvement settings "Improve now" button.
+  const forceStyleLearn = useCallback(async (): Promise<boolean> => {
+    const runLLM = buildStyleRunLLM();
+    if (!runLLM) return false;
+    return runStyleDistillation(runLLM, { force: true });
+  }, [buildStyleRunLLM]);
 
   const recordTurn = async (userText: string, assistantText: string) => {
     if (!userText && !assistantText) return;
@@ -2445,6 +2463,7 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
           status, lastSpoken, streamingReply,
           processCommand, stopSpeaking,
           maybeLearnStyle,
+          forceStyleLearn,
           pendingCommand,
           lastError, clearLastError,
           voice, setVoice,

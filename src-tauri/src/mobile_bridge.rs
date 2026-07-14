@@ -483,15 +483,104 @@ struct TursoResponseDetail {
 
 #[derive(Debug, Deserialize)]
 struct TursoExecuteResult {
+    // Turso column descriptors ({name, decltype}); kept as raw JSON since the
+    // TS layer reconstructs column names from its own DDL and never reads these.
     #[serde(default)]
-    cols: Vec<TursoColumn>,
+    cols: Vec<serde_json::Value>,
+    // Each cell is a Hrana typed value: {"type":"text"|"integer"|"float"|"null","value":…}.
     #[serde(default)]
     rows: Vec<Vec<serde_json::Value>>,
 }
 
-#[derive(Debug, Deserialize)]
-struct TursoColumn {
-    name: String,
+/// Build the Turso HTTP pipeline endpoint from a stored sync URL.
+///
+/// Sync URLs are stored with the `libsql://` scheme (what the JS
+/// `@libsql/client` expects), but `reqwest` only speaks HTTP and rejects an
+/// unknown scheme with "builder error for url". The libsql HTTP pipeline is
+/// served over TLS at the same host, so rewrite `libsql://`/`wss://` → `https://`
+/// (and `ws://` → `http://`) before appending the pipeline path.
+fn turso_pipeline_url(url: &str) -> String {
+    let base = url.trim_end_matches('/');
+    let https = if let Some(rest) = base.strip_prefix("libsql://") {
+        format!("https://{}", rest)
+    } else if let Some(rest) = base.strip_prefix("wss://") {
+        format!("https://{}", rest)
+    } else if let Some(rest) = base.strip_prefix("ws://") {
+        format!("http://{}", rest)
+    } else {
+        base.to_string()
+    };
+    format!("{}/v2/pipeline", https)
+}
+
+/// Format a reqwest error with its full source chain, plus the coarse reqwest
+/// category flags. reqwest's top-level Display is often just "error sending
+/// request for url (…)" and hides the real cause (DNS vs connect vs TLS) in the
+/// `source()` chain — surface all of it so mobile sync failures are diagnosable.
+fn fmt_reqwest_err(e: &reqwest::Error) -> String {
+    let mut parts = vec![format!("{}", e)];
+    let mut src = std::error::Error::source(e);
+    while let Some(s) = src {
+        parts.push(format!("caused by: {}", s));
+        src = s.source();
+    }
+    let flags = format!(
+        "[connect={} timeout={} request={} body={} builder={}]",
+        e.is_connect(),
+        e.is_timeout(),
+        e.is_request(),
+        e.is_body(),
+        e.is_builder(),
+    );
+    format!("{} {}", parts.join(" | "), flags)
+}
+
+/// Shared reqwest client for the Turso sync transport. An explicit connect
+/// timeout turns silent Android connection stalls into fast, logged errors.
+fn turso_client() -> Result<reqwest::Client, String> {
+    reqwest::Client::builder()
+        .connect_timeout(std::time::Duration::from_secs(10))
+        .timeout(std::time::Duration::from_secs(30))
+        .build()
+        .map_err(|e| format!("Failed to build HTTP client: {}", fmt_reqwest_err(&e)))
+}
+
+/// Encode a JS-supplied scalar into a Hrana typed value. The Turso HTTP pipeline
+/// requires statement args as `{"type":…,"value":…}` objects — sending raw JSON
+/// scalars makes Turso reject the request, which surfaces as an unparseable
+/// (results-less) error body. Integers must be sent as strings per the Hrana spec.
+fn to_hrana_arg(v: &serde_json::Value) -> serde_json::Value {
+    use serde_json::json;
+    match v {
+        serde_json::Value::Null => json!({ "type": "null" }),
+        serde_json::Value::Bool(b) => json!({ "type": "integer", "value": if *b { "1" } else { "0" } }),
+        serde_json::Value::Number(n) => {
+            if n.is_i64() || n.is_u64() {
+                json!({ "type": "integer", "value": n.to_string() })
+            } else {
+                json!({ "type": "float", "value": n.as_f64().unwrap_or(0.0) })
+            }
+        }
+        serde_json::Value::String(s) => json!({ "type": "text", "value": s }),
+        // Arrays/objects have no SQLite-native scalar type — store as JSON text.
+        other => json!({ "type": "text", "value": other.to_string() }),
+    }
+}
+
+/// Decode one Hrana typed value cell back into a plain JSON scalar for the TS
+/// layer (which expects raw values, not `{"type":…,"value":…}` wrappers).
+fn from_hrana_cell(cell: &serde_json::Value) -> serde_json::Value {
+    let kind = cell.get("type").and_then(|x| x.as_str()).unwrap_or("null");
+    match kind {
+        "integer" => cell
+            .get("value")
+            .and_then(|x| x.as_str())
+            .and_then(|s| s.parse::<i64>().ok())
+            .map(serde_json::Value::from)
+            .unwrap_or(serde_json::Value::Null),
+        "float" | "text" => cell.get("value").cloned().unwrap_or(serde_json::Value::Null),
+        _ => serde_json::Value::Null,
+    }
 }
 
 #[tauri::command]
@@ -506,28 +595,34 @@ pub async fn sync_exec(
             stmt_type: "execute".to_string(),
             stmt: TursoStmt {
                 sql,
-                args: args.map(|a| {
-                    a.into_iter()
-                        .map(|v| if v.is_null() { serde_json::Value::Null } else { v })
-                        .collect()
-                }),
+                args: args.map(|a| a.iter().map(to_hrana_arg).collect()),
             },
         }],
     };
 
-    let client = reqwest::Client::new();
+    let client = turso_client()?;
     let resp = client
-        .post(format!("{}/v2/pipeline", url.trim_end_matches('/')))
+        .post(turso_pipeline_url(&url))
         .header("Authorization", format!("Bearer {}", token))
         .json(&payload)
         .send()
         .await
-        .map_err(|e| format!("HTTP request failed: {}", e))?;
+        .map_err(|e| format!("HTTP request failed: {}", fmt_reqwest_err(&e)))?;
 
-    let body: TursoResponse = resp
-        .json()
+    // Read the body as text first so a shape mismatch (e.g. a Turso error object
+    // with no `results` field) surfaces the actual body instead of an opaque
+    // "error decoding response body".
+    let body_text = resp
+        .text()
         .await
-        .map_err(|e| format!("Failed to parse Turso response: {}", e))?;
+        .map_err(|e| format!("HTTP request failed reading body: {}", fmt_reqwest_err(&e)))?;
+    let body: TursoResponse = serde_json::from_str(&body_text).map_err(|e| {
+        format!(
+            "Failed to parse Turso response: {} | body: {}",
+            e,
+            body_text.chars().take(400).collect::<String>()
+        )
+    })?;
 
     let result = body.results.into_iter().next().ok_or("Empty results")?;
     if result.result_type != "ok" {
@@ -537,7 +632,16 @@ pub async fn sync_exec(
     if detail.detail_type != "execute" {
         return Err(format!("Unexpected response type: {}", detail.detail_type));
     }
-    Ok(detail.result.map(|r| r.rows).unwrap_or_default())
+    // Decode each Hrana typed cell back to a plain scalar for the TS layer.
+    Ok(detail
+        .result
+        .map(|r| {
+            r.rows
+                .into_iter()
+                .map(|row| row.iter().map(from_hrana_cell).collect())
+                .collect()
+        })
+        .unwrap_or_default())
 }
 
 #[tauri::command]
@@ -556,19 +660,26 @@ pub async fn sync_exec_multiple(
             .collect(),
     };
 
-    let client = reqwest::Client::new();
+    let client = turso_client()?;
     let resp = client
-        .post(format!("{}/v2/pipeline", url.trim_end_matches('/')))
+        .post(turso_pipeline_url(&url))
         .header("Authorization", format!("Bearer {}", token))
         .json(&payload)
         .send()
         .await
-        .map_err(|e| format!("HTTP request failed: {}", e))?;
+        .map_err(|e| format!("HTTP request failed: {}", fmt_reqwest_err(&e)))?;
 
-    let body: TursoResponse = resp
-        .json()
+    let body_text = resp
+        .text()
         .await
-        .map_err(|e| format!("Failed to parse Turso response: {}", e))?;
+        .map_err(|e| format!("HTTP request failed reading body: {}", fmt_reqwest_err(&e)))?;
+    let body: TursoResponse = serde_json::from_str(&body_text).map_err(|e| {
+        format!(
+            "Failed to parse Turso response: {} | body: {}",
+            e,
+            body_text.chars().take(400).collect::<String>()
+        )
+    })?;
 
     for result in &body.results {
         if result.result_type != "ok" {

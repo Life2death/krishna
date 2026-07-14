@@ -17,3 +17,4 @@ export * from "./VoicePhrasesSettings";
 export * from "./NaukriSearchesSettings";
 export * from "./LiveVoiceSettings";
 export * from "./WakeWordSettings";
+export * from "./LearningSettings";

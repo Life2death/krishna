@@ -1,5 +1,5 @@
 import { getRecentActivity } from "@/lib/database";
-import { getAllMemories, createMemory } from "@/lib/repo-bound";
+import { getAllMemories, createMemory, deleteMemory } from "@/lib/repo-bound";
 
 /**
  * Passive learning loop: distills how the user talks (tone, phrasing, recurring
@@ -12,6 +12,7 @@ import { getAllMemories, createMemory } from "@/lib/repo-bound";
 export const STYLE_MEMORY_KEY = "communication_style";
 
 const LAST_RUN_KEY = "krishna_style_last_run";
+const PASSIVE_ENABLED_KEY = "krishna_passive_learning_enabled";
 const MIN_NEW_UTTERANCES = 12; // run after this many new user utterances
 const MIN_INTERVAL_MS = 10 * 60 * 1000; // …and at most once per 10 min
 const MIN_TOTAL_UTTERANCES = 4; // need at least this much signal to say anything
@@ -32,6 +33,27 @@ function getLastRun(): number {
 function setLastRun(ts: number): void {
   try {
     localStorage.setItem(LAST_RUN_KEY, String(ts));
+  } catch {
+    /* ignore */
+  }
+}
+
+/**
+ * Whether the passive style-learning loop is allowed to run. Defaults to true;
+ * only an explicit "false" (set via the Self-Improvement settings toggle)
+ * disables it. Safe in non-browser/test environments.
+ */
+export function isPassiveLearningEnabled(): boolean {
+  try {
+    return localStorage.getItem(PASSIVE_ENABLED_KEY) !== "false";
+  } catch {
+    return true;
+  }
+}
+
+export function setPassiveLearningEnabled(enabled: boolean): void {
+  try {
+    localStorage.setItem(PASSIVE_ENABLED_KEY, enabled ? "true" : "false");
   } catch {
     /* ignore */
   }
@@ -74,6 +96,24 @@ async function saveStyleProfile(profile: string): Promise<void> {
   });
 }
 
+/**
+ * Forgets the learned communication-style profile so Krishna re-learns from
+ * scratch. Deletes the underlying confirmed memory via the shared data layer.
+ * Returns true if a profile existed and was removed.
+ */
+export async function forgetStyleProfile(): Promise<boolean> {
+  const mems = await getAllMemories();
+  const m = mems.find((x) => (x.key ?? "").toLowerCase() === STYLE_MEMORY_KEY);
+  if (!m?.id) return false;
+  await deleteMemory(m.id);
+  try {
+    localStorage.removeItem(LAST_RUN_KEY);
+  } catch {
+    /* ignore */
+  }
+  return true;
+}
+
 export function buildDistillPrompts(
   utterances: string[],
   existing: string | null,
@@ -103,6 +143,10 @@ export async function runStyleDistillation(
 ): Promise<boolean> {
   try {
     const now = Date.now();
+
+    // Passive runs honour the user's toggle; the "Improve now" button (force)
+    // is always allowed.
+    if (!opts?.force && !isPassiveLearningEnabled()) return false;
 
     if (!opts?.force) {
       const lastRun = getLastRun();

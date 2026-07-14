@@ -25,7 +25,7 @@ import {
   VoiceMaxTokensInput,
   VoiceModelInput,
 } from "@/pages/responses/components";
-import { CreateSkillDialog, PersonaSelector, LiveVoiceSettings, WakeWordSettings } from "./components";
+import { CreateSkillDialog, PersonaSelector, LiveVoiceSettings, WakeWordSettings, LearningSettings } from "./components";
 import { PageLayout } from "@/layouts";
 import { Button, Header } from "@/components";
 import { SaveIcon, CheckIcon } from "lucide-react";
@@ -135,6 +135,9 @@ const Settings = () => {
 
       {/* Voice ID */}
       <VoiceIdSettings />
+
+      {/* Self-Improvement (passive style learning) */}
+      <LearningSettings />
 
       {/* Skill Generation */}
       <div className="border-t pt-4">
