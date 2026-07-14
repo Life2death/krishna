@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { useKrishna, useMobileSpeech, useLiveVoiceSession } from "@/hooks";
 import { useApp as useAppContext } from "@/contexts";
+import WakeWordMeter from "./components/WakeWordMeter";
 import {
   getLiveVoiceSettings,
   updateLiveVoiceProvider,
@@ -249,6 +250,11 @@ export default function MobileHome() {
         ) : (
           <p className="text-2xl font-semibold text-primary">Krishna</p>
         )}
+      </div>
+
+      {/* Wake-word confidence meter — visible in both modes */}
+      <div className="w-full max-w-xs mx-auto mb-2">
+        <WakeWordMeter />
       </div>
 
       {/* One big mic — drives Classic tap-to-talk or the Live session */}

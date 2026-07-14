@@ -434,7 +434,9 @@ export async function executeAction(
 
     return {
       kind: "answer",
-      spokenResponse: result.output || "I couldn't find a route.",
+      // Prefer the tool's own message (e.g. "I don't have your home address saved
+      // yet…") over the generic fallback so the user learns the real reason.
+      spokenResponse: result.output || result.error || "I couldn't find a route.",
       ok: result.success,
       errorDetail: result.data?.errorDetail,
     };
