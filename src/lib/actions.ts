@@ -18,6 +18,8 @@ import { controlWindowTool } from "@krishna/core/tools/computer";
 import { getAllSavedSearches } from "@krishna/core/database/saved-searches.action";
 import { isMobileDevice } from "@/lib/platform";
 
+import { getCurrentPositionSafe } from "@/lib/geolocation";
+
 const ACTION_REGEX = /```action\n([\s\S]*?)```/g;
 const JSON_BLOCK_REGEX = /```json\n([\s\S]*?)```/g;
 const PLAN_REGEX = /```plan\n([\s\S]*?)```/;
@@ -247,6 +249,19 @@ export function detectPhantomSave(
 
 type LlmFallbackFn = (input: string) => Promise<string | null>;
 
+async function resolveTravelOrigin(
+  from: string | undefined | null,
+): Promise<string> {
+  if (from && from.trim()) {
+    return from.trim();
+  }
+  if (isMobileDevice()) {
+    const gps = await getCurrentPositionSafe();
+    if (gps) return `${gps.lat},${gps.lng}`;
+  }
+  return "home";
+}
+
 export function extractJsonArray(raw: string): unknown {
   const cleaned = raw
     .replace(/```(?:json)?\s*/gi, "")
@@ -422,7 +437,8 @@ export async function executeAction(
       return { kind: "answer", spokenResponse: "Where would you like to go?" };
     }
 
-    const result = await getTravelTimeTool.run({ from: action.from ?? "home", to, mode }, { vars: {} });
+    const origin = await resolveTravelOrigin(action.from);
+    const result = await getTravelTimeTool.run({ from: origin, to, mode }, { vars: {} });
 
     if (result.data?.url) {
       try {
@@ -451,8 +467,9 @@ export async function executeAction(
     }
 
     try {
+      const origin = await resolveTravelOrigin(action.from);
       const result = await suggestDepartureTimeTool.run(
-        { from: action.from ?? "home", to, mode, window_hours: String(action.window_hours ?? 3) },
+        { from: origin, to, mode, window_hours: String(action.window_hours ?? 3) },
         { vars: {} },
       );
 

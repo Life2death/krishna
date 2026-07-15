@@ -129,6 +129,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_http::init())
         .plugin(tauri_plugin_keychain::init())
+        .plugin(tauri_plugin_geolocation::init())
         .plugin(tauri_plugin_shell::init());
     // PostHog (analytics) + machine-uid are desktop-only — both pull in the
     // `machine-uid` crate, which doesn't compile for Android/iOS.

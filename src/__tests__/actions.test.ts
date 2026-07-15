@@ -23,6 +23,8 @@ const mockCancelRouteWatch = vi.hoisted(() => vi.fn());
 const mockResolvePlace = vi.hoisted(() => vi.fn());
 const mockControlWindowRun = vi.hoisted(() => vi.fn());
 const mockGetAllSavedSearches = vi.hoisted(() => vi.fn());
+const mockGetCurrentPositionSafe = vi.hoisted(() => vi.fn());
+const mockIsMobileDevice = vi.hoisted(() => vi.fn().mockReturnValue(false));
 
 vi.mock("@krishna/core/tools/get-travel-time", () => ({
   getTravelTimeTool: {
@@ -79,6 +81,14 @@ vi.mock("@krishna/core/tools/computer", () => ({
 
 vi.mock("@krishna/core/database/saved-searches.action", () => ({
   getAllSavedSearches: mockGetAllSavedSearches,
+}));
+
+vi.mock("@/lib/geolocation", () => ({
+  getCurrentPositionSafe: mockGetCurrentPositionSafe,
+}));
+
+vi.mock("@/lib/platform", () => ({
+  isMobileDevice: mockIsMobileDevice,
 }));
 
 describe("parseActions", () => {
@@ -438,6 +448,106 @@ describe("executeAction — travel_time", () => {
     expect(result.kind).toBe("answer");
     expect(result.ok).toBe(true);
   });
+
+  // ── GPS origin resolution ────────────────────────────────────────────────
+
+  describe("travel_time — GPS origin resolution", () => {
+    beforeEach(() => {
+      mockTravelToolRun.mockReset();
+      vi.mocked(invoke).mockReset();
+      mockGetCurrentPositionSafe.mockReset();
+    });
+
+    it("uses GPS coords when no from given on mobile", async () => {
+      mockIsMobileDevice.mockReturnValue(true);
+      mockGetCurrentPositionSafe.mockResolvedValue({ lat: 19.076, lng: 72.877 });
+      mockTravelToolRun.mockResolvedValue({
+        success: true,
+        output: "By car it's about 22 minutes from your current location, sir.",
+        data: { fallback: "false" },
+      });
+
+      const result = await executeAction({
+        action: "travel_time",
+        to: "work",
+        mode: "car",
+      });
+
+      expect(mockGetCurrentPositionSafe).toHaveBeenCalledOnce();
+      expect(mockTravelToolRun).toHaveBeenCalledWith(
+        { from: "19.076,72.877", to: "work", mode: "car" },
+        { vars: {} },
+      );
+      expect(result.kind).toBe("answer");
+      expect(result.ok).toBe(true);
+    });
+
+    it("falls back to home when GPS returns null on mobile", async () => {
+      mockIsMobileDevice.mockReturnValue(true);
+      mockGetCurrentPositionSafe.mockResolvedValue(null);
+      mockTravelToolRun.mockResolvedValue({
+        success: true,
+        output: "By car it's about 40 minutes from home, sir.",
+        data: { fallback: "false" },
+      });
+
+      const result = await executeAction({
+        action: "travel_time",
+        to: "work",
+        mode: "car",
+      });
+
+      expect(mockGetCurrentPositionSafe).toHaveBeenCalledOnce();
+      expect(mockTravelToolRun).toHaveBeenCalledWith(
+        { from: "home", to: "work", mode: "car" },
+        { vars: {} },
+      );
+      expect(result.ok).toBe(true);
+    });
+
+    it("still uses explicit 'home' when given (GPS not called)", async () => {
+      mockIsMobileDevice.mockReturnValue(true);
+      mockTravelToolRun.mockResolvedValue({
+        success: true,
+        output: "By car it's about 40 minutes from home, sir.",
+        data: { fallback: "false" },
+      });
+
+      await executeAction({
+        action: "travel_time",
+        from: "home",
+        to: "work",
+        mode: "car",
+      });
+
+      expect(mockGetCurrentPositionSafe).not.toHaveBeenCalled();
+      expect(mockTravelToolRun).toHaveBeenCalledWith(
+        { from: "home", to: "work", mode: "car" },
+        { vars: {} },
+      );
+    });
+
+    it("falls back to home on desktop (GPS never called)", async () => {
+      mockIsMobileDevice.mockReturnValue(false);
+      mockTravelToolRun.mockResolvedValue({
+        success: true,
+        output: "By car it's about 40 minutes from home, sir.",
+        data: { fallback: "false" },
+      });
+
+      await executeAction({
+        action: "travel_time",
+        to: "work",
+        mode: "car",
+      });
+
+      expect(mockGetCurrentPositionSafe).not.toHaveBeenCalled();
+      expect(mockTravelToolRun).toHaveBeenCalledWith(
+        { from: "home", to: "work", mode: "car" },
+        { vars: {} },
+      );
+    });
+  });
 });
 
 describe("executeAction — travel_best", () => {
@@ -525,6 +635,79 @@ describe("executeAction — travel_best", () => {
     expect(result.ok).toBe(false);
     expect(result.spokenResponse).toBe("I couldn't check departure times, sir.");
     expect(result.errorDetail).toBe("Network error");
+  });
+
+  // ── GPS origin resolution ────────────────────────────────────────────────
+
+  describe("travel_best — GPS origin resolution", () => {
+    beforeEach(() => {
+      mockSuggestDepartureRun.mockReset();
+      vi.mocked(invoke).mockReset();
+      mockGetCurrentPositionSafe.mockReset();
+    });
+
+    it("uses GPS coords when no from given on mobile", async () => {
+      mockIsMobileDevice.mockReturnValue(true);
+      mockGetCurrentPositionSafe.mockResolvedValue({ lat: 19.076, lng: 72.877 });
+      mockSuggestDepartureRun.mockResolvedValue({
+        success: true,
+        output: "Leaving now is 30 minutes, sir. If you wait...",
+        data: { bestDepartureTime: "2026-07-05T09:30:00.000Z", bestDuration: "1800" },
+      });
+
+      const result = await executeAction({
+        action: "travel_best",
+        to: "work",
+        mode: "car",
+      });
+
+      expect(mockGetCurrentPositionSafe).toHaveBeenCalledOnce();
+      expect(mockSuggestDepartureRun).toHaveBeenCalledWith(
+        { from: "19.076,72.877", to: "work", mode: "car", window_hours: "3" },
+        { vars: {} },
+      );
+      expect(result.kind).toBe("answer");
+      expect(result.ok).toBe(true);
+    });
+
+    it("falls back to home when GPS returns null", async () => {
+      mockIsMobileDevice.mockReturnValue(true);
+      mockGetCurrentPositionSafe.mockResolvedValue(null);
+      mockSuggestDepartureRun.mockResolvedValue({
+        success: true,
+        output: "Leaving now is 30 minutes, sir.",
+        data: { bestDepartureTime: "2026-07-05T09:30:00.000Z", bestDuration: "1800" },
+      });
+
+      const result = await executeAction({
+        action: "travel_best",
+        to: "work",
+        mode: "car",
+      });
+
+      expect(mockGetCurrentPositionSafe).toHaveBeenCalledOnce();
+      expect(mockSuggestDepartureRun).toHaveBeenCalledWith(
+        { from: "home", to: "work", mode: "car", window_hours: "3" },
+        { vars: {} },
+      );
+      expect(result.ok).toBe(true);
+    });
+
+    it("falls back to home on desktop", async () => {
+      mockIsMobileDevice.mockReturnValue(false);
+
+      await executeAction({
+        action: "travel_best",
+        to: "work",
+        mode: "car",
+      });
+
+      expect(mockGetCurrentPositionSafe).not.toHaveBeenCalled();
+      expect(mockSuggestDepartureRun).toHaveBeenCalledWith(
+        { from: "home", to: "work", mode: "car", window_hours: "3" },
+        { vars: {} },
+      );
+    });
   });
 });
 
