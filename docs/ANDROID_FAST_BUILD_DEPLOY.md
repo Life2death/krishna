@@ -91,6 +91,46 @@ ABIs (`armeabi-v7a`/`x86`/`x86_64`) wastes time for an APK you can't use on a re
 ultimately calls (`tauri android android-studio-script`) only recompiles the Rust dylib — no
 frontend rebuild, no network — so driving gradle directly is both faster and hang-proof.
 
+#### Exception: a fresh worktree (or any state with no prior tauri-driven Rust build)
+
+Direct gradle only works once the Rust dylib has **already** been built by a full `tauri android
+build` at least once in this checkout — after that, `:app:rustBuildArm64Debug` is up-to-date and
+gets skipped. On a brand-new worktree (e.g. a `main-merge` worktree used for release builds), that
+task runs for the first time and invokes `tauri android android-studio-script` **standalone**. That
+script fetches its build options over a WebSocket from the parent `tauri` process that normally
+spawned gradle — which doesn't exist when you run gradle yourself — so it panics:
+
+```
+failed to read CLI options: Context("failed to build WebSocket client",
+  Io(Os { code: 10061, kind: ConnectionRefused, ... }))
+> Task :app:rustBuildArm64Debug FAILED
+```
+
+For that first build, let `tauri` drive it (so the options plumbing exists) but blank out
+`beforeBuildCommand` so the network prebuild hook is skipped — you've already run `npx vite build`
+in step 2, so `dist/` is current:
+
+```powershell
+# no-before-build.json:  { "build": { "beforeBuildCommand": "" } }
+npx tauri android build --debug --apk --target aarch64 -c path\to\no-before-build.json
+```
+
+This still respects `CARGO_NET_OFFLINE=true`, still builds arm64-only via `--target aarch64`, and
+skips the frontend network hook. It's slower than direct gradle only because the Rust dylib compiles
+cold the first time. Subsequent iterations in the same worktree can use the direct-gradle step above.
+Run it in the background (it can exceed a 10-minute foreground timeout on a cold Rust compile); a
+foreground kill mid-compile orphans the `target/` lock and the next run hangs on "Blocking waiting
+for file lock".
+
+**This is not optional for new native plugins either:** adding a Tauri plugin with an Android-side
+component (e.g. `tauri-plugin-geolocation`) requires the Android project itself to be regenerated
+(new Gradle module, merged manifest permissions) — only the full `tauri android build` path above
+does that. Skipping it (raw `cargo build` + `gradlew -x rustBuildArm64Debug`) silently produces an
+APK with the plugin's Rust side compiled in but its Android manifest permissions and Gradle module
+missing, or — if the reused Rust binary was actually a stale dev-mode build — a **white screen**
+(the app tries to load `http://localhost:1420`, the Vite dev server address, instead of the bundled
+`dist/` assets, because that dev-vs-bundled decision is also made by the CLI step being skipped).
+
 ### 4. Install, launch, and verify on-device
 
 ```powershell
