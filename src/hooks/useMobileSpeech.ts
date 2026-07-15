@@ -48,16 +48,25 @@ function matchHandsFreeToggle(text: string): boolean | null {
  * toggles: "go hands free mode" / "exit hands free mode" (work in both modes).
  * Limitation: the mic lives in the app's WebView, so listening pauses while
  * another app is in the foreground or the screen is off.
+ *
+ * `opts.suppressed` mutes hands-free (and, on Android, stops the native
+ * KrishnaHandsFreeService) without touching the user's stored preference —
+ * used to hand control to a Live session while it's active. When suppression
+ * lifts, hands-free resumes automatically if it was on, instead of the caller
+ * having to remember and restore it (a one-way `setHandsFree(false)` would
+ * permanently clobber the preference instead of handing control back).
  */
-export function useMobileSpeech(): UseMobileSpeechReturn {
+export function useMobileSpeech(opts?: { suppressed?: boolean }): UseMobileSpeechReturn {
+  const suppressed = opts?.suppressed ?? false;
   const [isListening, setIsListening] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [handsFree, setHandsFreeState] = useState<boolean>(
     () => typeof localStorage !== "undefined" && localStorage.getItem(HANDS_FREE_STORAGE_KEY) === "true",
   );
+  const effectiveHandsFree = handsFree && !suppressed;
   const recognitionRef = useRef<any>(null);
   const finalTranscriptRef = useRef("");
-  const handsFreeRef = useRef(handsFree);
+  const handsFreeRef = useRef(effectiveHandsFree);
   const krishna = useKrishna();
 
   const SpeechRecognitionAPI = getSpeechRecognition();
@@ -65,12 +74,12 @@ export function useMobileSpeech(): UseMobileSpeechReturn {
   const isAndroid = typeof navigator !== "undefined" && /Android/i.test(navigator.userAgent);
 
   const setHandsFree = useCallback((on: boolean) => {
-    handsFreeRef.current = on;
+    handsFreeRef.current = on && !suppressed;
     setHandsFreeState(on);
     try {
       localStorage.setItem(HANDS_FREE_STORAGE_KEY, on ? "true" : "false");
     } catch { /* storage unavailable */ }
-  }, []);
+  }, [suppressed]);
 
   const stopListening = useCallback(() => {
     if (recognitionRef.current) {
@@ -184,13 +193,13 @@ export function useMobileSpeech(): UseMobileSpeechReturn {
     if (!isAndroid) return;
     let cancelled = false;
 
-    const command = handsFree ? "android_hands_free_start" : "android_hands_free_stop";
+    const command = effectiveHandsFree ? "android_hands_free_start" : "android_hands_free_stop";
     void invoke(command)
       .then(() => {
-        if (!cancelled) setIsListening(handsFree);
+        if (!cancelled) setIsListening(effectiveHandsFree);
       })
       .catch((err) => {
-        if (!cancelled && handsFree) {
+        if (!cancelled && effectiveHandsFree) {
           setIsListening(false);
           setError(`Hands-free service error: ${String(err)}`);
         }
@@ -199,14 +208,14 @@ export function useMobileSpeech(): UseMobileSpeechReturn {
     return () => {
       cancelled = true;
     };
-  }, [handsFree, isAndroid]);
+  }, [effectiveHandsFree, isAndroid]);
 
   // Hands-free ambient loop: keep recognition alive whenever Krishna is idle.
   // Pausing while she thinks/speaks avoids transcribing her own voice.
   useEffect(() => {
-    handsFreeRef.current = handsFree;
+    handsFreeRef.current = effectiveHandsFree;
     if (isAndroid) return;
-    if (!handsFree || !isSupported) return;
+    if (!effectiveHandsFree || !isSupported) return;
     if (krishna.status !== "idle") return;
     if (recognitionRef.current) return;
     // Small delay so TTS audio has fully stopped before the mic re-opens.
@@ -216,14 +225,15 @@ export function useMobileSpeech(): UseMobileSpeechReturn {
       }
     }, 400);
     return () => clearTimeout(t);
-  }, [handsFree, isAndroid, isSupported, krishna.status, isListening, startRecognition]);
+  }, [effectiveHandsFree, isAndroid, isSupported, krishna.status, isListening, startRecognition]);
 
-  // Leaving hands-free mid-listen stops the ambient capture.
+  // Leaving hands-free mid-listen (or being suppressed for a Live session)
+  // stops the ambient capture.
   useEffect(() => {
-    if (!handsFree && recognitionRef.current && !isListening) {
+    if (!effectiveHandsFree && recognitionRef.current && !isListening) {
       stopListening();
     }
-  }, [handsFree, isListening, stopListening]);
+  }, [effectiveHandsFree, isListening, stopListening]);
 
   const supported = isSupported;
 

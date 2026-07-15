@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { useCallback, useState, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   MicIcon,
@@ -46,6 +46,20 @@ export default function MobileHome() {
   const navigate = useNavigate();
   const { status, lastSpoken, streamingReply, maybeLearnStyle } = useKrishna();
   const { customizable, toggleLiveVoiceMode } = useAppContext();
+
+  const isLiveMode = !!(
+    customizable.liveVoice?.enabled && customizable.liveVoice?.mode === "live"
+  );
+  const currentEndpoint: Endpoint = isLiveMode
+    ? (getLiveVoiceSettings().provider as Endpoint)
+    : "classic";
+
+  // Classic hands-free (native KrishnaHandsFreeService on Android) must never
+  // run alongside a Live session — it would fight for the mic. Suppressing it
+  // here (rather than calling setHandsFree(false)) hands control to Live
+  // without touching the user's stored preference, so Classic hands-free
+  // resumes on its own the moment Live ends — a two-way handoff instead of a
+  // one-way clobber.
   const {
     isListening,
     isSupported,
@@ -54,16 +68,9 @@ export default function MobileHome() {
     stopListening,
     handsFree,
     setHandsFree,
-  } = useMobileSpeech();
+  } = useMobileSpeech({ suppressed: isLiveMode });
 
   const [pickerOpen, setPickerOpen] = useState(false);
-
-  const isLiveMode = !!(
-    customizable.liveVoice?.enabled && customizable.liveVoice?.mode === "live"
-  );
-  const currentEndpoint: Endpoint = isLiveMode
-    ? (getLiveVoiceSettings().provider as Endpoint)
-    : "classic";
 
   const handleSwitchToClassic = useCallback(() => {
     setPickerOpen(false);
@@ -80,20 +87,14 @@ export default function MobileHome() {
     onTurnComplete: maybeLearnStyle,
   });
 
-  // Classic hands-free (webkitSpeech "hey krishna") must never run alongside a
-  // Live session — it would fight for the mic. Force it off in Live mode.
-  useEffect(() => {
-    if (isLiveMode && handsFree) setHandsFree(false);
-  }, [isLiveMode, handsFree, setHandsFree]);
-
   const selectEndpoint = (ep: Endpoint) => {
     setPickerOpen(false);
     if (ep === "classic") {
       handleSwitchToClassic();
       return;
     }
-    // Leaving Classic → stop any classic listening before the live session grabs the mic.
-    if (handsFree) setHandsFree(false);
+    // Leaving Classic → stop any in-flight tap-to-talk capture immediately;
+    // hands-free is suppressed automatically (see useMobileSpeech above).
     if (isListening) stopListening();
     updateLiveVoiceProvider(ep);
     toggleLiveVoiceMode("live");
