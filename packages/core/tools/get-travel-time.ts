@@ -468,6 +468,11 @@ export const getTravelTimeTool: Tool = {
             transitSummary: routes[0].transitSummary ?? "",
             routeCount: String(routes.length),
             fallback: "false",
+            // Always include the Maps deep link too (not just on the error/no-key
+            // fallback paths) — actions.ts opens this whenever present, so a
+            // spoken travel-time answer always also shows the route on Maps,
+            // regardless of whether the user separately asked to "see"/"show" it.
+            url: buildMapsUrl(origin, destination, mode),
           } as Record<string, string>,
         };
       } catch (err) {
