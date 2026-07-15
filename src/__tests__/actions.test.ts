@@ -413,31 +413,12 @@ describe("executeAction — travel_time", () => {
     expect(result.ok).toBe(false);
   });
 
-  it("opens the URL when tool returns a data.url", async () => {
+  it("returns the URL as deferredUrl instead of opening it immediately", async () => {
     mockTravelToolRun.mockResolvedValue({
       success: true,
       output: "Opened route.",
       data: { url: "https://google.com/maps/dir/", fallback: "true" },
     });
-
-    await executeAction({
-      action: "travel_time",
-      from: "home",
-      to: "work",
-    });
-
-    expect(invoke).toHaveBeenCalledWith("open_target", {
-      target: "https://google.com/maps/dir/",
-    });
-  });
-
-  it("does not crash if URL open fails", async () => {
-    mockTravelToolRun.mockResolvedValue({
-      success: true,
-      output: "Opened route.",
-      data: { url: "https://google.com/maps/dir/", fallback: "true" },
-    });
-    vi.mocked(invoke).mockRejectedValue(new Error("open failed"));
 
     const result = await executeAction({
       action: "travel_time",
@@ -445,8 +426,27 @@ describe("executeAction — travel_time", () => {
       to: "work",
     });
 
-    expect(result.kind).toBe("answer");
-    expect(result.ok).toBe(true);
+    // Opening here (before the answer is spoken) backgrounds the app and lets
+    // Android kill the process before TTS plays — the caller must open
+    // deferredUrl only after speaking the response.
+    expect(invoke).not.toHaveBeenCalledWith("open_target", expect.anything());
+    expect(result.deferredUrl).toBe("https://google.com/maps/dir/");
+  });
+
+  it("omits deferredUrl when the tool has no url", async () => {
+    mockTravelToolRun.mockResolvedValue({
+      success: true,
+      output: "By car it's about 22 minutes, sir.",
+      data: { fallback: "false" },
+    });
+
+    const result = await executeAction({
+      action: "travel_time",
+      from: "home",
+      to: "work",
+    });
+
+    expect(result.deferredUrl).toBeUndefined();
   });
 
   // ── GPS origin resolution ────────────────────────────────────────────────

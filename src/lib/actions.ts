@@ -167,6 +167,11 @@ export interface ExecuteActionResult {
   input?: string;
   ok?: boolean;
   errorDetail?: string;
+  /** URL to open AFTER the spoken response finishes. Opening it earlier sends
+   * this app to the background mid-turn, where Android may kill the process
+   * before TTS plays (observed live: Maps intent at 14:23:04 → process killed
+   * at 14:23:07 with the answer computed but never spoken). */
+  deferredUrl?: string;
 }
 
 export interface ActionResponsePlan {
@@ -440,14 +445,6 @@ export async function executeAction(
     const origin = await resolveTravelOrigin(action.from);
     const result = await getTravelTimeTool.run({ from: origin, to, mode }, { vars: {} });
 
-    if (result.data?.url) {
-      try {
-        await invoke("open_target", { target: result.data.url });
-      } catch {
-        // URL open failure is non-critical
-      }
-    }
-
     return {
       kind: "answer",
       // Prefer the tool's own message (e.g. "I don't have your home address saved
@@ -455,6 +452,9 @@ export async function executeAction(
       spokenResponse: result.output || result.error || "I couldn't find a route.",
       ok: result.success,
       errorDetail: result.data?.errorDetail,
+      // Opened by the caller after TTS completes — opening Maps here backgrounds
+      // the app and Android can kill it before the answer is ever spoken.
+      deferredUrl: result.data?.url,
     };
   }
 

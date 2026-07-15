@@ -2353,6 +2353,16 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
                   setKrishnaSpeaking(false);
                 }
               }
+              // Deferred URL (e.g. the Maps route): open only after the answer has
+              // been spoken — opening earlier backgrounds this app and Android can
+              // kill the process before TTS plays.
+              if (result.deferredUrl) {
+                try {
+                  await invoke("open_target", { target: result.deferredUrl });
+                } catch {
+                  // URL open failure is non-critical
+                }
+              }
             } else {
               // Action ran but produced no response and asked for no confirmation —
               // treat as an uncaptured tool failure rather than letting it vanish.
