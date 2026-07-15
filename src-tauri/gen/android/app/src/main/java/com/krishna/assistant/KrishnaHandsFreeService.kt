@@ -40,12 +40,24 @@ class KrishnaHandsFreeService : Service(), RecognitionListener {
     @JvmStatic
     fun start(context: Context): Boolean {
       val intent = Intent(context, KrishnaHandsFreeService::class.java).setAction(ACTION_START)
-      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-        context.startForegroundService(intent)
-      } else {
-        context.startService(intent)
+      return try {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+          context.startForegroundService(intent)
+        } else {
+          context.startService(intent)
+        }
+        true
+      } catch (e: IllegalStateException) {
+        // Android 12+ refuses to start a NEW foreground service while the app
+        // isn't in the foreground (e.g. right after our own action opened
+        // another app, backgrounding us) — ForegroundServiceStartNotAllowedException
+        // is a subclass of this. This is an expected, recoverable condition
+        // (the caller retries once the app regains focus), not a real error —
+        // swallow it here instead of letting an uncaught exception surface as
+        // a raw Java exception message in the UI.
+        Log.w(TAG, "start() declined — app not in foreground yet: ${e.message}")
+        false
       }
-      return true
     }
 
     @JvmStatic

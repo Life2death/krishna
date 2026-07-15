@@ -21,6 +21,21 @@ vi.mock("@tauri-apps/api/core", () => ({
   invoke: (...args: unknown[]) => mockInvoke(...args),
 }));
 
+// Controllable fake window: isFocused() resolves mockFocused; onFocusChanged
+// stores its callback so tests can fire a focus-changed event manually.
+let mockFocused = true;
+let focusCallback: ((e: { payload: boolean }) => void) | null = null;
+const mockOnFocusChanged = vi.fn((cb: (e: { payload: boolean }) => void) => {
+  focusCallback = cb;
+  return Promise.resolve(() => { focusCallback = null; });
+});
+vi.mock("@tauri-apps/api/window", () => ({
+  getCurrentWindow: () => ({
+    isFocused: () => Promise.resolve(mockFocused),
+    onFocusChanged: mockOnFocusChanged,
+  }),
+}));
+
 vi.mock("@/hooks/useKrishna", () => ({
   useKrishna: () => ({ status: "idle", wakeWord: "hey krishna", processCommand: vi.fn() }),
 }));
@@ -31,7 +46,9 @@ describe("useMobileSpeech — Classic/Live hands-free handoff", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     localStorage.clear();
-    mockInvoke.mockResolvedValue(undefined);
+    mockInvoke.mockResolvedValue(true);
+    mockFocused = true;
+    focusCallback = null;
     Object.defineProperty(navigator, "userAgent", {
       value: "Mozilla/5.0 (Linux; Android 14)",
       configurable: true,
@@ -106,7 +123,7 @@ describe("useMobileSpeech — Classic/Live hands-free handoff", () => {
     });
   });
 
-  it("delays restarting after suppression lifts, giving the ending session's audio teardown a head start", async () => {
+  it("gives a brief head start before restarting after suppression lifts", async () => {
     vi.useFakeTimers();
     try {
       localStorage.setItem(HANDS_FREE_KEY, "true");
@@ -130,7 +147,7 @@ describe("useMobileSpeech — Classic/Live hands-free handoff", () => {
       expect(mockInvoke).not.toHaveBeenCalledWith("android_hands_free_start");
 
       await act(async () => {
-        await vi.advanceTimersByTimeAsync(799);
+        await vi.advanceTimersByTimeAsync(399);
       });
       expect(mockInvoke).not.toHaveBeenCalledWith("android_hands_free_start");
 
@@ -157,12 +174,12 @@ describe("useMobileSpeech — Classic/Live hands-free handoff", () => {
       });
       mockInvoke.mockClear();
 
-      // Lift suppression, then immediately re-engage it before the 800ms
+      // Lift suppression, then immediately re-engage it before the 400ms
       // restart delay elapses — the pending start must not fire, and stop
       // must still be immediate.
       rerender({ suppressed: false });
       await act(async () => {
-        await vi.advanceTimersByTimeAsync(200);
+        await vi.advanceTimersByTimeAsync(100);
       });
       rerender({ suppressed: true });
 
@@ -178,5 +195,46 @@ describe("useMobileSpeech — Classic/Live hands-free handoff", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it("defers starting until the app regains focus, instead of erroring, when Android declines a background start", async () => {
+    localStorage.setItem(HANDS_FREE_KEY, "true");
+    mockFocused = false; // app is currently backgrounded (e.g. Krishna's own action opened another app)
+
+    const { result } = renderHook(() => useMobileSpeech({ suppressed: false }));
+
+    // Give the attemptStart() microtasks a chance to run.
+    await waitFor(() => {
+      expect(mockOnFocusChanged).toHaveBeenCalled();
+    });
+    // Must NOT have attempted the native start while backgrounded, and must
+    // NOT have surfaced an error either — this is an expected, quiet wait.
+    expect(mockInvoke).not.toHaveBeenCalledWith("android_hands_free_start");
+    expect(result.current.error).toBeNull();
+
+    mockInvoke.mockClear();
+    // App regains focus.
+    act(() => {
+      focusCallback?.({ payload: true });
+    });
+
+    await waitFor(() => {
+      expect(mockInvoke).toHaveBeenCalledWith("android_hands_free_start");
+    });
+  });
+
+  it("treats a graceful false return (Android declined) as not-listening, not an error", async () => {
+    localStorage.setItem(HANDS_FREE_KEY, "true");
+    mockInvoke.mockImplementation((cmd: string) =>
+      cmd === "android_hands_free_start" ? Promise.resolve(false) : Promise.resolve(true),
+    );
+
+    const { result } = renderHook(() => useMobileSpeech({ suppressed: false }));
+
+    await waitFor(() => {
+      expect(mockOnFocusChanged).toHaveBeenCalled();
+    });
+    expect(result.current.isListening).toBe(false);
+    expect(result.current.error).toBeNull();
   });
 });

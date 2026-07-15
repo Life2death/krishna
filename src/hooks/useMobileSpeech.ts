@@ -1,5 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useKrishna } from "./useKrishna";
 import { detectWakeWord } from "@/lib/wake-word";
 import { getTTS } from "@/lib/tts";
@@ -191,48 +192,97 @@ export function useMobileSpeech(opts?: { suppressed?: boolean }): UseMobileSpeec
 
   // Tracks the previous `suppressed` value so we can tell "hands-free is
   // resuming right after Live handed control back" apart from a fresh manual
-  // toggle in plain Classic mode — only the former needs the startup delay
-  // below (Live's own mic teardown is async and not guaranteed to finish
-  // before this effect runs; racing it for the microphone threw a Java
-  // exception, observed live right after a Live-session fallback re-armed
-  // hands-free).
+  // toggle in plain Classic mode.
   const prevSuppressedRef = useRef(suppressed);
 
   useEffect(() => {
     if (!isAndroid) return;
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout> | null = null;
+    let unlistenFocus: (() => void) | null = null;
+
+    handsFreeRef.current = effectiveHandsFree;
 
     const justUnsuppressed = prevSuppressedRef.current && !suppressed;
     prevSuppressedRef.current = suppressed;
 
-    const run = () => {
-      const command = effectiveHandsFree ? "android_hands_free_start" : "android_hands_free_stop";
-      void invoke(command)
-        .then(() => {
-          if (!cancelled) setIsListening(effectiveHandsFree);
+    const invokeCommand = (want: boolean) => {
+      const command = want ? "android_hands_free_start" : "android_hands_free_stop";
+      void invoke<boolean>(command)
+        .then((ok) => {
+          if (cancelled) return;
+          if (want && ok === false) {
+            // Android 12+ refuses to start a NEW foreground service unless the
+            // app is currently in the foreground (observed live: our own
+            // action opened another app, backgrounding us, then the
+            // Live→Classic handoff tried to re-arm hands-free and got denied
+            // — surfaced as a raw Java exception before this fix). Kotlin's
+            // start() now returns false instead of throwing for exactly this
+            // case — wait for focus and retry instead of erroring.
+            void waitForFocus();
+            return;
+          }
+          setIsListening(want);
         })
         .catch((err) => {
-          if (!cancelled && effectiveHandsFree) {
+          if (!cancelled && want) {
             setIsListening(false);
             setError(`Hands-free service error: ${String(err)}`);
           }
         });
     };
 
-    if (effectiveHandsFree && justUnsuppressed) {
-      // Give the just-ended session's audio teardown a head start before the
-      // native hands-free service tries to acquire the microphone. Stopping
-      // (the !effectiveHandsFree branch) is always immediate — only
-      // (re)starting right after suppression needs the buffer.
-      timer = setTimeout(run, 800);
+    const waitForFocus = async () => {
+      if (unlistenFocus || cancelled) return;
+      try {
+        unlistenFocus = await getCurrentWindow().onFocusChanged(({ payload: focused }) => {
+          if (focused && !cancelled && handsFreeRef.current) {
+            unlistenFocus?.();
+            unlistenFocus = null;
+            invokeCommand(true);
+          }
+        });
+      } catch {
+        // Focus events unavailable for some reason — a one-shot delayed retry
+        // beats never trying again.
+        timer = setTimeout(() => {
+          if (!cancelled && handsFreeRef.current) invokeCommand(true);
+        }, 2000);
+      }
+    };
+
+    const attemptStart = async () => {
+      let focused = true;
+      try {
+        focused = await getCurrentWindow().isFocused();
+      } catch {
+        // Can't tell — just try; the native side declines gracefully (and we
+        // fall back to waiting for focus) if we're wrong.
+      }
+      if (cancelled) return;
+      if (!focused) {
+        void waitForFocus();
+        return;
+      }
+      invokeCommand(true);
+    };
+
+    if (!effectiveHandsFree) {
+      invokeCommand(false); // stopping is always immediate and always allowed
+    } else if (justUnsuppressed) {
+      // Small head start for the just-ended session's own audio teardown
+      // before even checking focus.
+      timer = setTimeout(() => {
+        void attemptStart();
+      }, 400);
     } else {
-      run();
+      void attemptStart();
     }
 
     return () => {
       cancelled = true;
       if (timer) clearTimeout(timer);
+      unlistenFocus?.();
     };
   }, [effectiveHandsFree, suppressed, isAndroid]);
 
