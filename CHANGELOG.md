@@ -12,6 +12,29 @@
 
 ---
 
+## v2.1.7 (2026-07-15)
+
+- **Mobile Turso sync, fully working end-to-end:** fixed a duplicate-module vite alias bug
+  ("SqlDriver not set"), missing CSP allowance for `*.turso.io`, and — the real blocker — the
+  Rust sync transport never implemented Turso's Hrana value codec (typed args/cells), so every
+  push/pull silently failed. Mobile now correctly syncs conversations, messages, and memories
+  (including home/work addresses) with the desktop.
+- **Unified Classic/Live mobile UI:** one consistent screen (single mic button, shared reply
+  area) now drives both Classic (Claude) and Live (OpenAI/Gemini) voice modes; fixed a bug where
+  switching from Classic to Live silently did nothing.
+- **Self-Improvement settings panel:** view, enable/disable, force-refresh, and reset the
+  passive communication-style learning profile from Settings.
+- **Wake-word confidence meter + settings on mobile:** a live OpenWakeWord score readout in both
+  Classic and Live modes, plus the shadow-mode/training-consent/evaluation controls now
+  reachable from mobile Settings (previously desktop-only).
+- **GPS-based travel origin:** "how long to work" (no origin stated) now uses the phone's current
+  location instead of always assuming home, with a graceful fallback to the home address when
+  location is unavailable or denied. Fixed a related bug where the voice-ID-unverified
+  confirmation flow bypassed GPS entirely.
+- **16 KB page-size compatibility:** swapped the wake-word model runtime from TensorFlow Lite to
+  LiteRT, fixing Android's "not 16 KB compatible" warning (and the underlying compile break from
+  the previous v2.1.6 Android release attempt).
+
 ## v2.1.6 (2026-07-13)
 
 - **Mobile voice, complete:** native Android TTS (`TextToSpeech` JNI bridge, since the WebView has
