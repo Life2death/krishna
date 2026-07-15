@@ -3141,6 +3141,7 @@ dependencies = [
  "tauri-nspanel",
  "tauri-plugin-autostart",
  "tauri-plugin-dialog",
+ "tauri-plugin-geolocation",
  "tauri-plugin-global-shortcut",
  "tauri-plugin-http",
  "tauri-plugin-keychain",
@@ -6697,6 +6698,20 @@ dependencies = [
  "thiserror 2.0.14",
  "toml 0.9.5",
  "url",
+]
+
+[[package]]
+name = "tauri-plugin-geolocation"
+version = "2.3.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0366e51823ad001ff1a47f116cd34ddfea3d94ebeb2309caf42e290dec27e0a6"
+dependencies = [
+ "log",
+ "serde",
+ "serde_json",
+ "tauri",
+ "tauri-plugin",
+ "thiserror 2.0.14",
 ]
 
 [[package]]

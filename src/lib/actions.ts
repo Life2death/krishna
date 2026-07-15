@@ -1054,10 +1054,10 @@ export async function resolveActionForConfirm(
   llmFallback?: LlmFallbackFn
 ): Promise<ExecuteActionResult> {
   if (action.action === "travel_time") {
-    const from = action.from || "home";
     const to = action.to || "";
     const mode = action.mode || "car";
-    const placeStr = [from, to].filter(Boolean).join(" to ");
+    const origin = action.from || "home";
+    const placeStr = [origin, to].filter(Boolean).join(" to ");
     return {
       spokenResponse: `Check travel time from ${placeStr} by ${mode}?`,
       needsConfirmation: true,
@@ -1065,7 +1065,7 @@ export async function resolveActionForConfirm(
         found: true,
         displayName: `travel_time: ${placeStr}`,
         target: "",
-        actionToResume: JSON.stringify({ action: "travel_time", from, to, mode }),
+        actionToResume: JSON.stringify({ action: "travel_time", from: action.from, to, mode }),
       } as any,
     };
   }

@@ -1255,7 +1255,45 @@ describe("resolveActionForConfirm — gmail_send and travel_time (G-4)", () => {
     expect(result.pendingResult?.actionToResume).toBeDefined();
     const action = JSON.parse(result.pendingResult!.actionToResume!);
     expect(action.action).toBe("travel_time");
+    expect(action.from).toBe("home");
     expect(action.to).toBe("work");
+  });
+
+  it("travel_time preserves undefined from in actionToResume (defers GPS to executeAction)", async () => {
+    const result = await resolveActionForConfirm({
+      action: "travel_time", to: "work",
+    });
+
+    expect(result.needsConfirmation).toBe(true);
+    expect(result.pendingResult?.actionToResume).toBeDefined();
+    const action = JSON.parse(result.pendingResult!.actionToResume!);
+    expect(action.from).toBeUndefined();
+    expect(action.to).toBe("work");
+    expect(result.spokenResponse).toContain("home");
+  });
+
+  it("travel_time unverified → confirm yes → executeAction still calls GPS", async () => {
+    mockIsMobileDevice.mockReturnValue(true);
+    mockGetCurrentPositionSafe.mockResolvedValue({ lat: 19.076, lng: 72.877 });
+    mockTravelToolRun.mockResolvedValue({
+      success: true,
+      output: "By car it's about 22 minutes from your current location, sir.",
+      data: {},
+    });
+
+    const confirmResult = await resolveActionForConfirm({
+      action: "travel_time", to: "work", mode: "car",
+    });
+
+    const resumedAction = JSON.parse(confirmResult.pendingResult!.actionToResume!);
+    const execResult = await executeAction(resumedAction, undefined, { preConfirmed: true });
+
+    expect(mockGetCurrentPositionSafe).toHaveBeenCalledOnce();
+    expect(mockTravelToolRun).toHaveBeenCalledWith(
+      { from: "19.076,72.877", to: "work", mode: "car" },
+      { vars: {} },
+    );
+    expect(execResult.ok).toBe(true);
   });
 
   it("open action still works without actionToResume", async () => {
