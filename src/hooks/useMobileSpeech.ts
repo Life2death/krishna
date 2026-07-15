@@ -189,26 +189,52 @@ export function useMobileSpeech(opts?: { suppressed?: boolean }): UseMobileSpeec
 
   const startListening = useCallback(() => startRecognition(false), [startRecognition]);
 
+  // Tracks the previous `suppressed` value so we can tell "hands-free is
+  // resuming right after Live handed control back" apart from a fresh manual
+  // toggle in plain Classic mode — only the former needs the startup delay
+  // below (Live's own mic teardown is async and not guaranteed to finish
+  // before this effect runs; racing it for the microphone threw a Java
+  // exception, observed live right after a Live-session fallback re-armed
+  // hands-free).
+  const prevSuppressedRef = useRef(suppressed);
+
   useEffect(() => {
     if (!isAndroid) return;
     let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
 
-    const command = effectiveHandsFree ? "android_hands_free_start" : "android_hands_free_stop";
-    void invoke(command)
-      .then(() => {
-        if (!cancelled) setIsListening(effectiveHandsFree);
-      })
-      .catch((err) => {
-        if (!cancelled && effectiveHandsFree) {
-          setIsListening(false);
-          setError(`Hands-free service error: ${String(err)}`);
-        }
-      });
+    const justUnsuppressed = prevSuppressedRef.current && !suppressed;
+    prevSuppressedRef.current = suppressed;
+
+    const run = () => {
+      const command = effectiveHandsFree ? "android_hands_free_start" : "android_hands_free_stop";
+      void invoke(command)
+        .then(() => {
+          if (!cancelled) setIsListening(effectiveHandsFree);
+        })
+        .catch((err) => {
+          if (!cancelled && effectiveHandsFree) {
+            setIsListening(false);
+            setError(`Hands-free service error: ${String(err)}`);
+          }
+        });
+    };
+
+    if (effectiveHandsFree && justUnsuppressed) {
+      // Give the just-ended session's audio teardown a head start before the
+      // native hands-free service tries to acquire the microphone. Stopping
+      // (the !effectiveHandsFree branch) is always immediate — only
+      // (re)starting right after suppression needs the buffer.
+      timer = setTimeout(run, 800);
+    } else {
+      run();
+    }
 
     return () => {
       cancelled = true;
+      if (timer) clearTimeout(timer);
     };
-  }, [effectiveHandsFree, isAndroid]);
+  }, [effectiveHandsFree, suppressed, isAndroid]);
 
   // Hands-free ambient loop: keep recognition alive whenever Krishna is idle.
   // Pausing while she thinks/speaks avoids transcribing her own voice.

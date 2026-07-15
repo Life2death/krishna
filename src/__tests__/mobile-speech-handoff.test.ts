@@ -105,4 +105,78 @@ describe("useMobileSpeech — Classic/Live hands-free handoff", () => {
       expect(mockInvoke).toHaveBeenCalledWith("android_hands_free_start");
     });
   });
+
+  it("delays restarting after suppression lifts, giving the ending session's audio teardown a head start", async () => {
+    vi.useFakeTimers();
+    try {
+      localStorage.setItem(HANDS_FREE_KEY, "true");
+
+      const { rerender } = renderHook(
+        ({ suppressed }) => useMobileSpeech({ suppressed }),
+        { initialProps: { suppressed: true } },
+      );
+
+      // Flush the initial (immediate) "stop" effect.
+      await act(async () => {
+        await vi.runOnlyPendingTimersAsync();
+      });
+      mockInvoke.mockClear();
+
+      rerender({ suppressed: false });
+
+      // Immediately after suppression lifts, the native service must NOT have
+      // been asked to start yet — starting here is exactly what raced a
+      // just-ended Live session's mic teardown and threw a Java exception.
+      expect(mockInvoke).not.toHaveBeenCalledWith("android_hands_free_start");
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(799);
+      });
+      expect(mockInvoke).not.toHaveBeenCalledWith("android_hands_free_start");
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1);
+      });
+      expect(mockInvoke).toHaveBeenCalledWith("android_hands_free_start");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("does not delay stopping (suppression re-engaging) and cancels a stale pending restart", async () => {
+    vi.useFakeTimers();
+    try {
+      localStorage.setItem(HANDS_FREE_KEY, "true");
+
+      const { rerender } = renderHook(
+        ({ suppressed }) => useMobileSpeech({ suppressed }),
+        { initialProps: { suppressed: true } },
+      );
+      await act(async () => {
+        await vi.runOnlyPendingTimersAsync();
+      });
+      mockInvoke.mockClear();
+
+      // Lift suppression, then immediately re-engage it before the 800ms
+      // restart delay elapses — the pending start must not fire, and stop
+      // must still be immediate.
+      rerender({ suppressed: false });
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(200);
+      });
+      rerender({ suppressed: true });
+
+      expect(mockInvoke).toHaveBeenCalledWith("android_hands_free_stop");
+      expect(mockInvoke).not.toHaveBeenCalledWith("android_hands_free_start");
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1000);
+      });
+      // The stale pending start (from before re-suppression) must have been
+      // cancelled, not fired late.
+      expect(mockInvoke).not.toHaveBeenCalledWith("android_hands_free_start");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
