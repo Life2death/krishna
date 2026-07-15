@@ -7,8 +7,8 @@ import java.io.RandomAccessFile
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.nio.ShortBuffer
-import com.google.ai.edge.litert.Interpreter
-import com.google.ai.edge.litert.support.common.FileUtil
+import org.tensorflow.lite.Interpreter
+import org.tensorflow.lite.support.common.FileUtil
 
 /**
  * Local held-out evaluation of the wake-word model against stored training clips.

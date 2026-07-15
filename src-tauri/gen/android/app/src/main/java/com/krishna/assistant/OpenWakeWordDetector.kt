@@ -14,9 +14,9 @@ import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
 import kotlin.concurrent.thread
 import org.json.JSONObject
-import com.google.ai.edge.litert.DataType
-import com.google.ai.edge.litert.Interpreter
-import com.google.ai.edge.litert.support.common.FileUtil
+import org.tensorflow.lite.DataType
+import org.tensorflow.lite.Interpreter
+import org.tensorflow.lite.support.common.FileUtil
 
 /**
  * Architecture: direct waveform classifier.
