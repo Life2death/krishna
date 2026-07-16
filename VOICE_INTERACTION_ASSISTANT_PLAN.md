@@ -1,13 +1,12 @@
 # Krishna as the system Digital Assistant (VoiceInteractionService) — implementation plan
 
-**Status:** Phases 1 and 2 implemented and verified end-to-end live on-device 2026-07-16 (see Phase
-0 spike run and Phase 2 verification note below) — the core mechanism (assist gesture → Krishna
-foregrounded → already listening) works, **including the duplicate-task edge case (found and fixed
-the same session — see Phase 0's "Duplicate-task trap" finding, now marked RESOLVED)**. Remaining
-before this is fully done: a live owner voice test through the listening state (adb can't inject
-real speech), and Phase 3 (settings UX/discoverability — not started). Phase 4 (v2) not started.
-Originally written 2026-07-15; re-validated against the codebase and Android 14–16 platform docs
-2026-07-16 before implementation began.
+**Status:** Phases 1, 2, and 3 implemented and verified end-to-end live on-device 2026-07-16 — the
+full mechanism (assist gesture → Krishna foregrounded → already listening → Settings discoverability
+card) works, **including the duplicate-task edge case (found and fixed the same session — see
+Phase 0's "Duplicate-task trap" finding, now marked RESOLVED)**. Only remaining item: a live owner
+voice test through the listening state (adb can't inject real speech). Phase 4 (v2) not started —
+do not begin without explicit owner go-ahead. Originally written 2026-07-15; re-validated against
+the codebase and Android 14–16 platform docs 2026-07-16 before implementation began.
 **Working directory:** `D:\Learning\krishna-main-merge` (the shipping worktree — do NOT start a
 fresh worktree off `main`; see Build & verify rules at the bottom).
 
@@ -356,6 +355,18 @@ unrelated warnings).
 2. Update `docs/openwakeword-android.md` + `RESUME_HERE.md`: the assistant gesture is the primary
    hands-free invocation; OpenWakeWord remains the optional always-listening layer, still behind
    its approval gate.
+
+**DONE + VERIFIED live on-device 2026-07-16.** `AssistantRoleCard.tsx` added to `src/pages/mobile/
+Settings.tsx` — shows "Krishna is your current Digital assistant app" (green) or "Not set yet"
+(best-effort, `android_is_assistant` Tauri command → `assist_get_current_component` JNI call →
+`AssistBridgeHelper.getCurrentAssistantComponent`, `Settings.Secure.getString(resolver,
+"assistant")`), plus an "Open assistant settings" button (`android_open_assistant_settings` →
+`Settings.ACTION_MANAGE_DEFAULT_APPS_SETTINGS`, confirmed the working intent per Phase 0 — no
+fallback needed, `ACTION_VOICE_INPUT_SETTINGS` was dropped as planned since it doesn't resolve on
+this OS). On-device: card correctly showed the current selected state, and the button opened
+Settings landing directly on Krishna's entry in the assistant picker — no crash. Docs updated:
+`docs/openwakeword-android.md` (relationship note) and `RESUME_HERE.md` (new §0 entry + updated
+§7 next-agent pointer).
 
 ## Phase 4 (v2, separate effort — do NOT start without explicit owner go-ahead)
 

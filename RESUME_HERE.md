@@ -1,4 +1,4 @@
-# RESUME HERE — Krishna handoff (updated 2026-07-13)
+# RESUME HERE — Krishna handoff (updated 2026-07-16)
 
 > **This is the single source of truth to resume from.** Reviewer (Claude), coding agent, and
 > owner (Vikram) all sync through this file. Read the whole thing before touching anything.
@@ -12,7 +12,51 @@
 
 ---
 
-## 0. LATEST — v2.1.6 released; mobile travel/sync/CSP fixes on main (2026-07-13, later)
+## 0. LATEST — Krishna as system Digital Assistant, Phases 1–3 built + verified live (2026-07-16)
+
+**Krishna can now be set as the phone's Digital assistant app**, same mechanism as Gemini/Bixby
+(`VoiceInteractionService`, `ROLE_ASSISTANT`). This directly targets the "backgrounded-by-own-
+action" bug class documented in `gps-travel-origin-spec` memory — the assist gesture brings Krishna
+to foreground *before* it does anything, so there's no FGS-denial race to lose. Full spec, on-device
+findings, and build/verify trail: `VOICE_INTERACTION_ASSISTANT_PLAN.md` (repo root). Committed
+`84b47ed` on `main` in this worktree — **not yet pushed**.
+
+**Verified end-to-end live on-device** (Samsung SM-M066B, Android 16, `R9ZY40XK38A`):
+1. **Phase 1 — service trio + manifest.** `KrishnaVoiceInteractionService`, `KrishnaInteractionSessionService`,
+   `KrishnaInteractionSession`, a stub `KrishnaRecognitionServiceStub` + `res/xml/voice_interaction_
+   service.xml` + manifest entries. Krishna appears and is selectable in Settings → Apps → Choose
+   default apps → Digital assistant app → Other apps.
+2. **Phase 2 — assist → JS bridge.** `AssistBridgeHelper.kt` (Kotlin) → `android_control.rs`/
+   `mobile_bridge.rs` (JNI/Tauri command) → `useAssistTrigger` hook wired into `Home.tsx`. Invoking
+   assist (long-press home, or `adb shell input keyevent 219` for scripted testing) from inside
+   another app brings Krishna to foreground **already listening**, exactly like a mic tap — no wake
+   word required.
+3. **Phase 3 — Settings UX.** `AssistantRoleCard` (`src/pages/mobile/components/
+   AssistantRoleCard.tsx`) on the mobile Settings page: shows whether Krishna is currently the
+   selected assistant (best-effort, `android_is_assistant`) and a button
+   (`android_open_assistant_settings`) that opens the system's default-apps picker directly
+   (`Settings.ACTION_MANAGE_DEFAULT_APPS_SETTINGS` — confirmed the working intent on this One UI
+   build; `ACTION_VOICE_INPUT_SETTINGS` failed to resolve, deliberately not used).
+
+**A real bug was found and fixed during verification, not just planned around:** if Krishna was
+already open normally (launcher tap) and the assist gesture then fired, Android started a SECOND
+concurrent `MainActivity` instance in the same process (assistant invocations always get a distinct
+`ACTIVITY_TYPE_ASSISTANT` task, regardless of intent flags — confirmed, not app-controllable). The
+new instance's WebView never rendered (persistent blank screen, no crash) because Tauri/wry doesn't
+tolerate two concurrent Activity instances in one process. Fixed: `MainActivity` tracks its live
+instance; `KrishnaInteractionSession` checks `MainActivity.isAlive()` before launching and calls
+`ActivityManager.moveTaskToFront()` on the existing instance instead of relaunching when one is
+already alive. Verified against the exact original repro.
+
+**Still open:** a real spoken-command test through the already-listening state (needs an actual
+human voice — not scriptable via `adb`). OpenWakeWord (item 0b below) is unaffected — the assistant
+gesture is now the *primary* hands-free invocation path, OpenWakeWord remains the optional
+always-listening layer, unchanged, still behind its own shadow-mode approval gate. See
+`docs/openwakeword-android.md` for the updated relationship note.
+
+---
+
+## 0a. PRIOR — v2.1.6 released; mobile travel/sync/CSP fixes on main (2026-07-13, later)
 
 **Desktop release `v2.1.6` cut and built (draft).** Tag pushed, GitHub Actions `release.yml`
 succeeded, both installers (`Krishna_2.1.6_x64-setup.exe`, `.msi`) attached to a **draft** release
@@ -53,7 +97,7 @@ verification first). The travel fix `a504b5e` IS pushed. Android build/deploy re
 
 ---
 
-## 0a. EARLIER TODAY — OpenWakeWord Android build fixed + verified live; "Upgrades" system planned (2026-07-13)
+## 0b. EARLIER — OpenWakeWord Android build fixed + verified live; "Upgrades" system planned (2026-07-13)
 
 **OpenWakeWord shadow-mode feature (branch `codex/openwakeword-shadow-mode`, PR #6, pushed `21cee94`):**
 - Root-caused the "hour-long build, no APK" problem: **cargo blocks on the crates.io network index
@@ -103,7 +147,7 @@ spec + AGENTS.md — no runtime code, pure design artifact, nothing to build/bre
 
 ---
 
-## 0b. PRIOR — Android mobile voice fully working (2026-07-12), pushed `905041f`
+## 0c. PRIOR — Android mobile voice fully working (2026-07-12), pushed `905041f`
 
 Mobile went from "asks for a key it should never need, then silent/broken" to a working
 tap-to-talk voice assistant with device control, in one session. All code pushed to
@@ -499,11 +543,14 @@ one. See `GMAIL_RECRUITER_RADAR_REVIEW_FINDINGS.md` for the full trail.
 
 ---
 
-## 7. NEXT AGENT INSTRUCTION (paste this to resume) — updated 2026-07-13
+## 7. NEXT AGENT INSTRUCTION (paste this to resume) — updated 2026-07-16
 
-> Read `RESUME_HERE.md` §0 in full first (today's entry), then `Automation_with_LLM.md` (the full
-> self-improvement-system spec) before writing anything. `main` is green (`ci.yml` passes on
-> push). `codex/openwakeword-shadow-mode` (PR #6) is code-complete and verified live on-device —
+> Read `RESUME_HERE.md` §0 in full first (today's entry: Krishna as system Digital Assistant,
+> Phases 1–3 built + verified live, committed `84b47ed`, not pushed — see `VOICE_INTERACTION_
+> ASSISTANT_PLAN.md`). Remaining there: a real owner voice test through the assist-triggered
+> listening state (needs an actual human voice, not scriptable). Then `Automation_with_LLM.md` (the
+> full self-improvement-system spec) before writing anything else. `main` is green (`ci.yml` passes
+> on push). `codex/openwakeword-shadow-mode` (PR #6) is code-complete and verified live on-device —
 > do not write more code there; what's left is data collection, not code (see §4 item 0b).
 > `feature/voice-android` and `feature/android-control` are pushed but unmerged/unreviewed — do
 > not build on top of them without checking their actual diffs first, they may be stale.

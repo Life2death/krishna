@@ -218,6 +218,8 @@ pub fn run() {
             mobile_bridge::android_capture_clip,
             mobile_bridge::android_training_summary,
             mobile_bridge::android_take_pending_assist,
+            mobile_bridge::android_is_assistant,
+            mobile_bridge::android_open_assistant_settings,
             resolver::resolve_app,
             resolver::verify_target,
             tts::synthesize_speech_piper,

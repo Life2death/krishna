@@ -3,6 +3,7 @@ import { ChevronLeftIcon } from "lucide-react";
 import { LiveVoiceSettings } from "@/pages/settings/components/LiveVoiceSettings";
 import { WakeWordSettings } from "@/pages/settings/components/WakeWordSettings";
 import WakeWordMeter from "./components/WakeWordMeter";
+import AssistantRoleCard from "./components/AssistantRoleCard";
 import { useKrishna } from "@/hooks";
 
 /**
@@ -26,7 +27,11 @@ export default function MobileSettings() {
         <span className="text-base font-semibold">Settings</span>
       </div>
       <div className="p-4 space-y-4">
-        <LiveVoiceSettings />
+        <AssistantRoleCard />
+
+        <div className="border-t border-border/10 pt-4">
+          <LiveVoiceSettings />
+        </div>
 
         <div className="border-t border-border/10 pt-4">
           <WakeWordMeter />

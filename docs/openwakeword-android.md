@@ -2,6 +2,15 @@
 
 OpenWakeWord provides on-device "Hey Krishna" wake-word detection using TFLite/LiteRT. It replaces the experimental Sherpa-ONNX gate as the primary wake-word detector.
 
+**Relationship to the system assistant gesture (2026-07-16):** Krishna can also be registered as
+the phone's Digital assistant app (`VoiceInteractionService` — see
+`VOICE_INTERACTION_ASSISTANT_PLAN.md`). That system gesture (long-press home / assist button, works
+from any app) is now the **primary hands-free invocation path** — it's a sanctioned OS mechanism
+with no always-on service required and no FGS-denial failure class. OpenWakeWord remains the
+**optional, always-listening** layer for users who want "Hey Krishna" to work without a physical
+gesture; it still sits behind its own shadow-mode approval gate (below) and is unaffected by
+whether the assistant role is granted.
+
 ## Architecture
 
 ```

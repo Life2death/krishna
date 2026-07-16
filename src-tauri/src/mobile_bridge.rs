@@ -455,6 +455,32 @@ pub fn android_take_pending_assist() -> bool {
     }
 }
 
+/// Best-effort: is Krishna currently the selected Digital assistant app?
+/// Empty/unknown component names never match, so this defaults to false.
+#[tauri::command]
+pub fn android_is_assistant() -> bool {
+    #[cfg(target_os = "android")]
+    {
+        crate::android_control::assist_get_current_component()
+            .map(|c| c.starts_with("com.krishna.assistant/"))
+            .unwrap_or(false)
+    }
+    #[cfg(not(target_os = "android"))]
+    {
+        false
+    }
+}
+
+/// Opens the system's default-apps picker so the user can pick Krishna as
+/// the Digital assistant app. No-op on desktop.
+#[tauri::command]
+pub fn android_open_assistant_settings() {
+    #[cfg(target_os = "android")]
+    {
+        let _ = crate::android_control::assist_open_settings();
+    }
+}
+
 // ── Sync transport fallback (Turso HTTP pipeline via reqwest) ──────────
 // Provides a Rust-backed transport used when `@libsql/client` can't run
 // (e.g. restrictive Android WebView). The TypeScript side auto-detects and

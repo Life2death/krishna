@@ -465,3 +465,44 @@ pub fn assist_take_pending() -> Result<bool, String> {
             .map_err(|e| format!("[assist] takePending not a bool: {}", e))
     })
 }
+
+/// Best-effort read of the `assistant` Secure Setting's component name, e.g.
+/// "com.krishna.assistant/.KrishnaVoiceInteractionService" when selected.
+pub fn assist_get_current_component() -> Result<String, String> {
+    with_env(|env| {
+        let context = application_context(env)?;
+        let class = JClass::from(find_app_class(env, ASSIST_BRIDGE_CLASS)?);
+        let result = env
+            .call_static_method(
+                class,
+                "getCurrentAssistantComponent",
+                "(Landroid/content/Context;)Ljava/lang/String;",
+                &[JValue::Object(&context)],
+            )
+            .map_err(|e| format!("[assist] getCurrentAssistantComponent failed: {}", e))?
+            .l()
+            .map_err(|e| format!("[assist] getCurrentAssistantComponent not string: {}", e))?;
+        let value: String = env
+            .get_string(&JString::from(result))
+            .map_err(|e| format!("[assist] getCurrentAssistantComponent string conv: {}", e))?
+            .into();
+        Ok(value)
+    })
+}
+
+/// Opens the system's default-apps picker so the user can pick Krishna as
+/// the Digital assistant app.
+pub fn assist_open_settings() -> Result<(), String> {
+    with_env(|env| {
+        let context = application_context(env)?;
+        let class = JClass::from(find_app_class(env, ASSIST_BRIDGE_CLASS)?);
+        env.call_static_method(
+            class,
+            "openAssistantSettings",
+            "(Landroid/content/Context;)V",
+            &[JValue::Object(&context)],
+        )
+        .map_err(|e| format!("[assist] openAssistantSettings failed: {}", e))?;
+        Ok(())
+    })
+}
