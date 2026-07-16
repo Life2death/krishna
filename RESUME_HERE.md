@@ -12,7 +12,33 @@
 
 ---
 
-## 0. LATEST — Krishna as system Digital Assistant, Phases 1–3 built + verified live (2026-07-16)
+## 0. LATEST — UPG-0 architecture contract delivered, awaiting owner review (2026-07-17)
+
+**UPG-0 (self-improvement upgrade system, Stage 0) is code-complete** — pure design artifact, no
+runtime code, exactly as scoped. Deliverables: `docs/upgrades/ARCHITECTURE.md` (state machine,
+status-ownership rule, the real 4-places sync-table gotcha with corrected file paths, named GitHub
+secrets, concrete cost limits, kill-switch spec), `schemas/upgrade-proposal.v1.json` (versioned,
+validates the normalized proposal/review response shape), root `AGENTS.md` (build/validate
+commands, hard constraints, repo gotchas for any coding agent), `CLAUDE.md` (thin pointer to
+`AGENTS.md` + this file). Not yet committed — see below for why.
+
+**⚠️ OWNER ACTION REQUIRED before Stage 1 starts (this is UPG-0's own exit gate, not optional):**
+per `Automation_with_LLM.md`'s Required Approvals, the owner must read `docs/upgrades/
+ARCHITECTURE.md` and `schemas/upgrade-proposal.v1.json` and confirm the approval gates, the cost
+numbers ($50/month cap, 200k tokens/run, 1 automatic + 5 manual runs per rolling 24h — all picked
+as concrete first-pass numbers, not derived from real usage data yet), and the kill-switch
+mechanics (`UPGRADES_PAUSED` repo variable + a client-side settings toggle) actually match intent.
+**Do not start `UPG-1a` (Stage 1 code) until that confirmation happens.**
+
+One correction worth flagging: earlier planning notes described the 4th sync-table location as the
+"Rust-backed Android transport schema" — on closer inspection (`packages/core/sync/rust-
+transport.ts`) it's actually a TypeScript file with its own `TABLE_DDL` duplicate, sent to a
+schema-agnostic Rust executor (`sync_exec_multiple` in `mobile_bridge.rs`) — the real Rust side
+holds no table/column knowledge. `ARCHITECTURE.md` documents the corrected picture.
+
+---
+
+## 0a. PRIOR — Krishna as system Digital Assistant, Phases 1–3 built + verified live (2026-07-16)
 
 **Krishna can now be set as the phone's Digital assistant app**, same mechanism as Gemini/Bixby
 (`VoiceInteractionService`, `ROLE_ASSISTANT`). This directly targets the "backgrounded-by-own-
@@ -56,7 +82,7 @@ always-listening layer, unchanged, still behind its own shadow-mode approval gat
 
 ---
 
-## 0a. PRIOR — v2.1.6 released; mobile travel/sync/CSP fixes on main (2026-07-13, later)
+## 0b. PRIOR — v2.1.6 released; mobile travel/sync/CSP fixes on main (2026-07-13, later)
 
 **Desktop release `v2.1.6` cut and built (draft).** Tag pushed, GitHub Actions `release.yml`
 succeeded, both installers (`Krishna_2.1.6_x64-setup.exe`, `.msi`) attached to a **draft** release
@@ -97,7 +123,7 @@ verification first). The travel fix `a504b5e` IS pushed. Android build/deploy re
 
 ---
 
-## 0b. EARLIER — OpenWakeWord Android build fixed + verified live; "Upgrades" system planned (2026-07-13)
+## 0c. EARLIER — OpenWakeWord Android build fixed + verified live; "Upgrades" system planned (2026-07-13)
 
 **OpenWakeWord shadow-mode feature (branch `codex/openwakeword-shadow-mode`, PR #6, pushed `21cee94`):**
 - Root-caused the "hour-long build, no APK" problem: **cargo blocks on the crates.io network index
@@ -141,13 +167,12 @@ kill switch, a status-ownership invariant so Android/desktop never race the coor
 `upgrade_tasks.status`, a schema-parity test for the repo's known "4-places-to-register-a-sync-
 table" drift trap, untrusted-provider-output handling, narrow-scope PAT for manual dispatch,
 concrete cost/rate limits). Broken into 11 sequenced, independently-testable tasks — **see task
-tracker `UPG-0` through `UPG-6`** (each has an explicit build step + a manual USER TEST). Not
-started yet. **Today's unblocked starting point: `UPG-0`** (architecture doc + schemas + kill-switch
-spec + AGENTS.md — no runtime code, pure design artifact, nothing to build/break).
+tracker `UPG-0` through `UPG-6`** (each has an explicit build step + a manual USER TEST).
+**`UPG-0` is now DONE (2026-07-17)** — see §0; next is the owner review that gates Stage 1.
 
 ---
 
-## 0c. PRIOR — Android mobile voice fully working (2026-07-12), pushed `905041f`
+## 0d. PRIOR — Android mobile voice fully working (2026-07-12), pushed `905041f`
 
 Mobile went from "asks for a key it should never need, then silent/broken" to a working
 tap-to-talk voice assistant with device control, in one session. All code pushed to
@@ -360,11 +385,12 @@ fully built end to end. Full history/spec: `NATURAL_SPEECH_PLAN.md`.
 ## 4. PENDING QUEUE — priority order
 
 ### 🔴 START TODAY
-0. **UPG-0 (Automation_with_LLM.md self-improvement system, Stage 0)** — architecture contract doc,
-   versioned proposal JSON schema, AGENTS.md/CLAUDE.md guidance, named GitHub secrets, concrete
-   cost limits, kill-switch spec. No runtime code — pure design artifact, fully unblocked, safe to
-   start immediately. See task tracker UPG-0..UPG-6 for the full 11-stage sequenced plan (each
-   stage has its own build step + manual USER TEST before the next stage starts).
+0. **UPG-0 (Automation_with_LLM.md self-improvement system, Stage 0) — DONE 2026-07-17, awaiting
+   owner review.** Delivered: `docs/upgrades/ARCHITECTURE.md`, `schemas/upgrade-proposal.v1.json`,
+   root `AGENTS.md`, `CLAUDE.md` (see §0). Pure design artifact, no runtime code. **Blocking gate
+   before UPG-1a:** owner reads the two docs and confirms approval gates / cost numbers /
+   kill-switch match intent. See task tracker UPG-0..UPG-6 for the full 11-stage sequenced plan
+   (each stage has its own build step + manual USER TEST before the next stage starts).
 0b. **OpenWakeWord shadow mode (branch `codex/openwakeword-shadow-mode`, PR #6)** — code is built
    and verified booting live on-device; what's left is DATA COLLECTION + EVALUATION, not code:
    record ≥100 positive / ≥200 negative training clips across ≥3 environments over ≥48h (Settings →
@@ -558,23 +584,20 @@ one. See `GMAIL_RECRUITER_RADAR_REVIEW_FINDINGS.md` for the full trail.
 > **Before marking any task done, update this file's §0** with what changed and what's still
 > open — that is the whole point of this file being a "single source of truth."
 
-### Do this now: `UPG-0` (Automation_with_LLM.md, Stage 0 — architecture contract, no runtime code)
-Fully unblocked, zero risk (produces docs + a JSON schema only, nothing to build or break). Deliver:
-`docs/upgrades/ARCHITECTURE.md` (state machine + the status-ownership rule: clients only ever
-append events, the GitHub coordinator is the sole writer of `upgrade_tasks.status`/`latest_run_id`
-— this avoids an Android/desktop write race), `schemas/upgrade-proposal.v1.json` (versioned,
-matches the "Proposal runs are read-only" normalized-response fields in the plan), root
-`AGENTS.md` + `CLAUDE.md` pointer, the named GitHub secrets list (provider keys +
-`TURSO_DATABASE_URL`/`TURSO_AUTH_TOKEN` + a fine-grained dispatch PAT scoped to `actions:write`
-only — do not reuse the existing Job Hunter GitHub integration), concrete cost limits (tokens/run,
-runs/day, monthly cap — pick real numbers, don't leave them symbolic), and the kill-switch spec
-(an `UPGRADES_PAUSED` repo variable the coordinator checks first, plus a settings-page toggle).
-**USER TEST for this stage:** the owner reads the two docs and confirms the approval gates, cost
-numbers, and kill-switch behavior match intent — before any of UPG-1a's code gets written.
+### Do this now: owner-review UPG-0, THEN start `UPG-1a` (not before)
+`UPG-0` is **DONE** (delivered 2026-07-17, see §0) — `docs/upgrades/ARCHITECTURE.md`,
+`schemas/upgrade-proposal.v1.json`, root `AGENTS.md`, `CLAUDE.md`. What's left is not an agent
+task, it's the **owner USER TEST that gates Stage 1**: read `docs/upgrades/ARCHITECTURE.md` +
+`schemas/upgrade-proposal.v1.json` and confirm the approval gates, the cost numbers ($50/month cap,
+200k tokens/run, 1 auto + 5 manual runs per rolling 24h), and the kill-switch (`UPGRADES_PAUSED`
+repo variable + settings toggle) match intent.
 
-Stage 1 (`UPG-1a` → `1b`/`1c`/`1d` in parallel) is next, but do not start it until UPG-0 is
-reviewed — each stage in this plan is a hard gate, not a suggestion (see `Automation_with_LLM.md`
-§"Required Approvals").
+Once the owner confirms, Stage 1 (`UPG-1a` → `1b`/`1c`/`1d`) begins: local SQLite tables (migrations
+23–25, per the 4-places sync-table checklist in `ARCHITECTURE.md`), core types + validation + DB
+actions, the shared upgrade feature UI, desktop `/settings/upgrades` + Android
+`/mobile/settings/upgrades` routes, and voice/text task capture — all local-only, no provider or
+GitHub calls yet. **Do not start `UPG-1a` until the owner has done the review above** — each stage
+in this plan is a hard gate, not a suggestion (see `Automation_with_LLM.md` §"Required Approvals").
 
 ### Separately, whenever there's a spare cycle: OpenWakeWord data collection (§4 item 0b)
 This is NOT a coding task — it's the owner recording training clips via Settings → Wake Word on

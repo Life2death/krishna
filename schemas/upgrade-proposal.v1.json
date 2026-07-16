@@ -1,0 +1,107 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Life2death/krishna/schemas/upgrade-proposal.v1.json",
+  "title": "Krishna upgrade proposal response (v1)",
+  "description": "Normalized, versioned response shape a provider run (Codex or Claude Code) must produce for a read-only proposal or an implementation-review pass. A response that fails to validate against this schema is a failed run (error = \"invalid_proposal_schema\"), not a best-effort partial proposal. See docs/upgrades/ARCHITECTURE.md.",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "taskId",
+    "provider",
+    "understanding",
+    "recommendedApproach",
+    "affectedFiles",
+    "risks",
+    "testPlan",
+    "effort",
+    "blockers"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": {
+      "const": "1.0.0",
+      "description": "Must match this schema file's version exactly. A provider or coordinator seeing a mismatch should treat the response as invalid rather than attempt best-effort parsing."
+    },
+    "taskId": {
+      "type": "string",
+      "description": "The upgrade_tasks.id this proposal is for."
+    },
+    "runId": {
+      "type": "string",
+      "description": "The upgrade_runs.id this response belongs to. Optional at response-authoring time — the coordinator may assign/stamp this after receiving the response."
+    },
+    "provider": {
+      "type": "string",
+      "enum": ["codex", "claude-code"],
+      "description": "Which provider produced this response. Extend this enum, don't repurpose an existing value, when a new provider is added."
+    },
+    "stage": {
+      "type": "string",
+      "enum": ["proposal", "review", "implementation"],
+      "description": "proposal = first read-only pass. review = a second provider's independent review of a proposal or diff. implementation = the approved code-writing pass (only reachable after the implementation-approval gate)."
+    },
+    "understanding": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The provider's restatement of the problem/request in its own words. Used to catch misunderstood requests before any code gets written."
+    },
+    "rootCauseHypothesis": {
+      "type": "string",
+      "description": "Optional. Only meaningful for bug-fix-shaped requests; omit for pure feature requests."
+    },
+    "recommendedApproach": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The provider's primary recommendation."
+    },
+    "alternatives": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["summary"],
+        "additionalProperties": false,
+        "properties": {
+          "summary": { "type": "string" },
+          "tradeoffs": { "type": "string" }
+        }
+      },
+      "default": []
+    },
+    "affectedFiles": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Repo-relative paths. Implementation runs must not touch files outside this list without a revised proposal — an implementation diff touching an unlisted file is a review finding, not something to wave through."
+    },
+    "risks": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Correctness, performance, or UX risks. May be empty (validated as [] , not omitted) if the provider genuinely found none — omission is treated as \"didn't check,\" not \"none found.\""
+    },
+    "privacyOrSecurityConcerns": {
+      "type": "array",
+      "items": { "type": "string" },
+      "default": [],
+      "description": "Separate from general risks because these get surfaced more prominently in the review UI. Empty array, not omitted, if none apply."
+    },
+    "testPlan": {
+      "type": "array",
+      "items": { "type": "string" },
+      "minItems": 1,
+      "description": "Concrete, checkable steps — not \"add appropriate tests.\" At least one item required; a proposal with no test plan is incomplete."
+    },
+    "expectedUserImpact": {
+      "type": "string",
+      "description": "What the user will actually notice changes, in plain language — this is what gets shown in the approval UI, not the technical diff summary."
+    },
+    "effort": {
+      "type": "string",
+      "enum": ["small", "medium", "large"],
+      "description": "Coarse sizing only. small = single file, no new deps. medium = a few files, possibly a new small dep. large = cross-cutting or touches sync/schema — should push the reviewer toward extra scrutiny."
+    },
+    "blockers": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Open questions or missing information the provider needs before it can proceed confidently. A non-empty blockers array on a proposal run should route to \"needs clarification\" rather than \"ready for approval\" in the client UI."
+    }
+  }
+}
