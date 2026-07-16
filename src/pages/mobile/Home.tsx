@@ -10,7 +10,7 @@ import {
   CheckIcon,
   EarIcon,
 } from "lucide-react";
-import { useKrishna, useMobileSpeech, useLiveVoiceSession } from "@/hooks";
+import { useKrishna, useMobileSpeech, useLiveVoiceSession, useAssistTrigger } from "@/hooks";
 import { useApp as useAppContext } from "@/contexts";
 import WakeWordMeter from "./components/WakeWordMeter";
 import {
@@ -85,6 +85,15 @@ export default function MobileHome() {
     autoStart: true,
     onSwitchToClassic: handleSwitchToClassic,
     onTurnComplete: maybeLearnStyle,
+  });
+
+  // System assist gesture (long-press home etc.) — starts listening in
+  // whichever mode is currently active, exactly like a mic tap.
+  useAssistTrigger({
+    isLiveMode,
+    isLiveActive: live.isActive,
+    startClassicListening: startListening,
+    startLive: () => void live.start(),
   });
 
   const selectEndpoint = (ep: Endpoint) => {

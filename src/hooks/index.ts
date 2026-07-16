@@ -19,6 +19,7 @@ export * from "./useKrishna";
 export * from "./useMcpTools";
 export * from "./useDevicePresence";
 export * from "./useMobileSpeech";
+export * from "./useAssistTrigger";
 export * from "./useSystemHealth";
 export * from "./useVoiceStatus";
 export * from "./useVoiceEnroll";

@@ -217,6 +217,7 @@ pub fn run() {
             mobile_bridge::android_run_wake_word_evaluation,
             mobile_bridge::android_capture_clip,
             mobile_bridge::android_training_summary,
+            mobile_bridge::android_take_pending_assist,
             resolver::resolve_app,
             resolver::verify_target,
             tts::synthesize_speech_piper,

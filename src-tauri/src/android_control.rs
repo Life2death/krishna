@@ -10,6 +10,7 @@ const LAUNCHER_CLASS: &str = "com.krishna.assistant.AppLauncherHelper";
 const MEDIA_CLASS: &str = "com.krishna.assistant.MediaControlHelper";
 const HANDS_FREE_CLASS: &str = "com.krishna.assistant.KrishnaHandsFreeService";
 const WAKE_WORD_BRIDGE: &str = "com.krishna.assistant.WakeWordBridgeHelper";
+const ASSIST_BRIDGE_CLASS: &str = "com.krishna.assistant.AssistBridgeHelper";
 
 #[derive(serde::Deserialize)]
 struct AppEntry {
@@ -449,5 +450,18 @@ pub fn wake_word_training_summary() -> Result<String, String> {
             .map_err(|e| format!("[ww] getTrainingSummary string conv: {}", e))?
             .into();
         Ok(value)
+    })
+}
+
+/// True at most once per system assist gesture (long-press home etc.) that
+/// just brought MainActivity to the foreground — JS should start listening
+/// immediately, exactly like a mic tap. See AssistBridgeHelper.kt.
+pub fn assist_take_pending() -> Result<bool, String> {
+    with_env(|env| {
+        let class = JClass::from(find_app_class(env, ASSIST_BRIDGE_CLASS)?);
+        env.call_static_method(class, "takePending", "()Z", &[])
+            .map_err(|e| format!("[assist] takePending failed: {}", e))?
+            .z()
+            .map_err(|e| format!("[assist] takePending not a bool: {}", e))
     })
 }

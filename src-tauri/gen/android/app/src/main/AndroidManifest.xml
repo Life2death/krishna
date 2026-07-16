@@ -7,6 +7,9 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Assist gesture while Krishna is already running: bring its existing
+         task to front instead of letting a second concurrent instance spawn. -->
+    <uses-permission android:name="android.permission.REORDER_TASKS" />
     <!-- Voice app-launcher: list installed launchable apps to match spoken names.
          Personal sideloaded build — Play Store policy on this permission n/a. -->
     <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES"
@@ -55,6 +58,31 @@
             android:exported="false"
             android:foregroundServiceType="microphone"
             android:stopWithTask="false" />
+
+        <!-- System Digital Assistant role (ROLE_ASSISTANT). See
+             VOICE_INTERACTION_ASSISTANT_PLAN.md. Not usable until the user
+             picks Krishna in Settings -> Apps -> Choose default apps ->
+             Digital assistant app. -->
+        <service android:name=".KrishnaVoiceInteractionService"
+            android:permission="android.permission.BIND_VOICE_INTERACTION"
+            android:exported="true"
+            android:label="@string/app_name">
+            <intent-filter>
+                <action android:name="android.service.voice.VoiceInteractionService" />
+            </intent-filter>
+            <meta-data android:name="android.voice_interaction"
+                android:resource="@xml/voice_interaction_service" />
+        </service>
+        <service android:name=".KrishnaInteractionSessionService"
+            android:permission="android.permission.BIND_VOICE_INTERACTION"
+            android:exported="true" />
+        <service android:name=".KrishnaRecognitionServiceStub"
+            android:permission="android.permission.BIND_RECOGNITION_SERVICE"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.speech.RecognitionService" />
+            </intent-filter>
+        </service>
 
         <provider
           android:name="androidx.core.content.FileProvider"

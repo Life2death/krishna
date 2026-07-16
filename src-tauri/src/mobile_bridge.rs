@@ -438,6 +438,23 @@ pub fn android_training_summary() -> String {
     }
 }
 
+// ── System assist gesture (VoiceInteractionService) ─────────────────
+// A long-press-home/assist gesture bounces MainActivity to the foreground
+// and marks a pending assist via AssistBridgeHelper. JS polls this on mount
+// and on window focus and, if true, starts listening exactly like a mic tap.
+
+#[tauri::command]
+pub fn android_take_pending_assist() -> bool {
+    #[cfg(target_os = "android")]
+    {
+        crate::android_control::assist_take_pending().unwrap_or(false)
+    }
+    #[cfg(not(target_os = "android"))]
+    {
+        false
+    }
+}
+
 // ── Sync transport fallback (Turso HTTP pipeline via reqwest) ──────────
 // Provides a Rust-backed transport used when `@libsql/client` can't run
 // (e.g. restrictive Android WebView). The TypeScript side auto-detects and
