@@ -1,12 +1,16 @@
 # Krishna as the system Digital Assistant (VoiceInteractionService) — implementation plan
 
-**Status:** Phases 1, 2, and 3 implemented and verified end-to-end live on-device 2026-07-16 — the
-full mechanism (assist gesture → Krishna foregrounded → already listening → Settings discoverability
-card) works, **including the duplicate-task edge case (found and fixed the same session — see
-Phase 0's "Duplicate-task trap" finding, now marked RESOLVED)**. Only remaining item: a live owner
-voice test through the listening state (adb can't inject real speech). Phase 4 (v2) not started —
-do not begin without explicit owner go-ahead. Originally written 2026-07-15; re-validated against
-the codebase and Android 14–16 platform docs 2026-07-16 before implementation began.
+**Status: DONE — Phases 1, 2, and 3 fully implemented and verified live on-device 2026-07-16,
+including a real owner voice test.** The full mechanism (assist gesture → Krishna foregrounded →
+already listening → real spoken question → spoken answer → Settings discoverability card) works
+end-to-end, including the duplicate-task edge case (found and fixed the same session — see Phase
+0's "Duplicate-task trap" finding, RESOLVED). Owner confirmed live: "What time is it?" / "What day
+is it today?" / "Hi Krishna, can you hear me?" all worked correctly via the assist gesture from
+inside another app — no tap needed. Committed `84b47ed` (Phases 1+2), `e601a0b` (Phase 3) on `main`
+in this worktree, pushed to `origin/main` 2026-07-16. Phase 4 (v2 — overlay session UI,
+screen-context awareness, keyguard support) intentionally not started — do not begin without
+explicit owner go-ahead. Originally written 2026-07-15; re-validated against the codebase and
+Android 14–16 platform docs 2026-07-16 before implementation began.
 **Working directory:** `D:\Learning\krishna-main-merge` (the shipping worktree — do NOT start a
 fresh worktree off `main`; see Build & verify rules at the bottom).
 
@@ -331,12 +335,12 @@ listening once; not pending → no-op; non-mobile → never invokes) using fake 
 in `mobile-speech-handoff.test.ts` — and follow that file's lesson: assert the *single-fire*
 behavior explicitly, not just eventual calls.
 
-**PASSED 2026-07-16, first half; second half still needs a live owner voice test.** Confirmed
-on-device: from inside another app (cold-started Krishna, no prior manual launch — see the
-duplicate-task caveat above), the assist gesture brings Krishna up with the mic already green and
-"Listening… tap to stop." **Not yet confirmed**: an actual spoken command through that listening
-state (needs a human voice, not scriptable via adb) — the owner should say something and confirm a
-real answer comes back, the same as the plan originally asked for. `useAssistTrigger.ts` written
+**FULLY PASSED 2026-07-16.** Confirmed on-device: from inside another app (cold-started Krishna, no
+prior manual launch — see the duplicate-task caveat above), the assist gesture brings Krishna up
+with the mic already green and "Listening… tap to stop." **Owner then live-tested real speech**
+("What time is it?", "What day is it today?", "Hi Krishna, can you hear me?") — all worked, spoken
+answers came back correctly, confirming the full pipeline (assist → auto-listen → STT → LLM → TTS)
+works exactly like a manual mic tap, with zero wake-word gating. `useAssistTrigger.ts` written
 (`src/hooks/useAssistTrigger.ts`, wired into `Home.tsx` after both `useMobileSpeech` and
 `useLiveVoiceSession` are constructed) with 6 vitest cases in
 `src/__tests__/use-assist-trigger.test.ts` (single-fire on mount, single-fire on focus regain, Live
