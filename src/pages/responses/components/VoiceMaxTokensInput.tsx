@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { getResponseSettings } from "@/lib";
 
 export const VoiceMaxTokensInput = () => {
-  const [voiceMaxTokens, setVoiceMaxTokens] = useState<number>(100);
+  const [voiceMaxTokens, setVoiceMaxTokens] = useState<number>(300);
 
   useEffect(() => {
     const settings = getResponseSettings();
@@ -12,7 +12,7 @@ export const VoiceMaxTokensInput = () => {
   }, []);
 
   const handleChange = (value: string) => {
-    const num = Math.max(50, Math.min(500, parseInt(value, 10) || 100));
+    const num = Math.max(50, Math.min(500, parseInt(value, 10) || 300));
     setVoiceMaxTokens(num);
     updateVoiceMaxTokens(num);
   };

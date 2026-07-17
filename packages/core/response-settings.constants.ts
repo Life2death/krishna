@@ -219,5 +219,11 @@ export const DEFAULT_RESPONSE_LENGTH = "auto";
 export const DEFAULT_LANGUAGE = "english";
 export const DEFAULT_AUTO_SCROLL = true;
 export const DEFAULT_HONORIFIC = "sir";
-export const DEFAULT_VOICE_MAX_TOKENS = 100;
+// 100 deterministically truncated any reply carrying a full Google-Maps
+// directions URL (two street addresses ≈ 150+ tokens on their own): the
+// completion died mid-```action fence, parseActions() found no closing fence
+// → zero actions → nothing opened, while the turn still logged "answered".
+// Confirmed twice on-device (2026-07-15 10:36, 2026-07-17 09:42). 300 keeps
+// spoken replies short but leaves room for one action block.
+export const DEFAULT_VOICE_MAX_TOKENS = 300;
 export const DEFAULT_VOICE_MODEL = "";

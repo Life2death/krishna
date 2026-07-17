@@ -155,6 +155,19 @@ export function parseActions(reply: string): ParsedReply {
     }
   }
 
+  // Complete blocks were stripped above, so any opening fence still left in
+  // spokenText never closed — the completion was cut off mid-action (seen
+  // live twice: a 100-token voice cap truncating a Maps-URL action). Without
+  // this check the regexes simply find no match, zero actions run, and the
+  // dangling JSON fragment gets SPOKEN — the turn "succeeds" while doing
+  // nothing. Strip the fragment and flag it so the caller fails the turn
+  // honestly instead.
+  const danglingFence = spokenText.search(/```(?:action|json|plan)\b/);
+  if (danglingFence !== -1) {
+    spokenText = spokenText.slice(0, danglingFence).trim();
+    return { spokenText, actions, plan, truncatedActionBlock: true };
+  }
+
   return { spokenText, actions, plan };
 }
 

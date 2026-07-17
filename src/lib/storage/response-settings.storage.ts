@@ -49,8 +49,14 @@ export const getResponseSettings = (): ResponseSettings => {
           : DEFAULT_RESPONSE_SETTINGS.autoScroll,
       honorific:
         parsedSettings.honorific || DEFAULT_RESPONSE_SETTINGS.honorific,
+      // 100 was the pre-2026-07-17 default, not a user choice — it truncated
+      // any completion carrying a Maps URL mid-action-block (see
+      // DEFAULT_VOICE_MAX_TOKENS). Migrate it up; any other stored value is
+      // a deliberate setting and is preserved.
       voiceMaxTokens:
-        parsedSettings.voiceMaxTokens ?? DEFAULT_RESPONSE_SETTINGS.voiceMaxTokens,
+        parsedSettings.voiceMaxTokens === 100 || parsedSettings.voiceMaxTokens == null
+          ? DEFAULT_RESPONSE_SETTINGS.voiceMaxTokens
+          : parsedSettings.voiceMaxTokens,
       voiceModel:
         parsedSettings.voiceModel ?? DEFAULT_RESPONSE_SETTINGS.voiceModel,
     };

@@ -2181,7 +2181,7 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
         }
         flushStreamingReply();
 
-        const { spokenText, actions, plan } = parseActions(fullResponse);
+        const { spokenText, actions, plan, truncatedActionBlock } = parseActions(fullResponse);
 
         // Suppress generic filler when reply is a plan-ack (the plan.say is sufficient)
         if (plan?.steps.length) {
@@ -2205,6 +2205,47 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
           ].slice(-8);
           await recordTurn(pendingUserTextRef.current, overrideText);
           logOutcome(command, "failed", "tool_failed", "save claimed without remember action", overrideText);
+          setStatus("speaking");
+          setLastSpoken(overrideText);
+          setKrishnaSpeaking(true);
+          try {
+            clearTimeout(fillerTimerRef.current!);
+            fillerTimerRef.current = null;
+            if (fillerPromiseRef.current) {
+              await fillerPromiseRef.current;
+            }
+            await speakLogged(overrideText, "status");
+          } finally {
+            setKrishnaSpeaking(false);
+          }
+          const cId = currentCaptureIdRef.current;
+          if (cId) {
+            if (usageData) turnTiming.setUsage(usageData);
+            turnTiming.freeze();
+            updateCommandTiming({ id: cId, timing: turnTiming.toJSON() }).catch((err) =>
+              console.error("Failed to persist turn timing:", err)
+            );
+            emit("command-log-updated").catch(() => {});
+          }
+          setStatus("idle");
+          return;
+        }
+
+        // The completion was cut off mid-```action fence (e.g. max-tokens) and
+        // no complete action survived — without this, zero actions run while
+        // the turn logs "answered" and the user hears a confident preamble
+        // followed by nothing (observed live 2026-07-15 + 2026-07-17, both
+        // Maps-URL actions truncated by the old 100-token voice cap). Fail
+        // the turn honestly instead, same pattern as the phantom-save guard.
+        if (truncatedActionBlock && actions.length === 0 && !plan?.steps.length) {
+          const hon = getResponseSettings().honorific || "sir";
+          const overrideText = `That reply got cut off before I could act on it, ${hon} — ask me once more.`;
+          historyRef.current = [
+            ...historyRef.current.slice(0, -1),
+            { role: "assistant" as const, content: overrideText },
+          ].slice(-8);
+          await recordTurn(pendingUserTextRef.current, overrideText);
+          logOutcome(command, "failed", "ai_error", "completion truncated mid-action block", overrideText);
           setStatus("speaking");
           setLastSpoken(overrideText);
           setKrishnaSpeaking(true);

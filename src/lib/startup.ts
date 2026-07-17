@@ -78,11 +78,14 @@ export async function initializeCore(): Promise<void> {
         language: base.language ?? "english",
         autoScroll: base.autoScroll ?? true,
         honorific: base.honorific ?? "sir",
-        voiceMaxTokens: base.voiceMaxTokens ?? 100,
+        // 100 (the old default) truncated URL-carrying action blocks — treat a
+        // stored 100 as unmigrated, same rule as response-settings.storage.ts.
+        voiceMaxTokens:
+          base.voiceMaxTokens === 100 || base.voiceMaxTokens == null ? 300 : base.voiceMaxTokens,
         voiceModel: base.voiceModel ?? "",
       };
     } catch {
-      return { responseLength: "auto", language: "english", autoScroll: true, honorific: "sir", voiceMaxTokens: 100, voiceModel: "" };
+      return { responseLength: "auto", language: "english", autoScroll: true, honorific: "sir", voiceMaxTokens: 300, voiceModel: "" };
     }
   });
 

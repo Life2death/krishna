@@ -44,6 +44,11 @@ export interface ParsedReply {
     needsConfirmation: boolean;
     steps: StepAction[];
   };
+  /** The reply opened an ```action/```json fence that never closed — the
+   * completion was cut off (e.g. max-tokens) mid-action. The dangling
+   * fragment is stripped from spokenText; the caller should treat the turn
+   * as failed rather than silently doing nothing. */
+  truncatedActionBlock?: boolean;
 }
 
 export interface AssistantTurnResult {

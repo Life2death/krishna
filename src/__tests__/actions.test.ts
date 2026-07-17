@@ -247,6 +247,54 @@ describe("parseActions", () => {
     const result = parseActions('```action\n{"action":"open_saved_search"}\n```');
     expect(result.actions.filter((a) => a.action === "open_saved_search")).toHaveLength(0);
   });
+
+  // Regression: a completion cut off mid-```action fence (e.g. the old
+  // 100-token voice cap truncating a Maps-URL action) used to find zero
+  // regex matches, run zero actions, and SPEAK the dangling JSON fragment —
+  // the turn logged "answered" while doing nothing. truncatedActionBlock
+  // lets the caller fail the turn honestly instead of pretending it worked.
+  describe("truncated action block", () => {
+    it("flags a dangling ```action fence with no closing", () => {
+      const result = parseActions('Let me check that for you.\n```action\n{"action":"open","target":"https://www.google.com/maps/dir/');
+      expect(result.truncatedActionBlock).toBe(true);
+      expect(result.actions).toHaveLength(0);
+      expect(result.spokenText).toBe("Let me check that for you.");
+    });
+
+    it("flags a dangling ```json fence with no closing", () => {
+      const result = parseActions('One moment.\n```json\n{"action":"remember","key":"note"');
+      expect(result.truncatedActionBlock).toBe(true);
+      expect(result.actions).toHaveLength(0);
+      expect(result.spokenText).toBe("One moment.");
+    });
+
+    it("flags a dangling ```plan fence with no closing", () => {
+      const result = parseActions('Working on it.\n```plan\n{"say":"doing it","plan":[');
+      expect(result.truncatedActionBlock).toBe(true);
+      expect(result.spokenText).toBe("Working on it.");
+    });
+
+    it("does not flag a complete, closed action block", () => {
+      const result = parseActions('Opening YouTube.\n```action\n{"action":"open","target":"youtube"}\n```');
+      expect(result.truncatedActionBlock).toBeUndefined();
+      expect(result.actions).toHaveLength(1);
+    });
+
+    it("does not flag plain text with no fence at all", () => {
+      const result = parseActions("Hello, how can I help you?");
+      expect(result.truncatedActionBlock).toBeUndefined();
+    });
+
+    it("still runs a completed first action when a second action is truncated", () => {
+      const result = parseActions(
+        'Noting that, then checking the route.\n```action\n{"action":"remember","key":"note","value":"buy milk"}\n```\n```action\n{"action":"travel_time","from":"home","to":"work"',
+      );
+      expect(result.truncatedActionBlock).toBe(true);
+      expect(result.actions).toHaveLength(1);
+      expect(result.actions[0]).toEqual({ action: "remember", key: "note", value: "buy milk" });
+      expect(result.spokenText).toBe("Noting that, then checking the route.");
+    });
+  });
 });
 
 // ── decideActionResponse (pure decision helper) ──────────────────────────
