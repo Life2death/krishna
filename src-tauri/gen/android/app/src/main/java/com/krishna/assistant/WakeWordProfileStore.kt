@@ -210,6 +210,27 @@ class WakeWordProfileStore(context: Context) {
     return cachedProfile!!
   }
 
+  /**
+   * Owner-explicit activation that SKIPS the readiness gate + evaluation.
+   * The full gate (100/200 clips, 3 environments, 48h, recall/false-wake
+   * thresholds) exists for a quality-assured rollout, but on this personal
+   * sideloaded build the owner chose to activate directly and tune from live
+   * use (2026-07-17: "enable things first, harden later"). Records a
+   * distinct evaluationStatus so diagnostics never claim an evaluation
+   * passed that never ran.
+   */
+  fun forceActivate(): WakeWordProfile {
+    val current = load()
+    Log.w(TAG, "forceActivate: skipping readiness gate + evaluation (owner override)")
+    save(current.copy(
+      enabled = true,
+      activationApprovedAt = System.currentTimeMillis(),
+      evaluationStatus = "approved_forced",
+      lastError = "",
+    ))
+    return cachedProfile!!
+  }
+
   fun incrementPositive(): WakeWordProfile {
     val current = load()
     save(current.copy(

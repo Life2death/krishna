@@ -1,6 +1,6 @@
 import { STORAGE_KEYS } from "@/config";
 
-export type EvaluationStatus = "collecting" | "ready_for_approval" | "approved" | "failed";
+export type EvaluationStatus = "collecting" | "ready_for_approval" | "approved" | "approved_forced" | "failed";
 export type AudioSource = "builtin_mic" | "bluetooth_sco";
 
 export interface EvaluationResult {
@@ -199,6 +199,37 @@ export const updateActivationApproved = async (approved: boolean): Promise<WakeW
     ...current,
     activationApprovedAt: approved ? Date.now() : 0,
     evaluationStatus: approved ? "approved" : current.evaluationStatus,
+  };
+  saveLocal(updated);
+  return updated;
+};
+
+/**
+ * Owner-explicit override that activates wake-word detection immediately,
+ * skipping the readiness gate (100/200 clips, 3 environments, 48h) and the
+ * evaluation pass entirely. Distinct from updateActivationApproved, which
+ * only succeeds after a passing evaluation — this always succeeds (it's a
+ * deliberate bypass, not a request the native side can deny). The resulting
+ * evaluationStatus is "approved_forced", not "approved", so diagnostics and
+ * the UI never claim an evaluation passed that never ran.
+ */
+export const forceActivateWakeWord = async (): Promise<WakeWordSettings> => {
+  if (isAndroid()) {
+    try {
+      await bridgeInvoke("android_update_wake_word_field", {
+        field: "forceActivate",
+        value: "true",
+      });
+    } catch { /* fallback below */ }
+    return getWakeWordSettings();
+  }
+  const current = await getWakeWordSettings();
+  const updated: WakeWordSettings = {
+    ...current,
+    enabled: true,
+    activationApprovedAt: Date.now(),
+    evaluationStatus: "approved_forced",
+    lastError: "",
   };
   saveLocal(updated);
   return updated;

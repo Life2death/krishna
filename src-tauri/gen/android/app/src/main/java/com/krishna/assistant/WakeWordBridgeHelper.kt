@@ -68,6 +68,7 @@ object WakeWordBridgeHelper {
         }
         "recordingRetention" -> store.setRecordingRetention(value.toBoolean())
         "evaluationStatus" -> store.setEvaluationStatus(value)
+        "forceActivate" -> if (value.toBoolean()) store.forceActivate()
         else -> Log.w(TAG, "Unknown profile field: $field")
       }
       true

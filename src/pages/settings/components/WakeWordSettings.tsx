@@ -6,6 +6,7 @@ import {
   updateTrainingConsent,
   updateEvaluationStatus,
   updateActivationApproved,
+  forceActivateWakeWord,
   updateAudioSource,
   updateRecordingRetention,
   resetWakeWordSettings,
@@ -89,6 +90,11 @@ export const WakeWordSettings = () => {
       const updated = await getWakeWordSettings();
       setSettings(updated);
     }
+  };
+
+  const handleForceActivate = async () => {
+    const updated = await forceActivateWakeWord();
+    setSettings(updated);
   };
 
   const handleReset = async () => {
@@ -216,6 +222,19 @@ export const WakeWordSettings = () => {
             </Button>
           )}
 
+          {settings.evaluationStatus !== "approved" && settings.evaluationStatus !== "approved_forced" && (
+            <div className="space-y-1 border-t border-border/10 pt-2 mt-1">
+              <Button size="sm" variant="outline" onClick={handleForceActivate}>
+                Activate now (skip the quality gate)
+              </Button>
+              <p className="text-xs text-muted-foreground">
+                Turns wake-word detection on immediately without waiting for the readiness gate or
+                a passing evaluation. Recall/false-wake accuracy is untested — you're tuning it
+                live instead of ahead of time.
+              </p>
+            </div>
+          )}
+
           {settings.evaluationResult.sampleCount > 0 && (
             <div className="text-xs space-y-1 font-mono mt-2">
               <p className="text-muted-foreground">Last evaluation: recall={settings.evaluationResult.recall.toFixed(3)} falseWakeRate={settings.evaluationResult.falseWakeRate.toFixed(3)} samples={settings.evaluationResult.sampleCount} model={settings.evaluationResult.modelVersion}</p>
@@ -240,6 +259,12 @@ export const WakeWordSettings = () => {
 
           {settings.evaluationStatus === "approved" && (
             <p className="text-xs text-green-600">Wake word is approved and active.</p>
+          )}
+
+          {settings.evaluationStatus === "approved_forced" && (
+            <p className="text-xs text-amber-500">
+              Wake word is active — activated manually, quality gate was skipped.
+            </p>
           )}
 
           {settings.evaluationStatus === "failed" && (
