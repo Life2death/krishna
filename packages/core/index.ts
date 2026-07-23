@@ -20,3 +20,4 @@ export * from "./tool-selector";
 export * from "./action-policy";
 export * from "./redact";
 export * from "./sync";
+export * from "./upgrades";

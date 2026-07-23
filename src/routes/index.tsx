@@ -16,6 +16,7 @@ import {
   MobileMemories,
   MobileHome,
   MobileSettings,
+  Upgrades,
 } from "@/pages";
 import { DashboardLayout } from "@/layouts";
 import { invoke } from "@tauri-apps/api/core";
@@ -68,6 +69,7 @@ export default function AppRoutes() {
           <Route element={<FirstRunGuard />}>
             <Route path="/" element={<MobileHome />} />
             <Route path="/mobile/settings" element={<MobileSettings />} />
+            <Route path="/mobile/settings/upgrades" element={<Upgrades />} />
             <Route path="/mobile/memories" element={<MobileMemories />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>
@@ -83,6 +85,7 @@ export default function AppRoutes() {
                 <Route path="/shortcuts" element={<Shortcuts />} />
                 <Route path="/screenshot" element={<Screenshot />} />
                 <Route path="/settings" element={<Settings />} />
+                <Route path="/settings/upgrades" element={<Upgrades />} />
                 <Route path="/audio" element={<Audio />} />
                 <Route path="/dev-space" element={<DevSpace />} />
                 <Route path="/mobile/memories" element={<MobileMemories />} />

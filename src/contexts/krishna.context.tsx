@@ -29,7 +29,7 @@ import { createReminder, getDueReminders, updateReminder, cancelReminder } from 
 import { createConversation, appendMessages, generateConversationTitle, getMostRecentConversation, deleteConversation } from "@/lib/repo-bound";
 import { isLookCommand, isUndoCommand, isJobExtractionCommand, isJobStatusCommand } from "@/lib/perception";
 import { triggerJobExtractionWorkflow, getJobExtractionStatus } from "@/lib/integrations/github-workflow";
-import { createAuditEntry, getLastReversible, logCommand, insertPendingCommand, updateCommandOutcome, updateCommandTiming, logSpeech } from "@/lib/database";
+import { createAuditEntry, createUpgradeTask, getLastReversible, listUpgradeTasks, logCommand, insertPendingCommand, updateCommandOutcome, updateCommandTiming, logSpeech } from "@/lib/database";
 import { pickLine } from "@/lib/voice-lines";
 import type { CommandOutcome, FailureReason, SpeechSource } from "@/lib/database";
 import { setConfirmAction, setVerbatimConfirm } from "@krishna/core/tools/mcp-bridge";
@@ -46,6 +46,9 @@ import { SentenceStream } from "@/lib/sentence-stream";
 import { SpeechQueue } from "@/lib/speech-queue";
 import { parseFastCommand } from "@/lib/fast-command";
 import { startDeviceCommandDispatcher } from "@/lib/device-command-dispatcher";
+import { isMobileDevice } from "@/lib/platform";
+import { createLocalUpgradeDraft, parseUpgradeCommand } from "@krishna/core/upgrades";
+import type { CreateUpgradeTaskInput } from "@krishna/core/types";
 
 export interface ConversationTurn {
   id: string;
@@ -1004,12 +1007,13 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const pendingConfirmationRef = useRef<{
-    type: "action" | "plan" | "memory" | "reminder" | "job_extraction" | "mcp_tool";
+    type: "action" | "plan" | "memory" | "reminder" | "job_extraction" | "mcp_tool" | "upgrade_task";
     spokenResponse: string;
     pendingResult?: { found: boolean; target?: string; displayName?: string; actionToResume?: string; [key: string]: any };
     input?: string;
     steps?: StepAction[];
     memoryData?: { key: string | null; value: string };
+    upgradeData?: CreateUpgradeTaskInput;
     reminderData?: { text: string; dueAt: number; recurrence: string | null };
     resolve?: (value: boolean) => void;
     captureId?: string;
@@ -1371,6 +1375,37 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
               pending.input ?? "",
               pending.captureId,
             );
+          } else if (pending.type === "upgrade_task" && pending.upgradeData) {
+            setStatus("thinking");
+            try {
+              const task = await createUpgradeTask(pending.upgradeData);
+              const speak = `Added "${task.title}" to Upgrades. It is local only for now.`;
+              logOutcome(pending.input ?? "", "answered", undefined, undefined, speak, "voice", pending.captureId);
+              await recordTurn(pending.input || "", speak);
+              setLastSpoken(speak);
+              setKrishnaSpeaking(true);
+              setStatus("speaking");
+              try {
+                await speakLogged(speak, "answer", pending.captureId);
+              } finally {
+                setKrishnaSpeaking(false);
+              }
+            } catch (err) {
+              const msg = err instanceof Error ? err.message : "Could not create upgrade task";
+              const speak = "I had trouble adding that upgrade.";
+              logOutcome(pending.input ?? "", "failed", "tool_failed", msg, undefined, "voice", pending.captureId);
+              await recordTurn(pending.input || "", speak);
+              setLastSpoken(speak);
+              setKrishnaSpeaking(true);
+              setStatus("speaking");
+              try {
+                await speakLogged(speak, "error", pending.captureId);
+              } finally {
+                setKrishnaSpeaking(false);
+              }
+            } finally {
+              setStatus("idle");
+            }
           } else if (pending.type === "mcp_tool" && pending.resolve) {
             pending.resolve(true);
             setStatus("thinking");
@@ -1637,6 +1672,75 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
         console.error("Failed to insert pending command:", err)
       );
       emit("command-log-updated").catch(() => {});
+
+      const upgradeIntent = parseUpgradeCommand(command);
+      if (upgradeIntent) {
+        if (upgradeIntent.intent === "create") {
+          const requestText = upgradeIntent.requestText || command;
+          const draft = createLocalUpgradeDraft(
+            requestText,
+            "voice",
+            isMobileDevice() ? "android" : "desktop",
+            captureId,
+          );
+          const spokenResponse = `Should I add "${draft.title}" to Upgrades for local review?`;
+          pendingConfirmationRef.current = {
+            type: "upgrade_task",
+            spokenResponse,
+            upgradeData: draft,
+            input: command,
+            captureId,
+          };
+          const thisPending = pendingConfirmationRef.current;
+          reAskRef.current = false;
+          clearConfirmTimeout();
+          confirmTimeoutRef.current = setTimeout(() => {
+            void handleConfirmDecline(thisPending, "Okay, I won't add it.", "Upgrade task confirmation timed out (15s)");
+          }, 15000);
+          setStatus("confirming");
+          setLastSpoken(spokenResponse);
+          setKrishnaSpeaking(true);
+          try {
+            await speakLogged(spokenResponse, "confirm_prompt", captureId);
+          } finally {
+            setKrishnaSpeaking(false);
+          }
+          return;
+        }
+
+        if (upgradeIntent.intent === "list") {
+          const tasks = await listUpgradeTasks({ status: "queued" });
+          const speak = tasks.length === 0
+            ? "There are no pending upgrades."
+            : `There ${tasks.length === 1 ? "is" : "are"} ${tasks.length} pending upgrade${tasks.length === 1 ? "" : "s"}. The next one is "${tasks[0].title}".`;
+          await recordTurn(command, speak);
+          logOutcome(command, "answered", undefined, undefined, speak, "voice", captureId);
+          setLastSpoken(speak);
+          setStatus("speaking");
+          setKrishnaSpeaking(true);
+          try {
+            await speakLogged(speak, "answer", captureId);
+          } finally {
+            setKrishnaSpeaking(false);
+            setStatus("idle");
+          }
+          return;
+        }
+
+        const speak = "That upgrade action is planned for a later stage. For now I can create and review local upgrade tasks.";
+        await recordTurn(command, speak);
+        logOutcome(command, "answered", undefined, undefined, speak, "voice", captureId);
+        setLastSpoken(speak);
+        setStatus("speaking");
+        setKrishnaSpeaking(true);
+        try {
+          await speakLogged(speak, "status", captureId);
+        } finally {
+          setKrishnaSpeaking(false);
+          setStatus("idle");
+        }
+        return;
+      }
 
       // Phase 2: zero-LLM fast path for greetings/thanks/acknowledgments
       const cannedHonorific = getResponseSettings().honorific || "sir";

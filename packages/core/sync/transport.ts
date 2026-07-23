@@ -21,6 +21,9 @@ const TABLE_DDL: Record<string, string> = {
   reminders: `id TEXT PRIMARY KEY, text TEXT, due_at INTEGER, recurrence TEXT, skill_id TEXT, enabled INTEGER DEFAULT 1, created_at INTEGER, updated_at INTEGER`,
   voiceprint_samples: `id TEXT PRIMARY KEY, speaker TEXT DEFAULT 'primary', embedding TEXT, dims INTEGER, quality REAL, created_at INTEGER, updated_at INTEGER`,
   device_commands: `id TEXT PRIMARY KEY, source_kind TEXT, target_kind TEXT, command_text TEXT, status TEXT DEFAULT 'pending', result TEXT, created_at INTEGER, updated_at INTEGER`,
+  upgrade_tasks: `id TEXT PRIMARY KEY, title TEXT, request_text TEXT, normalized_goal TEXT, acceptance_criteria_json TEXT, area TEXT, priority TEXT, source TEXT, origin_command_log_id TEXT, context_json TEXT, platform TEXT, app_version TEXT, status TEXT, provider_policy TEXT, latest_run_id TEXT, created_at INTEGER, updated_at INTEGER`,
+  upgrade_runs: `id TEXT PRIMARY KEY, task_id TEXT, stage TEXT, provider TEXT, status TEXT, suggestion_summary TEXT, recommended_action TEXT, alternatives_json TEXT, risks_json TEXT, affected_files_json TEXT, test_plan_json TEXT, provider_run_id TEXT, github_run_id TEXT, branch_name TEXT, pr_url TEXT, prompt_tokens INTEGER, completion_tokens INTEGER, cost_usd REAL, error TEXT, created_at INTEGER, updated_at INTEGER, started_at INTEGER, finished_at INTEGER`,
+  upgrade_events: `id TEXT PRIMARY KEY, task_id TEXT, run_id TEXT, event_type TEXT, actor TEXT, note TEXT, created_at INTEGER, updated_at INTEGER`,
 };
 
 function args(params?: unknown[]): InValue[] {

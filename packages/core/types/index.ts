@@ -12,3 +12,4 @@ export * from "./shortcuts";
 export * from "./skill";
 export * from "./system-prompts";
 export * from "./saved-search";
+export * from "./upgrade";

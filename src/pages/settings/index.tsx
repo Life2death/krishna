@@ -28,7 +28,8 @@ import {
 import { CreateSkillDialog, PersonaSelector, LiveVoiceSettings, WakeWordSettings, LearningSettings } from "./components";
 import { PageLayout } from "@/layouts";
 import { Button, Header } from "@/components";
-import { SaveIcon, CheckIcon } from "lucide-react";
+import { SaveIcon, CheckIcon, ClipboardListIcon } from "lucide-react";
+import { Link } from "react-router-dom";
 
 type ThemeValue = "dark" | "light" | "system";
 
@@ -138,6 +139,22 @@ const Settings = () => {
 
       {/* Self-Improvement (passive style learning) */}
       <LearningSettings />
+
+      <div className="border-t pt-4">
+        <Header
+          title="Upgrades"
+          description="Review local self-improvement tasks before any coding provider is allowed to act."
+          isMainTitle
+          rightSlot={
+            <Button asChild size="sm" variant="outline">
+              <Link to="/settings/upgrades">
+                <ClipboardListIcon className="h-4 w-4" />
+                Open
+              </Link>
+            </Button>
+          }
+        />
+      </div>
 
       {/* Skill Generation */}
       <div className="border-t pt-4">

@@ -1,5 +1,5 @@
 import { useNavigate } from "react-router-dom";
-import { ChevronLeftIcon } from "lucide-react";
+import { ChevronLeftIcon, ClipboardListIcon, MicIcon } from "lucide-react";
 import { LiveVoiceSettings } from "@/pages/settings/components/LiveVoiceSettings";
 import { WakeWordSettings } from "@/pages/settings/components/WakeWordSettings";
 import WakeWordMeter from "./components/WakeWordMeter";
@@ -28,6 +28,29 @@ export default function MobileSettings() {
       </div>
       <div className="p-4 space-y-4">
         <AssistantRoleCard />
+
+        <button
+          type="button"
+          onClick={() => navigate("/mobile/settings/upgrades")}
+          className="flex w-full items-center justify-between rounded-lg border border-border/30 p-3 text-left active:scale-[0.99]"
+        >
+          <span className="flex items-center gap-3">
+            <ClipboardListIcon className="size-5 text-primary" />
+            <span>
+              <span className="block text-sm font-medium">Upgrades</span>
+              <span className="block text-xs text-muted-foreground">Self-improvement task queue</span>
+            </span>
+          </span>
+          <ChevronLeftIcon className="size-4 rotate-180 text-muted-foreground" />
+        </button>
+
+        <div className="flex items-center gap-3 border-t border-border/10 pt-4">
+          <MicIcon className="size-5 text-primary" />
+          <div>
+            <p className="text-sm font-medium">Live Voice</p>
+            <p className="text-xs text-muted-foreground">Provider, model, voice, and timeout settings</p>
+          </div>
+        </div>
 
         <div className="border-t border-border/10 pt-4">
           <LiveVoiceSettings />

@@ -152,5 +152,12 @@ pub fn migrations() -> Vec<Migration> {
             sql: include_str!("migrations/device-commands-v22.sql"),
             kind: MigrationKind::Up,
         },
+        // Migration 23: Local self-improvement upgrade queue (Stage 1)
+        Migration {
+            version: 23,
+            description: "create_upgrade_tables",
+            sql: include_str!("migrations/upgrades-v23.sql"),
+            kind: MigrationKind::Up,
+        },
     ]
 }

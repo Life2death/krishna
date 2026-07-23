@@ -1,7 +1,8 @@
 export const SYNC_TABLES = [
   'conversations', 'messages', 'memories', 'memory_embeddings',
   'learned_actions', 'skills', 'system_prompts', 'reminders',
-  'voiceprint_samples', 'device_commands',
+  'voiceprint_samples', 'device_commands', 'upgrade_tasks',
+  'upgrade_runs', 'upgrade_events',
 ] as const;
 
 export type SyncTable = typeof SYNC_TABLES[number];

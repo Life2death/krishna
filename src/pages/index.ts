@@ -13,3 +13,4 @@ export { default as Setup } from "./setup";
 export { default as MobileMemories } from "./mobile/Memories";
 export { default as MobileHome } from "./mobile/Home";
 export { default as MobileSettings } from "./mobile/Settings";
+export { default as Upgrades } from "./upgrades";
