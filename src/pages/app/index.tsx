@@ -1,13 +1,13 @@
 import { Card, Updater, DragButton, CustomCursor, Button, KrishnaVAD, MobileVoiceButton } from "@/components";
-import { Completion, BrainSelector, VoiceModeSelector, LiveVoiceBar } from "./components";
+import { Completion, BrainSelector, VoiceModeSelector, LiveVoiceBar, CollapsedPill } from "./components";
 import { useApp, useKrishna } from "@/hooks";
 import { useApp as useAppContext } from "@/contexts";
 import { SquareIcon, LayoutDashboardIcon, KeyboardIcon, Loader2 } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
 import { ErrorBoundary } from "react-error-boundary";
 import { ErrorLayout } from "@/layouts";
-import { useCallback } from "react";
-import { getPlatform } from "@/lib";
+import { useCallback, useMemo } from "react";
+import { getPlatform, deriveVoiceState } from "@/lib";
 
 const App = () => {
   const krishna = useKrishna();
@@ -24,6 +24,28 @@ const App = () => {
     onKrishnaCommand: krishna.processCommand,
   });
   const platform = getPlatform();
+
+  // Drives the collapsed overlay icon's spin speed/color (see
+  // src/lib/voice-state.ts). Not yet wired to an actual collapse/expand
+  // window mechanism — CollapsedPill is rendered inline below purely so the
+  // four states can be eyeballed before that lands.
+  const voiceState = useMemo(
+    () =>
+      deriveVoiceState({
+        status: krishna.status,
+        vadPhase: krishna.vadPhase,
+        dictationRecording: dictation.isRecording,
+        dictationTranscribing: dictation.isTranscribing,
+        liveVoicePhase: krishna.liveVoicePhase,
+      }),
+    [
+      krishna.status,
+      krishna.vadPhase,
+      krishna.liveVoicePhase,
+      dictation.isRecording,
+      dictation.isTranscribing,
+    ]
+  );
 
   const dictationTitle = !customizable.dictation.enabled
     ? "Dictation (disabled — enable in Settings)"
@@ -118,6 +140,10 @@ const App = () => {
 
           <Updater />
           <DragButton />
+          {/* TEMPORARY placement — just to eyeball all four states before the
+              real collapse/expand window mechanism lands. Moves to being the
+              collapsed-window's actual content in a later commit. */}
+          <CollapsedPill state={voiceState} onExpand={() => {}} />
         </Card>
         {customizable.cursor.type === "invisible" && platform !== "linux" ? (
           <CustomCursor />
