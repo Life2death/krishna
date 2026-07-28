@@ -34,6 +34,7 @@ import { pickLine } from "@/lib/voice-lines";
 import type { CommandOutcome, FailureReason, SpeechSource } from "@/lib/database";
 import { setConfirmAction, setVerbatimConfirm } from "@krishna/core/tools/mcp-bridge";
 import type { AssistantStatus, StepAction } from "@/types/assistant";
+import type { VadPhase } from "@/lib/voice-state";
 import type { Skill } from "@/types/skill";
 import type { Message, AttachedFile } from "@/types";
 import type { VoiceVerifyResult } from "@/lib/voice-client";
@@ -113,6 +114,16 @@ interface KrishnaContextType {
   clearFiles: () => void;
   captureScreenshot: () => Promise<void>;
   isScreenshotLoading: boolean;
+  /** Classic VAD mic-pipeline phase, pushed up from `KrishnaVAD` (the only
+   * thing that owns `useMicVAD`). Feeds `deriveVoiceState` for the collapsed
+   * overlay icon — see `src/lib/voice-state.ts`. */
+  vadPhase: VadPhase;
+  setVadPhase: (phase: VadPhase) => void;
+  /** Realtime (Live Voice) session phase, pushed up from `LiveVoiceBar` (the
+   * only thing that owns `useLiveVoiceSession`). Empty string when live mode
+   * is off. Also feeds `deriveVoiceState`. */
+  liveVoicePhase: string;
+  setLiveVoicePhase: (phase: string) => void;
 }
 
 const KrishnaContext = createContext<KrishnaContextType | undefined>(undefined);
@@ -489,6 +500,8 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
 
   const [enabled, setEnabled] = useState<boolean>(true);
   const [status, setStatus] = useState<AssistantStatus>("idle");
+  const [vadPhase, setVadPhase] = useState<VadPhase>("quiet");
+  const [liveVoicePhase, setLiveVoicePhase] = useState<string>("");
   const [lastSpoken, setLastSpoken] = useState<string>("");
   const [pendingCommand, setPendingCommand] = useState<string | null>(null);
   const [lastError, setLastError] = useState<string | null>(null);
@@ -2616,6 +2629,8 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
           clearFiles,
           captureScreenshot,
           isScreenshotLoading,
+          vadPhase, setVadPhase,
+          liveVoicePhase, setLiveVoicePhase,
         }}
       >
       {children}

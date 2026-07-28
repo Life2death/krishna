@@ -196,6 +196,17 @@ export const KrishnaVAD = () => {
     if (vad.errored) console.error("[KrishnaVAD] VAD error:", vad.errored);
   }, [vad.errored]);
 
+  // Push the mic pipeline's phase up to the Krishna context — this is the
+  // only place that owns useMicVAD, so it's the only place that can know this.
+  // Feeds deriveVoiceState (src/lib/voice-state.ts) for the collapsed overlay
+  // icon. `transcribing` takes priority: it closes a real gap where `status`
+  // doesn't reach "thinking" until well after the STT call starts, which used
+  // to make the old presence orb (and would make the new icon) show idle for
+  // the whole ~1s+ round-trip right after the user stops talking.
+  useEffect(() => {
+    krishna.setVadPhase(isTranscribing ? "transcribing" : vad.userSpeaking ? "speaking" : "quiet");
+  }, [vad.userSpeaking, isTranscribing, krishna.setVadPhase]);
+
   const handleMuteToggle = () => {
     if (muted) {
       vad.start();
