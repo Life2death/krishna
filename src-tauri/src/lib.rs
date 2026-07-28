@@ -61,22 +61,6 @@ fn file_exists(path: String) -> bool {
     std::path::Path::new(&path).exists()
 }
 
-#[tauri::command]
-fn show_presence(app: tauri::AppHandle) {
-    if let Some(w) = app.get_webview_window("presence") {
-        #[cfg(desktop)]
-        let _ = w.set_ignore_cursor_events(true);
-        let _ = w.show();
-    }
-}
-
-#[tauri::command]
-fn hide_presence(app: tauri::AppHandle) {
-    if let Some(w) = app.get_webview_window("presence") {
-        let _ = w.hide();
-    }
-}
-
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     // Panic hook: if the app crashes, write the reason to a file before exiting
@@ -163,8 +147,6 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             get_app_version,
             file_exists,
-            show_presence,
-            hide_presence,
             window::set_window_height,
             window::open_dashboard,
             capture::capture_to_base64,
@@ -265,35 +247,6 @@ pub fn run() {
 
             #[cfg(target_os = "android")]
             keystore::init();
-
-            // Presence overlay (the desktop orb) is created programmatically and
-            // ONLY on desktop. It used to be a static tauri.conf.json window,
-            // which meant Android ALSO spawned it as a second WebView — and with
-            // two webviews, Tauri's IPC responses misroute to the wrong one on
-            // Android production builds: every `invoke` (starting with the first
-            // Database.load) hangs, initializeCore never resolves, white screen.
-            // Mobile now has exactly one WebView.
-            #[cfg(desktop)]
-            {
-                if app.handle().get_webview_window("presence").is_none() {
-                    let _ = tauri::WebviewWindowBuilder::new(
-                        app.handle(),
-                        "presence",
-                        tauri::WebviewUrl::App("/".into()),
-                    )
-                    .title("")
-                    .transparent(true)
-                    .decorations(false)
-                    .always_on_top(true)
-                    .visible(false)
-                    .resizable(false)
-                    .skip_taskbar(true)
-                    .fullscreen(true)
-                    .focused(false)
-                    .inner_size(800.0, 600.0)
-                    .build();
-                }
-            }
 
             #[cfg(target_os = "macos")]
             init(app.app_handle());

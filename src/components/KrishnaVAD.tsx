@@ -8,7 +8,6 @@ import { fetchSTTWithRetryDefault } from "@/lib/fetch-stt-with-retry";
 import { useApp } from "@/contexts";
 import { useKrishna } from "@/hooks";
 import { isKrishnaSpeaking } from "@/lib/krishna-mutex";
-import { invoke } from "@tauri-apps/api/core";
 import { emit } from "@tauri-apps/api/event";
 import { verifyVoice, getVoiceStatus, isVoiceIdEnabled, considerAddSample } from "@/lib/voice-client";
 import type { VoiceVerifyResult } from "@/lib/voice-client";
@@ -196,16 +195,6 @@ export const KrishnaVAD = () => {
   useEffect(() => {
     if (vad.errored) console.error("[KrishnaVAD] VAD error:", vad.errored);
   }, [vad.errored]);
-
-  // Wire VAD userSpeaking to presence overlay
-  useEffect(() => {
-    if (vad.userSpeaking) {
-      invoke("show_presence");
-      emit("vad-user-speaking", { speaking: true });
-    } else {
-      emit("vad-user-speaking", { speaking: false });
-    }
-  }, [vad.userSpeaking]);
 
   const handleMuteToggle = () => {
     if (muted) {

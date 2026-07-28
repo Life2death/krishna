@@ -2573,30 +2573,6 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
     [selectedAIProvider, allAiProviders, llmFallback, wakeWordEnabled, wakeWord, clearFiles, promptMemoryConfirmation]
   );
 
-  // Presence overlay: show large chakra when active, hide when idle
-  useEffect(() => {
-    if (status === "thinking" || status === "speaking") {
-      const chakraState: "speaking" | "processing" = status === "speaking" ? "speaking" : "processing";
-      invoke("show_presence");
-      emit("presence-state", { state: chakraState });
-    } else if (status === "idle" && !pendingConfirmationRef.current) {
-      invoke("hide_presence");
-    }
-  }, [status]);
-
-  // Presence overlay from VAD: show when user is speaking, hide when idle
-  useEffect(() => {
-    const unlisten = listen<{ speaking: boolean }>("vad-user-speaking", (event) => {
-      if (event.payload.speaking) {
-        invoke("show_presence");
-        emit("presence-state", { state: "listening" });
-      } else if (status === "idle") {
-        invoke("hide_presence");
-      }
-    });
-    return () => { unlisten.then((fn) => fn()); };
-  }, [status]);
-
   // Device relay (bridge P1): execute commands queued for THIS device kind by
   // the other device (desktop ↔ mobile) via the synced device_commands table.
   // A ref keeps the dispatcher on the freshest processCommand without
