@@ -71,4 +71,15 @@ export const DEFAULT_SHORTCUT_ACTIONS: ShortcutAction[] = [
       linux: "ctrl+shift+s",
     },
   },
+  {
+    id: "dictation",
+    name: "Dictation",
+    description:
+      "Speak from anywhere and have the transcribed text typed into whatever app currently has focus, without switching to Krishna",
+    defaultKey: {
+      macos: "cmd+shift+j",
+      windows: "ctrl+shift+j",
+      linux: "ctrl+shift+j",
+    },
+  },
 ];

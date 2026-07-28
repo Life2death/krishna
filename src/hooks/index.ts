@@ -7,6 +7,7 @@ export * from "./useSettings";
 export * from "./useGlobalShortcuts";
 export * from "./useShortcuts";
 export * from "./useSystemAudio";
+export * from "./useDictation";
 export * from "./useHistory";
 export * from "./useCommandInsights";
 export * from "./useCopyToClipboard";

@@ -14,6 +14,7 @@ import {
   updateAlwaysOnTop,
   updateAutostart,
   updateComputerControl,
+  updateDictationEnabled,
   updateLiveVoice,
   updateLiveVoiceMode,
   updateLiveVoiceAutoStart,
@@ -464,6 +465,9 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
           invoke("set_computer_control_enabled", {
             enabled: customizable.computerControl.enabled,
           }),
+          invoke("set_dictation_enabled", {
+            enabled: customizable.dictation.enabled,
+          }),
         ]);
       } catch (error) {
         console.error("Failed to apply customizable settings:", error);
@@ -783,6 +787,20 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
+  // Dictation has its own dedicated permission — deliberately NOT gated behind
+  // computerControl, since typing spoken words is a much narrower trust surface
+  // than full mouse/keyboard automation.
+  const toggleDictationEnabled = async (enabled: boolean) => {
+    const newState = updateDictationEnabled(enabled);
+    setCustomizable(newState);
+    try {
+      await invoke("set_dictation_enabled", { enabled });
+      loadData();
+    } catch (error) {
+      console.error("Failed to toggle dictation:", error);
+    }
+  };
+
   const toggleLiveVoiceEnabled = (enabled: boolean) => {
     const newState = updateLiveVoice(enabled);
     setCustomizable(newState);
@@ -829,6 +847,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     toggleAlwaysOnTop,
     toggleAutostart,
     toggleComputerControlEnabled,
+    toggleDictationEnabled,
     toggleLiveVoiceEnabled,
     toggleLiveVoiceMode,
     toggleLiveVoiceAutoStart,

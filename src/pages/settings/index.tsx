@@ -6,6 +6,7 @@ import {
   AppIconToggle,
   AutostartToggle,
   ComputerControlToggle,
+  DictationToggle,
   KrishnaSettings,
   Integrations,
   BrainConnection,
@@ -97,6 +98,9 @@ const Settings = () => {
 
       {/* Computer Control Toggle */}
       <ComputerControlToggle />
+
+      {/* Dictation Toggle — dedicated permission, separate from Computer Control */}
+      <DictationToggle />
 
       {/* Persona */}
       <PersonaSelector />

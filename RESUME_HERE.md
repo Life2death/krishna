@@ -12,7 +12,218 @@
 
 ---
 
-## 0. LATEST — UPG-0 architecture contract delivered, awaiting owner review (2026-07-17)
+## 0. LATEST — Dictation: fully working end-to-end, root cause was Enigo/SendInput text corruption, fixed via clipboard+paste (2026-07-28, later still)
+
+**Picking up from the section directly below in the same session.** Short version: the feature
+now works. The on-screen button and hotkey both reliably type dictated speech into whatever app
+has focus, confirmed with several live tests including one with capitals/punctuation/digits that
+came through byte-for-byte correct.
+
+**What actually happened, in order (so the next agent doesn't re-discover any of this):**
+
+1. Section 0a below's key-repeat fix was confirmed working (one trigger per press) and the
+   `OverconstrainedError` mic-device-id bug was found and fixed with a fallback-to-default-mic —
+   both already covered below. That got recording/STT working, but a **third, separate bug**
+   surfaced once real dictated sentences started actually reaching the typing step.
+
+2. **Owner asked for an on-screen toggle button** (next to the Brain selector on Krishna's main
+   overlay) as an alternative to the hotkey. Added in `src/pages/app/index.tsx`: a button right
+   after `<BrainSelector />`, red-filled while recording, spinner while transcribing, disabled-dot
+   indicator when the Dictation toggle is off. Uses lucide-react's `KeyboardIcon` (owner explicitly
+   asked for a typewriter icon; lucide-react has no literal typewriter glyph, `Keyboard` was picked
+   as the closest fit — "this types into the focused app"). Wired to the *same* toggle function the
+   hotkey uses — `useDictation.ts` now returns `triggerDictation` (was previously only used
+   internally by the hotkey's event listener); `useApp.ts`'s `useDictation()` call is returned from
+   the hook as `dictation` so `pages/app/index.tsx` (which already calls `useApp()`) can reach the
+   *same mounted instance* rather than mounting a second listener. **Confirmed working live** —
+   several of the successful paste tests below (item 3) were triggered via this button, not just
+   the hotkey.
+
+3. **Enigo's `text()` call was corrupting typed output on Windows**, confirmed via multiple live
+   tests. `type_text_via_enigo` (now in `src-tauri/src/automation.rs`) called `enigo.text(text)`
+   once for the whole string. Enigo 0.2.1's Windows backend
+   (`~/.cargo/registry/.../enigo-0.2.1/src/win/win_impl.rs:232-273`) builds ONE `SendInput` array
+   for the entire string (two `KEYEVENTF_UNICODE` events per char) and fires it in a single
+   syscall — a live test typing "Can I write something?" produced `Can ` followed by 18 literal
+   `?` characters in Notepad (exactly the length of "I write something?"); another test produced
+   `Dad`→`ddd` and `you`→`?ou`. `SendInput` itself reported success in every case — the corruption
+   happens downstream, in how the receiving app's message queue drains a large burst of synthetic
+   unicode key events with no pacing.
+   - **First attempt (insufficient):** paced `type_text_via_enigo` to call `enigo.text()` once per
+     character with an 8ms sleep between. This measurably reduced the corruption (delayed onset
+     from ~character 5 to ~character 49 in one test) but did NOT eliminate it — a subsequent test
+     still corrupted mid-string (`Mic Testing 1` → repeated `2`s). Tuning the delay further was
+     judged not worth chasing — this is a non-deterministic timing race, not a fixed threshold.
+   - **Actual fix:** `dictation_type_text` now uses a **new clipboard-write + single Ctrl+V paste**
+     path (`type_text_via_paste` + the `windows_clipboard` module, both in `automation.rs`,
+     `#[cfg(target_os = "windows")]` — other platforms still use the old paced `type_text_via_enigo`
+     since the bug was only observed/fixed for Windows). Saves the user's existing clipboard text,
+     writes the dictated text as `CF_UNICODETEXT`, sends Ctrl+V via Enigo (a single small keystroke
+     combo, immune to the large-burst corruption), then restores the original clipboard content.
+     Uses the `windows` crate directly (already a dependency for WASAPI/window-control code) —
+     added `Win32_System_DataExchange` + `Win32_System_Memory` features to `Cargo.toml`, no new
+     crate. **`computer_type` (the general Computer Control typing command) was deliberately left
+     on the old `type_text_via_enigo` path** — same latent bug likely applies there too, but that
+     wasn't in scope this session and wasn't confirmed broken; flagging it as a known follow-up.
+   - **Confirmed live, repeatedly**, including the exact controlled test that matters (click into
+     Notepad first so it visibly has focus, THEN press the hotkey without touching anything else):
+     `"Hello, hi there, good morning, good afternoon, good evening."` (60 chars, punctuation) came
+     through **byte-for-byte correct**. Several earlier tests in this session that looked like new
+     failures ("Notepad is blank") turned out to be a **test-methodology artifact, not a bug** — the
+     owner was reading/typing in this chat between tests, so their actual OS focus was on the chat
+     app, not Notepad, and dictation correctly typed into (or was swallowed by) whatever really had
+     focus. Once the owner explicitly clicked into Notepad first and left it alone, it worked
+     cleanly every time.
+
+4. **A build-race crash happened mid-session, unrelated to the above logic**: running `cargo check`
+   manually while `npm run tauri dev`'s own file-watcher was concurrently rebuilding after a Rust
+   edit corrupted the shared `target/` build cache, producing a binary that crashed instantly on
+   launch with `STATUS_STACK_BUFFER_OVERRUN` (0xC0000409). This was **not a bug in the new code** —
+   confirmed by killing all cargo/krishna processes and doing a clean `npm run tauri dev` restart,
+   which then ran fine. **Lesson, generalizing the existing node_modules "one-party" rule (§6) to
+   Rust builds too: never run a manual `cargo check`/`cargo build` while `tauri dev` is live and has
+   its own pending rebuild for the same files** — let its own watcher rebuild, read its terminal
+   output for errors, and only run manual cargo commands when the dev server is stopped or you're
+   certain no Rust files changed since its last successful build.
+
+5. **Debug logging added to `useDictation.ts` uses `console.warn`, not `console.log`** — confirmed
+   the terminal stream for `npm run tauri dev` only forwards `console.warn`/`console.error` from the
+   webview, never plain `console.log` (0 occurrences of the latter across the entire session's
+   terminal output vs. thousands of the former). Keep using `warn`/`error` for anything you need to
+   see in the terminal; `log` is invisible there (still visible in the app's own DevTools console,
+   which nobody had open this session).
+
+**Verification after all of the above:** `cargo check --workspace` clean (same 3 pre-existing
+unrelated warnings), `npx tsc --noEmit` clean (same 1 pre-existing unrelated `@xenova/transformers`
+error), `npx vitest run` 979/979 green — re-checked after every code change this session, not just
+once at the end.
+
+**Not yet committed.** Everything in this section plus the section below is still sitting
+uncommitted in the working tree (see `git status`). The owner asked mid-session about pushing to
+GitHub to get a new installer built; that got paused to keep debugging instead — see the owner's
+own message log if picking this back up, but the short version is: `release.yml` only builds on a
+pushed `v*` tag, not on any branch push, and the current branch (`codex/upgrade-stage1`) already has
+unrelated Stage-1 self-improvement-system commits on it (already public on `origin`, so no new
+exposure risk there) — those should stay untouched; only the dictation-related files should go into
+this feature's commit(s). Still needs: commit (excluding the pre-existing, unrelated stray
+`package.json`/`package-lock.json`/`apps/brain/package.json` dependency downgrades that predate this
+session), then owner confirmation before pushing/tagging.
+
+---
+
+## 0a. PRIOR — Global-hotkey OS-wide dictation feature added (2026-07-28)
+
+**New feature: press a global hotkey from anywhere in the OS, speak, and the transcribed text
+types into whatever app currently has OS focus** (browser address bar, Word, Slack, VSCode, etc.)
+— without Krishna's own window stealing focus. Reuses Krishna's existing cloud STT providers
+(OpenAI/Groq Whisper, ElevenLabs, Deepgram, Azure, Google STT, IBM Watson); no local/offline
+Whisper added (explicitly out of scope, left for a future follow-up).
+
+**What changed:**
+- `src-tauri/src/shortcuts.rs`: new `"dictation"` shortcut action, parallel to the existing
+  `"audio_recording"` one, but its handler (`handle_dictation_shortcut`) emits a distinct
+  `start-dictation-recording` event and deliberately does **not** show/focus Krishna's window
+  (unlike `handle_audio_shortcut`) — the whole point is leaving the external app focused.
+- `src-tauri/src/automation.rs`: new `DictationState` (separate `Mutex<bool>` flag) +
+  `set_dictation_enabled` + `dictation_type_text` commands. `dictation_type_text` is gated on
+  `DictationState`, **not** the existing broad `ComputerControlState` — typing spoken words is a
+  much narrower trust surface than full mouse/keyboard automation, so it got its own dedicated
+  permission rather than piggybacking on (or requiring) Computer Control. Both `computer_type` and
+  `dictation_type_text` now share one `type_text_via_enigo` helper to avoid duplicating the Enigo
+  init/type call.
+- `src-tauri/src/lib.rs`: registers `DictationState` (`Mutex::new(false)` default, same pattern as
+  `ComputerControlState`) and the two new commands in the invoke handler, all `#[cfg(desktop)]`
+  (dictation is desktop-only, same as the rest of `automation.rs`).
+- `src/hooks/useDictation.ts` (new): headless hook — listens for `start-dictation-recording`,
+  records via `MediaRecorder` (mirrors `AudioRecorder.tsx`'s recording lifecycle), transcribes via
+  the existing `fetchSTTWithRetryDefault` headless STT helper (same one `KrishnaVAD.tsx` uses), then
+  calls `invoke("dictation_type_text", { text })` — never routes through Krishna's
+  chat/`processCommand` path. Toggle behavior: first hotkey press starts recording, second press
+  stops + transcribes + types. Mounted app-wide via `src/hooks/useApp.ts` (the hook used by the
+  main window's root `App` component, `src/pages/app/index.tsx`) — NOT mounted on the mobile home
+  screen, since dictation is desktop-only.
+- `src/config/shortcuts.ts`: new `"dictation"` default binding (`Ctrl/Cmd+Shift+J`), auto-picked up
+  by the existing `ShortcutManager` UI (Settings → Shortcuts) for enabling/rebinding the hotkey.
+- Dedicated permission toggle (separate from Computer Control): `CustomizableState.dictation.enabled`
+  (`src/lib/storage/customizable.storage.ts`, `updateDictationEnabled`), `toggleDictationEnabled` in
+  `src/contexts/app.context.tsx` (invokes `set_dictation_enabled` on change, mirrors
+  `toggleComputerControlEnabled`), new `src/pages/settings/components/DictationToggle.tsx` rendered
+  in `src/pages/settings/index.tsx` right after `ComputerControlToggle`.
+
+**Build validation (owner's Windows machine, done after initial implementation):**
+`npx tsc --noEmit` clean (one pre-existing, unrelated error in `src/lib/voice-id/embedding.ts` —
+missing `@xenova/transformers` type declarations, not touched by this feature). `npx vitest run`
+979/979 passing. `cargo check --workspace` compiled clean (3 pre-existing warnings in
+`mobile_bridge.rs`/`chrome_profiles.rs`, unrelated). So the initial implementation compiled fine —
+the bug described below was a **runtime logic bug**, not a build failure.
+
+**Bug found during first real end-to-end test, root-caused and fixed (still needs re-test):**
+Owner tested the hotkey and it "listened" (mic activated) but never typed anything into ANY app,
+including plain Notepad — ruling out anything Claude-Desktop-specific or Windows UIPI/permission
+related. Terminal log during a single, normal-length key hold showed:
+```
+Shortcut triggered: dictation
+Shortcut triggered: dictation
+... (14 times from one physical press)
+```
+Root cause: Windows re-fires the global-hotkey `Pressed` event repeatedly for as long as the keys
+are physically held (key-repeat) — `tauri_plugin_global_shortcut` has no way to distinguish a
+repeat tick from the initial press. Dictation is toggle-based (press = start, press again = stop),
+so a single normal key-hold was flipping start/stop/start/stop over a dozen times before the user
+finished speaking, meaning no real recording window was ever captured.
+
+**Fix applied** (in `src-tauri/src/shortcuts.rs` and `src-tauri/src/lib.rs`, NOT yet re-verified
+end-to-end by the owner):
+- `RegisteredShortcuts` gained a `keys_down: Mutex<HashSet<String>>` field — tracks which
+  non-`move_window_*` action ids are currently "held" per the OS.
+- The `with_handler` closure in `lib.rs` (~line 396) now only actually calls
+  `handle_shortcut_action` on the *first* `Pressed` for an action id since the last `Released`;
+  subsequent `Pressed` events for the same still-registered key are treated as repeat ticks and
+  ignored. `Released` removes the action id from `keys_down`.
+- `unregister_all_shortcuts` (in `shortcuts.rs`) clears `keys_down` entirely as a safety net, so a
+  hypothetical missed `Released` event can't permanently wedge an action after a shortcuts reload.
+- This also incidentally affects `audio_recording`/`screenshot`/`system_audio`/`cancel_plan` (same
+  toggle-style repeat-vulnerability existed for all of them before this fix, just less visibly).
+
+**Indicators added** (since dictation never shows/focuses Krishna's window, there was no way to
+tell if it's currently on/off — owner asked for this specifically), also **not yet re-tested**:
+- `src/hooks/useDictation.ts`: Web Audio API tone cues — rising beep (880Hz) on recording start,
+  falling beep (523Hz) on stop/transcribe-start, low buzz (180Hz) on any failure (no STT provider
+  configured, empty transcription, or a thrown error).
+- New Tauri command `set_dictation_tray_status` (`src-tauri/src/shortcuts.rs`, registered in
+  `lib.rs`) updates the existing `"main-tray"` system tray icon's tooltip to
+  "Dictating..."/"Transcribing..."/idle default, via `app.tray_by_id("main-tray")` (same pattern as
+  the existing `set_app_icon_visibility`). Hover the tray icon any time to check current state.
+
+**Current state — HONEST STATUS, read this before assuming anything above works:** None of the
+key-repeat fix or the indicators have been re-validated by the owner yet — no fresh
+`cargo check`/`tsc`/`vitest` run since these edits, and no fresh end-to-end test. The owner asked to
+hand this off to a different coding agent (Claude Code) at this point instead of continuing the
+back-and-forth here, specifically because it was still "not working" as of the last real test
+(which predates the key-repeat fix). **Do not assume the key-repeat fix resolved it** — verify by
+getting a fresh terminal log first (should show exactly one `Shortcut triggered: dictation` line
+per physical press now, not a burst) before looking for a new/different root cause.
+
+**Remaining / next agent's action items:**
+1. Run `cargo check --workspace` (from `src-tauri/`), `npx tsc --noEmit`, `npx vitest run` fresh —
+   confirm the key-repeat fix compiles clean (it's new code since the last verified build above).
+2. Rebuild (`npm run tauri dev`), enable Dictation toggle (Settings, separate from Computer
+   Control), confirm hotkey binding (default `Ctrl+Shift+J`) and an STT provider are set.
+3. Fresh end-to-end test in Notepad first (simplest target): single quick tap (not held) → expect
+   rising beep + tray tooltip → "Dictating..." → speak → quick tap again → expect falling beep +
+   tray tooltip → "Transcribing..." → text should appear in Notepad, tray reverts to idle.
+4. If it STILL doesn't type anything even with exactly one "Shortcut triggered: dictation" log line
+   per press: check whether `dictation_type_text` is actually being invoked (add temporary logging
+   if needed) and whether it returns an error — likely candidates: STT call failing/returning empty
+   (check network/API key for the configured provider), or `enigo.text()` silently not working for
+   this Windows setup (rare, but check Windows version / any accessibility software that might
+   interfere with `SendInput`).
+5. No local/offline Whisper was added — still cloud-STT-only, as scoped; that's an intentional
+   future follow-up, not a bug.
+
+---
+
+## 0a. PRIOR — UPG-0 architecture contract delivered, awaiting owner review (2026-07-17)
 
 **UPG-0 (self-improvement upgrade system, Stage 0) is code-complete** — pure design artifact, no
 runtime code, exactly as scoped. Deliverables: `docs/upgrades/ARCHITECTURE.md` (state machine,
@@ -38,7 +249,7 @@ holds no table/column knowledge. `ARCHITECTURE.md` documents the corrected pictu
 
 ---
 
-## 0a. PRIOR — Krishna as system Digital Assistant, Phases 1–3 built + verified live (2026-07-16)
+## 0b. PRIOR — Krishna as system Digital Assistant, Phases 1–3 built + verified live (2026-07-16)
 
 **Krishna can now be set as the phone's Digital assistant app**, same mechanism as Gemini/Bixby
 (`VoiceInteractionService`, `ROLE_ASSISTANT`). This directly targets the "backgrounded-by-own-
@@ -82,7 +293,7 @@ always-listening layer, unchanged, still behind its own shadow-mode approval gat
 
 ---
 
-## 0b. PRIOR — v2.1.6 released; mobile travel/sync/CSP fixes on main (2026-07-13, later)
+## 0c. PRIOR — v2.1.6 released; mobile travel/sync/CSP fixes on main (2026-07-13, later)
 
 **Desktop release `v2.1.6` cut and built (draft).** Tag pushed, GitHub Actions `release.yml`
 succeeded, both installers (`Krishna_2.1.6_x64-setup.exe`, `.msi`) attached to a **draft** release
@@ -123,7 +334,7 @@ verification first). The travel fix `a504b5e` IS pushed. Android build/deploy re
 
 ---
 
-## 0c. EARLIER — OpenWakeWord Android build fixed + verified live; "Upgrades" system planned (2026-07-13)
+## 0d. EARLIER — OpenWakeWord Android build fixed + verified live; "Upgrades" system planned (2026-07-13)
 
 **OpenWakeWord shadow-mode feature (branch `codex/openwakeword-shadow-mode`, PR #6, pushed `21cee94`):**
 - Root-caused the "hour-long build, no APK" problem: **cargo blocks on the crates.io network index
@@ -172,7 +383,7 @@ tracker `UPG-0` through `UPG-6`** (each has an explicit build step + a manual US
 
 ---
 
-## 0d. PRIOR — Android mobile voice fully working (2026-07-12), pushed `905041f`
+## 0e. PRIOR — Android mobile voice fully working (2026-07-12), pushed `905041f`
 
 Mobile went from "asks for a key it should never need, then silent/broken" to a working
 tap-to-talk voice assistant with device control, in one session. All code pushed to

@@ -2,7 +2,7 @@ import { Card, Updater, DragButton, CustomCursor, Button, KrishnaVAD, MobileVoic
 import { Completion, BrainSelector, VoiceModeSelector, LiveVoiceBar } from "./components";
 import { useApp, useKrishna } from "@/hooks";
 import { useApp as useAppContext } from "@/contexts";
-import { SquareIcon, LayoutDashboardIcon } from "lucide-react";
+import { SquareIcon, LayoutDashboardIcon, KeyboardIcon, Loader2 } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
 import { ErrorBoundary } from "react-error-boundary";
 import { ErrorLayout } from "@/layouts";
@@ -19,11 +19,19 @@ const App = () => {
   // Run the classic capture pipeline ONLY in classic mode. In Live mode the
   // realtime session handles the mic, so keeping classic capture on made both
   // pipelines answer the same utterance (double voices).
-  const { isHidden } = useApp({
+  const { isHidden, dictation } = useApp({
     krishnaEnabled: isClassicMode,
     onKrishnaCommand: krishna.processCommand,
   });
   const platform = getPlatform();
+
+  const dictationTitle = !customizable.dictation.enabled
+    ? "Dictation (disabled — enable in Settings)"
+    : dictation.isTranscribing
+    ? "Dictation: transcribing..."
+    : dictation.isRecording
+    ? "Dictation: recording (click to stop)"
+    : "Dictation (click to start — types into whatever app has focus)";
 
   const handleSwitchToClassic = useCallback(() => {
     toggleLiveVoiceMode("classic");
@@ -70,6 +78,29 @@ const App = () => {
           <div className="w-full flex flex-row gap-1 items-center">
             <Completion isHidden={isHidden} />
             <BrainSelector />
+            {/* Dictation: mirrors the global hotkey (Ctrl+Shift+J by default) —
+                click to start, click again to stop+transcribe+type into
+                whatever app currently has OS focus. Same toggle fn as the
+                hotkey listener (useDictation's triggerDictation), so both
+                paths can't drift out of sync. */}
+            <Button
+              size="icon"
+              variant={dictation.isRecording ? "default" : "ghost"}
+              className={`relative cursor-pointer shrink-0 ${
+                dictation.isRecording ? "bg-red-500 hover:bg-red-600 text-white" : ""
+              }`}
+              title={dictationTitle}
+              onClick={dictation.triggerDictation}
+            >
+              {dictation.isTranscribing ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <KeyboardIcon className="h-4 w-4" />
+              )}
+              {!customizable.dictation.enabled && (
+                <span className="absolute -top-1 -right-1 flex size-2 rounded-full bg-muted-foreground/50" />
+              )}
+            </Button>
             {/* Voice mode: Classic / OpenAI Live / Gemini Live (icon + dropdown,
                 resizes the window on open so the menu isn't clipped). */}
             <VoiceModeSelector />

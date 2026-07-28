@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useTitles, useSystemAudio } from "@/hooks";
+import { useTitles, useSystemAudio, useDictation } from "@/hooks";
 import { listen } from "@tauri-apps/api/event";
 import { safeLocalStorage, migrateLocalStorageToSQLite } from "@/lib";
 import { getShortcutsConfig } from "@/lib/storage";
@@ -13,6 +13,13 @@ export const useApp = (systemAudioOptions?: {
   const [isHidden, setIsHidden] = useState(false);
   // Initialize title management
   useTitles();
+
+  // Mounts the app-wide listener for the global Dictation hotkey (see
+  // src-tauri/src/shortcuts.rs's "dictation" action / useDictation.ts). Runs
+  // regardless of window visibility/focus — that's the entire point. Returned
+  // so the overlay's dictation button can trigger/reflect the same instance
+  // instead of mounting a second one.
+  const dictation = useDictation();
 
   // Initialize shortcuts from localStorage on app startup
   useEffect(() => {
@@ -156,5 +163,6 @@ export const useApp = (systemAudioOptions?: {
     handleSelectConversation,
     handleNewConversation,
     systemAudio,
+    dictation,
   };
 };

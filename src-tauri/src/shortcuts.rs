@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use tauri::{AppHandle, Emitter, Manager, Runtime};
@@ -28,12 +28,22 @@ pub struct WindowVisibility {
 // State for registered shortcuts
 pub struct RegisteredShortcuts {
     pub shortcuts: Mutex<HashMap<String, String>>, // action_id -> shortcut_key
+    /// Action ids currently "held down" per the OS. Windows (and other OSes) send a
+    /// `Pressed` event *repeatedly* for a global hotkey while the physical keys stay
+    /// down (key-repeat) — there is no way to distinguish the initial press from a
+    /// repeat at the plugin level. For edge-triggered/toggle actions (dictation,
+    /// audio_recording, screenshot, system_audio, cancel_plan) this must fire exactly
+    /// once per physical press, not once per repeat tick, or a toggle-style action
+    /// flips on/off many times during a single normal-length key hold. `move_window_*`
+    /// is exempt (handled separately) since it's meant to keep firing while held.
+    pub keys_down: Mutex<HashSet<String>>,
 }
 
 impl Default for RegisteredShortcuts {
     fn default() -> Self {
         RegisteredShortcuts {
             shortcuts: Mutex::new(HashMap::new()),
+            keys_down: Mutex::new(HashSet::new()),
         }
     }
 }
@@ -117,6 +127,7 @@ pub fn handle_shortcut_action<R: Runtime>(app: &AppHandle<R>, action_id: &str) {
         "move_window_left" => handle_move_window(app, "left"),
         "move_window_right" => handle_move_window(app, "right"),
         "audio_recording" => handle_audio_shortcut(app),
+        "dictation" => handle_dictation_shortcut(app),
         "screenshot" => handle_screenshot_shortcut(app),
         "system_audio" => handle_system_audio_shortcut(app),
         "cancel_plan" => handle_cancel_plan(app),
@@ -270,6 +281,20 @@ fn handle_audio_shortcut<R: Runtime>(app: &AppHandle<R>) {
         // Emit event to start audio recording
         if let Err(e) = window.emit("start-audio-recording", json!({})) {
             eprintln!("Failed to emit audio recording event: {}", e);
+        }
+    }
+}
+
+/// Handle dictation shortcut. Deliberately does NOT show or focus Krishna's window
+/// (unlike `handle_audio_shortcut`) — the entire point of dictation is that the
+/// externally-focused app (browser address bar, Word doc, Slack, etc.) stays
+/// focused so the transcribed text types into IT, not into Krishna's own chat box.
+/// The event is still emitted to Krishna's webview so the frontend can run the
+/// (invisible) recording + transcription pipeline.
+fn handle_dictation_shortcut<R: Runtime>(app: &AppHandle<R>) {
+    if let Some(window) = app.get_webview_window("main") {
+        if let Err(e) = window.emit("start-dictation-recording", json!({})) {
+            eprintln!("Failed to emit dictation recording event: {}", e);
         }
     }
 }
@@ -495,6 +520,18 @@ fn unregister_all_shortcuts<R: Runtime>(app: &AppHandle<R>) -> Result<(), String
         }
     }
 
+    // Safety net for the key-repeat debounce in lib.rs's shortcut handler: if a
+    // Released event was ever missed (e.g. the physical keys were still down at the
+    // exact moment shortcuts got re-registered), clear the "held down" set here so a
+    // stale entry can't permanently block that action from firing again.
+    {
+        let mut keys_down = match state.keys_down.lock() {
+            Ok(guard) => guard,
+            Err(poisoned) => poisoned.into_inner(),
+        };
+        keys_down.clear();
+    }
+
     Ok(())
 }
 
@@ -569,6 +606,50 @@ pub fn set_app_icon_visibility<R: Runtime>(app: AppHandle<R>, visible: bool) -> 
                 eprintln!("set_app_icon_visibility: tray icon 'main-tray' not found");
             }
         }
+    }
+
+    Ok(())
+}
+
+/// Tauri command: update the tray icon's tooltip to reflect current dictation state.
+///
+/// Dictation deliberately never shows or focuses Krishna's own window (that's the
+/// whole point — the externally-focused app stays focused so text types into it), so
+/// there is no window UI available to show a "recording..." indicator. The system
+/// tray tooltip is the only place this state can be surfaced without stealing focus —
+/// hover the tray icon to see whether Krishna is currently listening, transcribing, or
+/// idle, so you know whether pressing the hotkey again will stop an in-progress
+/// recording or start a new one.
+///
+/// `status` is one of `"recording"`, `"transcribing"`, or anything else (treated as
+/// idle, restoring the default tooltip).
+#[tauri::command]
+pub fn set_dictation_tray_status<R: Runtime>(
+    app: AppHandle<R>,
+    status: String,
+) -> Result<(), String> {
+    #[cfg(any(target_os = "windows", target_os = "linux"))]
+    {
+        let tooltip = match status.as_str() {
+            "recording" => "Krishna — \u{1F3A4} Dictating... (press hotkey again to stop)",
+            "transcribing" => "Krishna — Transcribing...",
+            _ => "Krishna — click to open dashboard",
+        };
+
+        match app.tray_by_id("main-tray") {
+            Some(tray) => {
+                tray.set_tooltip(Some(tooltip))
+                    .map_err(|e| format!("Failed to set tray tooltip: {}", e))?;
+            }
+            None => {
+                eprintln!("set_dictation_tray_status: tray icon 'main-tray' not found");
+            }
+        }
+    }
+
+    #[cfg(not(any(target_os = "windows", target_os = "linux")))]
+    {
+        let _ = (app, status);
     }
 
     Ok(())

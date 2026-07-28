@@ -138,6 +138,9 @@ pub fn run() {
         builder = builder.manage(automation::ComputerControlState {
             enabled: Mutex::new(false),
         });
+        builder = builder.manage(automation::DictationState {
+            enabled: Mutex::new(false),
+        });
         let posthog_api_key = option_env!("POSTHOG_API_KEY").unwrap_or("").to_string();
         builder = builder
             .plugin(posthog_init(PostHogConfig {
@@ -174,6 +177,7 @@ pub fn run() {
             shortcuts::validate_shortcut_key,
             shortcuts::set_license_status,
             shortcuts::set_app_icon_visibility,
+            shortcuts::set_dictation_tray_status,
             shortcuts::set_always_on_top,
             shortcuts::exit_app,
             api::create_system_prompt,
@@ -231,6 +235,10 @@ pub fn run() {
             automation::set_computer_control_enabled,
             #[cfg(desktop)]
             automation::computer_type,
+            #[cfg(desktop)]
+            automation::set_dictation_enabled,
+            #[cfg(desktop)]
+            automation::dictation_type_text,
             #[cfg(desktop)]
             automation::computer_key,
             #[cfg(desktop)]
@@ -417,8 +425,32 @@ pub fn run() {
                                     {
                                         shortcuts::start_move_window(app, direction);
                                     } else {
-                                        eprintln!("Shortcut triggered: {}", action_id);
-                                        shortcuts::handle_shortcut_action(app, &action_id);
+                                        // Windows (and other OSes) re-fire `Pressed` on
+                                        // key-repeat while the hotkey is held, with no
+                                        // way to tell a repeat from the initial press.
+                                        // Debounce: only actually trigger on the first
+                                        // Pressed after a Released (or after boot) for
+                                        // this action_id, otherwise a single normal key
+                                        // hold fires the action a dozen+ times, which is
+                                        // fatal for toggle-style actions like dictation
+                                        // and audio_recording (start/stop/start/stop...
+                                        // before the user finishes speaking).
+                                        let already_down = {
+                                            let state =
+                                                app.state::<shortcuts::RegisteredShortcuts>();
+                                            let mut keys_down = match state.keys_down.lock() {
+                                                Ok(guard) => guard,
+                                                Err(poisoned) => poisoned.into_inner(),
+                                            };
+                                            !keys_down.insert(action_id.clone())
+                                        };
+
+                                        if already_down {
+                                            // Key-repeat tick — ignore.
+                                        } else {
+                                            eprintln!("Shortcut triggered: {}", action_id);
+                                            shortcuts::handle_shortcut_action(app, &action_id);
+                                        }
                                     }
                                 }
                                 ShortcutState::Released => {
@@ -426,6 +458,14 @@ pub fn run() {
                                         action_id.strip_prefix("move_window_")
                                     {
                                         shortcuts::stop_move_window(app, direction);
+                                    } else {
+                                        let state =
+                                            app.state::<shortcuts::RegisteredShortcuts>();
+                                        let mut keys_down = match state.keys_down.lock() {
+                                            Ok(guard) => guard,
+                                            Err(poisoned) => poisoned.into_inner(),
+                                        };
+                                        keys_down.remove(&action_id);
                                     }
                                 }
                             }
