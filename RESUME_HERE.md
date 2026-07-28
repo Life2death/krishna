@@ -12,7 +12,101 @@
 
 ---
 
-## 0. LATEST — Dictation: fully working end-to-end, root cause was Enigo/SendInput text corruption, fixed via clipboard+paste (2026-07-28, later still)
+## 0. LATEST — Overlay collapses to a small animated pill; fullscreen presence orb removed entirely (2026-07-28, same session, later still)
+
+**Confirmed working live, full loop**: the main overlay now launches as a 40x40 chakra pill
+(instead of the always-visible 600x54 bar), double-click expands it to the familiar full bar, and
+it auto-collapses back either ~1.5s after Krishna finishes a turn or when the window loses focus.
+The old fullscreen "big icon" orb — a 320px spinning chakra in its own always-on-top window,
+triggered by raw mic noise before any wake-word check, with a genuinely stuck-on-screen bug on
+ignored confirmations — is gone completely, not just hidden behind a flag.
+
+**Why:** owner found the fullscreen orb "sometimes very irritating" and asked for it removed and
+replaced with a small, always-present state indicator that expands on demand instead of a
+takeover. Four small design options (spinning chakra / orbiting halo / live waveform / quiet status
+dot) were mocked up live in an artifact; owner picked the chakra for idle/listening/thinking, then
+separately asked for the live waveform specifically for the speaking state, since it reads more
+clearly as "hearing audio right now."
+
+**What actually shipped, in commit order** (`06ac3b5` deriveVoiceState → `34cf443` lift vadPhase/
+liveVoicePhase → `403b8c9` remove presence orb → `ece741a` CollapsedPill component → `f27f4ce` Rust
+window-collapse command → `3f50c0c` wire it all into the running app):
+
+1. **`deriveVoiceState`** (`src/lib/voice-state.ts`) — one pure function combining `status`,
+   `vadPhase`, dictation recording/transcribing, and live-session phase into
+   `"idle"|"listening"|"thinking"|"speaking"`, in strict priority order (speaking always wins;
+   `confirming` maps to `thinking`, not a stuck state). Unit-tested (17 cases, the full precedence
+   table). This is what makes the presence-orb's whole bug *class* — an unhandled status leaving
+   the old imperative show/hide in whatever state it was last told — structurally impossible: the
+   icon is a pure function of current state, always mounted, so anything unhandled falls to idle.
+2. **`vadPhase`/`liveVoicePhase` lifted into the Krishna context** — `KrishnaVAD` (owns
+   `useMicVAD`) and `LiveVoiceBar` (owns `useLiveVoiceSession`) push their *values* up rather than
+   being re-mounted anywhere else, so `App` can derive the combined state without a second mic/
+   session instance.
+3. **Presence orb removed entirely**: the `presence` WebviewWindow builder + `show_presence`/
+   `hide_presence` commands in `lib.rs`, `PresenceOverlay.tsx`, the dead unreachable duplicate at
+   `pages/presence/`, `KrishnaChakraOrb.tsx`, `capabilities/presence.json`, and all 3 show/hide call
+   sites including the `vad-user-speaking` Tauri event round-trip (replaced by the direct context
+   push in item 2 — no more cross-window IPC for something that no longer crosses windows).
+4. **`CollapsedPill.tsx`** — reuses `KrishnaChakra` (already state-driven: spin speed + halo/aura
+   via CSS) rather than a new SVG. Manual drag (`startDragging()` past a 4px threshold) + a
+   hand-rolled 350ms click counter for expand — deliberately not `data-tauri-drag-region`, since
+   Windows treats that as a caption area and eats the double-click as maximize, and the existing
+   `useWindow.ts` mousedown handler keys off exactly that attribute. Speaking state shows a 4-bar
+   live waveform instead of the chakra.
+5. **Rust `set_overlay_collapsed` command** (`window.rs`) — resizes the main window between 40x40
+   and 600x54. **A real, documented Tauri/WebView2-on-Windows bug was hit and worked around twice**
+   here, not just planned around:
+   - Resizing during `setup_main_window` (at boot) moves the OS window (confirmed via
+     `outer_size()` reporting the new size correctly) but WebView2 keeps rendering the *old* size —
+     confirmed live via **three separate screenshots showing the same wide, clipped bar** even
+     after the diagnostic log proved the window itself was genuinely 40x40. This is
+     tauri-apps/tauri#10053 / #13318, found via web research after the Windows-minimum-size and
+     stale-DWM-paint theories were ruled out. Fixed by moving the actual collapse to *runtime*
+     (`main.tsx`, before React even mounts) — the exact same `set_size` call that's always worked
+     fine for the popovers' `set_window_height`.
+   - Separately, `resizable: false` in `tauri.conf.json` (tauri-apps/tauri#5679, #11975) means even
+     the runtime resize needs `set_resizable(true)` toggled around the call to make the content
+     actually follow.
+   - `OVERLAY_COLLAPSED` is the single Rust-side authoritative flag; `set_window_height` (called
+     from 7 different React mount sites plus a MutationObserver firing on nearly every DOM change)
+     early-returns while it's set, rather than requiring every call site to be individually audited.
+6. **Wiring** (`src/pages/app/index.tsx`, `useOverlayCollapse.ts`, `overlay-collapse.ts`,
+   `useWindow.ts`): the expanded bar is **CSS-hidden (opacity), never unmounted** — unmounting
+   `KrishnaVAD`/`LiveVoiceBar` would release the microphone and kill always-listening/wake-word/
+   barge-in. Auto-collapse triggers: idle-after-a-turn (1.5s) and focus-lost (skipped during
+   dictation, an open popover, or while Krishna is thinking/speaking/confirming; skipped entirely
+   on macOS, untested there — the window is a non-activating NSPanel with different focus
+   semantics). **A second real bug found and fixed while testing this specific piece**: the
+   `onFocusLost`/`onFocusGained` callbacks passed inline had no stable identity, so
+   `useWindowFocus`'s effect re-subscribed a new Tauri listener on every render — confirmed live via
+   a temporary diagnostic log firing 6-9x for one focus change. Fixed with the standard stable-
+   callback-reads-refs pattern.
+
+**Verification**: `cargo check`/`tsc --noEmit`/`vitest run` (996/996) green after every commit.
+Manually verified live, repeatedly, across multiple full app restarts: launches as the pill (no
+600px flash), expand/collapse both work, drag works, auto-collapse fires on both triggers, no
+fullscreen orb ever appears including when triggered by ambient noise.
+
+**Known gaps, not yet closed:**
+- No persistence — collapsed/expanded state is not remembered across restarts (always launches
+  collapsed; owner's explicit choice, not an oversight).
+- Screen-capture overlay stealing focus mid-screenshot would also trigger the focus-lost
+  auto-collapse and could clip the capture-result popover. `CaptureState.overlay_active` exists in
+  Rust (`capture.rs`) but has no JS mirror to gate against yet.
+- `<Updater />` can open its own popover autonomously (`updater/index.tsx`); while collapsed that
+  popover would be clipped to nothing. Not yet made to call `expand()` first.
+- macOS auto-collapse-on-focus-lost is gated off entirely (untested — non-activating NSPanel).
+- The exact same `AudioRecorder.tsx`/mic-device-id bug flagged in the dictation section above still
+  applies unfixed there.
+
+**Requested next, not yet done (owner ask, same session)**: bump the idle auto-collapse delay from
+1.5s to 5s, grow the pill ~10% (40→44px, chakra 22→24px), and consider more animation polish on the
+pill. Not implemented yet as of this handoff — pick up here.
+
+---
+
+## 0a. PRIOR — Dictation: fully working end-to-end, root cause was Enigo/SendInput text corruption, fixed via clipboard+paste (2026-07-28, later still)
 
 **Picking up from the section directly below in the same session.** Short version: the feature
 now works. The on-screen button and hotkey both reliably type dictated speech into whatever app
