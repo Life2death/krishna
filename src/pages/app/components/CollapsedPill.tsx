@@ -138,7 +138,19 @@ export const CollapsedPill = ({ state, onExpand }: CollapsedPillProps) => {
           style={ringDuration ? { animationDuration: ringDuration } : undefined}
         />
       )}
-      <KrishnaChakra state={toChakraState(state)} size={22} className={`!${colorClass}`} />
+      {state === "speaking" ? (
+        // Live waveform reads as "hearing audio right now" more clearly than
+        // a spin-speed change — reserved for speaking specifically, per the
+        // owner's explicit ask; every other state keeps the chakra.
+        <span className="krishna-pill-bars" aria-hidden="true">
+          <span />
+          <span />
+          <span />
+          <span />
+        </span>
+      ) : (
+        <KrishnaChakra state={toChakraState(state)} size={22} className={`!${colorClass}`} />
+      )}
     </button>
   );
 };

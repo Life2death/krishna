@@ -4,11 +4,31 @@ import Overlay from "./components/Overlay";
 import { AppProvider, ThemeProvider, ExpandedLayoutProvider, KrishnaProvider } from "./contexts";
 import "./global.css";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { invoke } from "@tauri-apps/api/core";
 import AppRoutes from "./routes";
 import { initializeCore } from "./lib/startup";
+import { setOverlayCollapsedLocal } from "./lib/overlay-collapse";
 
 const currentWindow = getCurrentWindow();
 const windowLabel = currentWindow.label;
+
+// The overlay window (label "main") boots at its tauri.conf.json size
+// (600x54) and hidden — resizing it during Rust's setup runs before WebView2
+// exists, so the OS window moves but the content keeps rendering at the
+// config size (tauri-apps/tauri#10053, #13318 — confirmed live). Collapsing
+// here, before React even mounts, means it never waits on initializeCore()
+// (which can legitimately take longer than Rust's 5s fallback-show timer,
+// which was the actual cause of an earlier boot race where the fallback beat
+// this collapse to the punch). Only for the actual overlay — capture-overlay
+// and any other window label must not be resized/shown from here.
+if (windowLabel === "main" || windowLabel === "krishna") {
+  invoke("set_overlay_collapsed", { collapsed: true })
+    .then(() => setOverlayCollapsedLocal(true))
+    .catch((error) => console.error("[overlay] Initial collapse failed:", error))
+    .finally(() => {
+      currentWindow.show().catch((error) => console.error("[overlay] Failed to show window:", error));
+    });
+}
 
 const renderApp = () => {
   if (windowLabel.startsWith("capture-overlay-")) {

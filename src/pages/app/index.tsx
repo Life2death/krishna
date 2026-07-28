@@ -1,13 +1,20 @@
 import { Card, Updater, DragButton, CustomCursor, Button, KrishnaVAD, MobileVoiceButton } from "@/components";
 import { Completion, BrainSelector, VoiceModeSelector, LiveVoiceBar, CollapsedPill } from "./components";
-import { useApp, useKrishna } from "@/hooks";
+import { useApp, useKrishna, useOverlayCollapse, useWindowFocus, isAnyPopoverOpen } from "@/hooks";
 import { useApp as useAppContext } from "@/contexts";
 import { SquareIcon, LayoutDashboardIcon, KeyboardIcon, Loader2 } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
 import { ErrorBoundary } from "react-error-boundary";
 import { ErrorLayout } from "@/layouts";
-import { useCallback, useMemo } from "react";
+import { useCallback, useMemo, useEffect, useRef } from "react";
 import { getPlatform, deriveVoiceState } from "@/lib";
+
+/** How long the overlay waits after Krishna goes idle before auto-collapsing
+ * — long enough to read a short final reply before it shrinks away. */
+const AUTO_COLLAPSE_AFTER_IDLE_MS = 1500;
+/** Debounce on focus-lost before collapsing, so a click that's actually
+ * moving focus into a popover-owning child doesn't trip it. */
+const AUTO_COLLAPSE_FOCUS_LOST_DEBOUNCE_MS = 200;
 
 const App = () => {
   const krishna = useKrishna();
@@ -24,11 +31,10 @@ const App = () => {
     onKrishnaCommand: krishna.processCommand,
   });
   const platform = getPlatform();
+  const { collapsed, collapse, expand } = useOverlayCollapse();
 
   // Drives the collapsed overlay icon's spin speed/color (see
-  // src/lib/voice-state.ts). Not yet wired to an actual collapse/expand
-  // window mechanism — CollapsedPill is rendered inline below purely so the
-  // four states can be eyeballed before that lands.
+  // src/lib/voice-state.ts).
   const voiceState = useMemo(
     () =>
       deriveVoiceState({
@@ -55,6 +61,81 @@ const App = () => {
     ? "Dictation: recording (click to stop)"
     : "Dictation (click to start — types into whatever app has focus)";
 
+  // Auto-collapse #1: after Krishna finishes a turn (goes idle from a busy
+  // state) and stays idle for a moment, shrink back to the pill. Cancelled if
+  // status leaves idle again before the timer fires — see the effect
+  // dependency: React tears down and re-arms this on every status change, so
+  // the timer body only ever runs once nothing has changed status since.
+  const prevStatusRef = useRef(krishna.status);
+  useEffect(() => {
+    const wasBusy = prevStatusRef.current !== "idle";
+    prevStatusRef.current = krishna.status;
+    if (collapsed || krishna.status !== "idle" || !wasBusy) return;
+
+    const timer = setTimeout(() => {
+      if (!isAnyPopoverOpen()) collapse();
+    }, AUTO_COLLAPSE_AFTER_IDLE_MS);
+    return () => clearTimeout(timer);
+  }, [krishna.status, collapsed, collapse]);
+
+  // Auto-collapse #2: clicking away from the overlay. Suppressed whenever
+  // collapsing would interrupt something — an open popover, dictation in
+  // progress, or Krishna mid-turn.
+  //
+  // Not suppressed here (known gap): a screen-capture overlay stealing focus
+  // mid-screenshot would also trigger this. CaptureState.overlay_active
+  // exists in Rust (capture.rs) but has no JS mirror yet to check against.
+  //
+  // macOS: the main window is a non-activating NSPanel there, so
+  // onFocusChanged semantics differ from Windows — gated off until verified.
+  //
+  // The onFocusLost/onFocusGained callbacks below MUST have a stable identity
+  // — useWindowFocus's effect re-subscribes the underlying Tauri listener
+  // whenever they change, and inline arrow functions get a new identity every
+  // render, which leaked one listener per render (confirmed live: a single
+  // focus change fired the diagnostic log 6-8 times). Reading the latest
+  // values via refs instead of closing over them directly keeps the callback
+  // identity fixed for the component's lifetime while still checking current
+  // state when the timer actually fires.
+  const collapsedRef = useRef(collapsed);
+  collapsedRef.current = collapsed;
+  const krishnaStatusRef = useRef(krishna.status);
+  krishnaStatusRef.current = krishna.status;
+  const dictationRef = useRef(dictation);
+  dictationRef.current = dictation;
+
+  const focusLostTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const handleOverlayFocusLost = useCallback(() => {
+    if (platform === "macos") return;
+    if (focusLostTimerRef.current) clearTimeout(focusLostTimerRef.current);
+    focusLostTimerRef.current = setTimeout(() => {
+      if (
+        collapsedRef.current ||
+        isAnyPopoverOpen() ||
+        dictationRef.current.isRecording ||
+        dictationRef.current.isTranscribing ||
+        krishnaStatusRef.current === "thinking" ||
+        krishnaStatusRef.current === "speaking" ||
+        krishnaStatusRef.current === "confirming"
+      ) {
+        return;
+      }
+      collapse();
+    }, AUTO_COLLAPSE_FOCUS_LOST_DEBOUNCE_MS);
+  }, [collapse, platform]);
+
+  const handleOverlayFocusGained = useCallback(() => {
+    if (focusLostTimerRef.current) {
+      clearTimeout(focusLostTimerRef.current);
+      focusLostTimerRef.current = null;
+    }
+  }, []);
+
+  useWindowFocus({
+    onFocusLost: handleOverlayFocusLost,
+    onFocusGained: handleOverlayFocusGained,
+  });
+
   const handleSwitchToClassic = useCallback(() => {
     toggleLiveVoiceMode("classic");
   }, [toggleLiveVoiceMode]);
@@ -78,6 +159,25 @@ const App = () => {
           isHidden ? "hidden pointer-events-none" : ""
         }`}
       >
+        {/* The collapsed pill. Rendered as a sibling of the bar rather than
+            replacing it — see the wrapper comment below. */}
+        {collapsed && <CollapsedPill state={voiceState} onExpand={expand} />}
+
+        {/* The expanded bar is CSS-hidden while collapsed, NEVER unmounted:
+            KrishnaVAD owns useMicVAD and LiveVoiceBar owns the realtime
+            session, so unmounting either releases the microphone and kills
+            always-listening / wake-word / barge-in. Same reasoning as the
+            existing `isHidden` handling above, which also hides via classes
+            rather than tearing the tree down. Fixed at the bar's real size so
+            a 600px-wide subtree inside a 40px window can't reflow anything,
+            and opacity (not display:none) so the transition can play and
+            layout measurements inside KrishnaVAD stay valid. */}
+        <div
+          className={`absolute inset-0 w-[600px] h-[54px] transition-opacity duration-[180ms] ease-[cubic-bezier(0.22,1,0.36,1)] ${
+            collapsed ? "opacity-0 pointer-events-none" : "opacity-100"
+          }`}
+          aria-hidden={collapsed}
+        >
         <Card className="w-full flex flex-row items-center gap-1 p-2">
           {isClassicMode ? <KrishnaVAD /> : (
             <LiveVoiceBar
@@ -140,11 +240,8 @@ const App = () => {
 
           <Updater />
           <DragButton />
-          {/* TEMPORARY placement — just to eyeball all four states before the
-              real collapse/expand window mechanism lands. Moves to being the
-              collapsed-window's actual content in a later commit. */}
-          <CollapsedPill state={voiceState} onExpand={() => {}} />
         </Card>
+        </div>
         {customizable.cursor.type === "invisible" && platform !== "linux" ? (
           <CustomCursor />
         ) : null}
