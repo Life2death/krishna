@@ -42,7 +42,7 @@ const toChakraState = (state: VoiceState): ChakraState =>
   state === "thinking" ? "processing" : state;
 
 /**
- * The 40x40 collapsed overlay icon. Reuses KrishnaChakra (already
+ * The 44x44 collapsed overlay icon. Reuses KrishnaChakra (already
  * state-driven: spin speed + halo/aura via CSS, see global.css) rather than
  * drawing a new SVG — this component is just a sized wrapper, a pulse ring,
  * and the drag/expand interaction.
@@ -124,7 +124,7 @@ export const CollapsedPill = ({ state, onExpand }: CollapsedPillProps) => {
       type="button"
       aria-label={STATE_LABEL[state]}
       title={STATE_LABEL[state]}
-      className={`relative flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-full border border-border bg-card/85 backdrop-blur transition-transform hover:scale-105 ${colorClass}`}
+      className={`krishna-pill-pop relative flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded-full border border-border bg-card/85 backdrop-blur transition-[transform,color] duration-300 hover:scale-105 active:scale-95 ${colorClass}`}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
@@ -149,7 +149,7 @@ export const CollapsedPill = ({ state, onExpand }: CollapsedPillProps) => {
           <span />
         </span>
       ) : (
-        <KrishnaChakra state={toChakraState(state)} size={22} className={`!${colorClass}`} />
+        <KrishnaChakra state={toChakraState(state)} size={24} className={`!${colorClass}`} />
       )}
     </button>
   );

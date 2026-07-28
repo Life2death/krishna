@@ -12,7 +12,7 @@ const TOP_OFFSET: i32 = 54;
 pub const BAR_WIDTH: f64 = 600.0;
 pub const BAR_HEIGHT: f64 = 54.0;
 /// The collapsed pill's dimensions (logical px, square).
-pub const PILL_SIZE: f64 = 40.0;
+pub const PILL_SIZE: f64 = 44.0;
 
 /// True while the overlay is the collapsed pill. Starts `false` because the
 /// window genuinely boots at its `tauri.conf.json` size (600x54) — the

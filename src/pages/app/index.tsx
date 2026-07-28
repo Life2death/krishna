@@ -11,7 +11,7 @@ import { getPlatform, deriveVoiceState } from "@/lib";
 
 /** How long the overlay waits after Krishna goes idle before auto-collapsing
  * — long enough to read a short final reply before it shrinks away. */
-const AUTO_COLLAPSE_AFTER_IDLE_MS = 1500;
+const AUTO_COLLAPSE_AFTER_IDLE_MS = 5000;
 /** Debounce on focus-lost before collapsing, so a click that's actually
  * moving focus into a popover-owning child doesn't trip it. */
 const AUTO_COLLAPSE_FOCUS_LOST_DEBOUNCE_MS = 200;
