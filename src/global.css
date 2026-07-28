@@ -257,6 +257,9 @@ body {
   transform-origin: 50% 50%;
   animation: krishna-spin 14s linear infinite;
 }
+.krishna-chakra__disc--minimal {
+  animation: none !important;
+}
 .krishna-chakra__halo,
 .krishna-chakra__aura {
   position: absolute;
@@ -286,11 +289,7 @@ body {
   .krishna-chakra__aura { animation: none !important; }
 }
 
-/* ──────────────────────────────────────────────────────────────────────────
-   Collapsed-pill speaking indicator — live waveform bars.
-   Only the "speaking" state uses this (CollapsedPill.tsx); every other state
-   keeps the chakra above. Bars, not the chakra, read as "hearing live audio".
-   ────────────────────────────────────────────────────────────────────────── */
+/* Collapsed overlay: the speaking state uses the live waveform. */
 @keyframes krishna-pill-bar {
   0%, 100% { transform: scaleY(0.3); }
   50% { transform: scaleY(1); }
@@ -299,12 +298,12 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 3px;
-  height: 20px;
+  gap: 6px;
+  height: 48px;
 }
 .krishna-pill-bars span {
   display: block;
-  width: 3px;
+  width: 6px;
   height: 100%;
   border-radius: 2px;
   background: currentColor;
@@ -317,20 +316,6 @@ body {
 
 @media (prefers-reduced-motion: reduce) {
   .krishna-pill-bars span { animation: none !important; transform: scaleY(0.6); }
-}
-
-/* One-shot pop-in for the collapsed pill — plays every time it mounts (i.e.
-   every time the overlay actually collapses), reinforcing the shrink motion
-   instead of the pill just appearing instantly. */
-@keyframes krishna-pill-pop {
-  0% { transform: scale(0.82); opacity: 0; }
-  100% { transform: scale(1); opacity: 1; }
-}
-.krishna-pill-pop {
-  animation: krishna-pill-pop 220ms cubic-bezier(0.22, 1, 0.36, 1);
-}
-@media (prefers-reduced-motion: reduce) {
-  .krishna-pill-pop { animation: none !important; }
 }
 
 /* Mobile safe-area inset for notch/home indicator */

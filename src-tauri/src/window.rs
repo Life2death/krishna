@@ -12,7 +12,7 @@ const TOP_OFFSET: i32 = 54;
 pub const BAR_WIDTH: f64 = 600.0;
 pub const BAR_HEIGHT: f64 = 54.0;
 /// The collapsed pill's dimensions (logical px, square).
-pub const PILL_SIZE: f64 = 44.0;
+pub const PILL_SIZE: f64 = 106.0;
 
 /// True while the overlay is the collapsed pill. Starts `false` because the
 /// window genuinely boots at its `tauri.conf.json` size (600x54) — the
@@ -119,7 +119,7 @@ pub fn set_window_height(window: tauri::WebviewWindow, height: u32) -> Result<()
     Ok(())
 }
 
-/// Collapses the overlay to a 40x40 pill, or expands it back to the 600x54
+/// Collapses the overlay to a 106x106 pill, or expands it back to the 600x54
 /// bar — the only command that resizes the main window between those two
 /// states. Position is always derived from the window's *current* position
 /// (never recomputed from the monitor), since drag and the `move_window_*`

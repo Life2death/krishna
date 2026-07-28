@@ -13,11 +13,11 @@ const COLLAPSE_ANIMATION_MS = 180;
 /**
  * Owns collapsing/expanding the overlay window.
  *
- * The window boots at its `tauri.conf.json` size (600x54) and hidden, then
+ * The window boots at its `tauri.conf.json` size (600x106) and hidden, then
  * this hook collapses it to the pill and reveals it on mount. That ordering is
  * load-bearing: resizing during Rust's `setup_main_window` moves the OS window
  * but leaves WebView2 rendering at the config size (tauri-apps/tauri#10053,
- * #13318 — confirmed live: `outer_size()` reported 40x40 while the content
+ * #13318 — confirmed live: `outer_size()` reported 106x106 while the content
  * still painted the full bar). The identical resize at runtime works, which is
  * why the popovers' `set_window_height` has always been fine.
  *
@@ -45,7 +45,7 @@ export const useOverlayCollapse = () => {
       try {
         if (next) {
           // Close any open popover first — Radix portals into document.body,
-          // so one left open while the window shrinks to 40x40 would be
+          // so one left open while the window shrinks to 106x106 would be
           // clipped to nothing. Deliberately does NOT consult
           // isAnyPopoverOpen() as a bail-out (unlike resizeWindow): a stuck
           // popover must not be able to pin the bar open forever.

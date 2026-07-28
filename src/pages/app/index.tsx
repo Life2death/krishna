@@ -169,13 +169,16 @@ const App = () => {
             always-listening / wake-word / barge-in. Same reasoning as the
             existing `isHidden` handling above, which also hides via classes
             rather than tearing the tree down. Fixed at the bar's real size so
-            a 600px-wide subtree inside a 40px window can't reflow anything,
+            a 600px-wide subtree inside a 106px window can't reflow anything,
             and opacity (not display:none) so the transition can play and
             layout measurements inside KrishnaVAD stay valid. */}
         <div
-          className={`absolute inset-0 w-[600px] h-[54px] transition-opacity duration-[180ms] ease-[cubic-bezier(0.22,1,0.36,1)] ${
-            collapsed ? "opacity-0 pointer-events-none" : "opacity-100"
-          }`}
+          className="absolute inset-0 h-[54px] w-[600px] transition-opacity duration-[180ms] ease-[cubic-bezier(0.22,1,0.36,1)]"
+          style={{
+            opacity: collapsed ? 0 : 1,
+            pointerEvents: collapsed ? "none" : "auto",
+            visibility: collapsed ? "hidden" : "visible",
+          }}
           aria-hidden={collapsed}
         >
         <Card className="w-full flex flex-row items-center gap-1 p-2">
@@ -198,7 +201,7 @@ const App = () => {
           )}
 
           <div className="w-full flex flex-row gap-1 items-center">
-            <Completion isHidden={isHidden} />
+            <Completion isHidden={isHidden || collapsed} />
             <BrainSelector />
             {/* Dictation: mirrors the global hotkey (Ctrl+Shift+J by default) —
                 click to start, click again to stop+transcribe+type into

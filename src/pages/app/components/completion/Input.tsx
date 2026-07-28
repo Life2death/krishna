@@ -23,13 +23,17 @@ export const Input = ({ isHidden }: { isHidden: boolean }) => {
 
   // Auto-open on reply/error/loading; also open on focus
   useEffect(() => {
+    if (isHidden) {
+      setIsPopoverOpen(false);
+      return;
+    }
     const shouldBeOpen = krishna.lastError !== null || isLoading || krishna.lastSpoken.length > 0;
     setIsPopoverOpen(shouldBeOpen);
-  }, [krishna.lastError, isLoading, krishna.lastSpoken]);
+  }, [isHidden, krishna.lastError, isLoading, krishna.lastSpoken]);
 
   const openOnFocus = useCallback(() => {
-    if (!isPopoverOpen) setIsPopoverOpen(true);
-  }, [isPopoverOpen]);
+    if (!isHidden && !isPopoverOpen) setIsPopoverOpen(true);
+  }, [isHidden, isPopoverOpen]);
 
   const handleKeyPress = useCallback(
     (e: React.KeyboardEvent) => {
@@ -59,7 +63,7 @@ export const Input = ({ isHidden }: { isHidden: boolean }) => {
 
   return (
     <div className="relative flex-1">
-      <Popover open={isPopoverOpen} onOpenChange={setIsPopoverOpen}>
+      <Popover open={!isHidden && isPopoverOpen} onOpenChange={setIsPopoverOpen}>
         <PopoverTrigger asChild className="!border-none !bg-transparent">
           <div className="relative select-none">
             <InputComponent

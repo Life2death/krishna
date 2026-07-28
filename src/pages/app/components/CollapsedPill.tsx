@@ -30,22 +30,13 @@ const STATE_TEXT_CLASS: Record<VoiceState, string> = {
   speaking: "text-primary",
 };
 
-// Ring cadence reinforces the chakra's own spin speed (see global.css:
-// 14s idle / 6s listening / 3.5s processing / 3s speaking).
-const STATE_RING_DURATION: Partial<Record<VoiceState, string>> = {
-  listening: "2s",
-  thinking: "1.4s",
-  speaking: "1s",
-};
-
 const toChakraState = (state: VoiceState): ChakraState =>
   state === "thinking" ? "processing" : state;
 
 /**
- * The 44x44 collapsed overlay icon. Reuses KrishnaChakra (already
- * state-driven: spin speed + halo/aura via CSS, see global.css) rather than
- * drawing a new SVG — this component is just a sized wrapper, a pulse ring,
- * and the drag/expand interaction.
+ * The 106x106 collapsed overlay icon. Reuses KrishnaChakra rather than drawing
+ * a new SVG, keeping the state color while the disc spins continuously until
+ * Krishna speaks, when the live waveform takes over.
  *
  * Deliberately NOT `data-tauri-drag-region` — Windows treats a drag region as
  * a caption area and swallows the double-click as a maximize toggle, and
@@ -117,31 +108,19 @@ export const CollapsedPill = ({ state, onExpand }: CollapsedPillProps) => {
   );
 
   const colorClass = STATE_TEXT_CLASS[state];
-  const ringDuration = STATE_RING_DURATION[state];
-
   return (
     <button
       type="button"
       aria-label={STATE_LABEL[state]}
       title={STATE_LABEL[state]}
-      className={`krishna-pill-pop relative flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded-full border border-border bg-card/85 backdrop-blur transition-[transform,color] duration-300 hover:scale-105 active:scale-95 ${colorClass}`}
+      className={`flex h-[106px] w-[106px] shrink-0 cursor-pointer items-center justify-center ${colorClass}`}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
       onPointerCancel={handlePointerCancel}
       onKeyDown={handleKeyDown}
     >
-      {state !== "idle" && (
-        <span
-          aria-hidden="true"
-          className="pointer-events-none absolute inset-0 rounded-full opacity-40 ring-2 ring-current motion-reduce:animate-none animate-ping"
-          style={ringDuration ? { animationDuration: ringDuration } : undefined}
-        />
-      )}
       {state === "speaking" ? (
-        // Live waveform reads as "hearing audio right now" more clearly than
-        // a spin-speed change — reserved for speaking specifically, per the
-        // owner's explicit ask; every other state keeps the chakra.
         <span className="krishna-pill-bars" aria-hidden="true">
           <span />
           <span />
@@ -149,7 +128,12 @@ export const CollapsedPill = ({ state, onExpand }: CollapsedPillProps) => {
           <span />
         </span>
       ) : (
-        <KrishnaChakra state={toChakraState(state)} size={24} className={`!${colorClass}`} />
+        <KrishnaChakra
+          state={toChakraState(state)}
+          size={58}
+          minimal
+          className={`krishna-chakra--compact !${colorClass}`}
+        />
       )}
     </button>
   );
