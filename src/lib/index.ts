@@ -7,6 +7,7 @@ export * from "@krishna/core/database";
 export * from "@krishna/core/chat-constants";
 export * from "./platform";
 export * from "./analytics";
+export * from "./voice-state";
 export * from "@krishna/core/response-settings.constants";
 export * from "@krishna/core/executor";
 export * from "@krishna/core/memory";
