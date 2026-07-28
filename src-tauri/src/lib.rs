@@ -148,6 +148,7 @@ pub fn run() {
             get_app_version,
             file_exists,
             window::set_window_height,
+            window::set_overlay_collapsed,
             window::open_dashboard,
             capture::capture_to_base64,
             capture::start_screen_capture,

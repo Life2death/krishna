@@ -22,7 +22,7 @@
         "resizable": false,
         "visibleOnAllWorkspaces": true,
         "skipTaskbar": false,
-        "visible": true,
+        "visible": false,
         "center": false,
         "focus": false,
         "acceptFirstMouse": true,
