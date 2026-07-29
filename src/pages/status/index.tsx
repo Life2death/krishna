@@ -133,6 +133,9 @@ const Status = () => {
                             <span className="line-clamp-1 font-medium">{entry.transcript || "(empty)"}</span>
                           </div>
                           <p className="mt-0.5 text-muted-foreground">{badge.label}{entry.failureReason && ` — ${FAILURE_LABELS[entry.failureReason] ?? entry.failureReason}`}</p>
+                          {entry.detail && (
+                            <p className="mt-0.5 line-clamp-1 text-muted-foreground/70" title={entry.detail}>{entry.detail}</p>
+                          )}
                         </div>
                         <span className="shrink-0 text-muted-foreground">{moment(entry.createdAt).format("MMM D, h:mm A")}</span>
                       </div>

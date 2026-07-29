@@ -46,6 +46,11 @@ export async function deleteAllAuditEntries(): Promise<boolean> {
   return true;
 }
 
+export async function pruneOldAuditEntries(maxAgeMs: number): Promise<void> {
+  const db = await getDatabase();
+  await db.execute("DELETE FROM audit_log WHERE created_at < ?", [Date.now() - maxAgeMs]);
+}
+
 export async function getLastReversible(): Promise<AuditEntry | null> {
   const db = await getDatabase();
   const rows = await db.select<DbAudit[]>(
