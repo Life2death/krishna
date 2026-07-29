@@ -61,6 +61,31 @@ fn file_exists(path: String) -> bool {
     std::path::Path::new(&path).exists()
 }
 
+const LOG_MAX_AGE: std::time::Duration = std::time::Duration::from_secs(7 * 24 * 60 * 60);
+// tauri-plugin-log only rotates when a fresh logger is acquired (app cold start), which
+// on Android never happens for days/weeks at a time — KrishnaHandsFreeService keeps the
+// process alive as a foreground service. Without an explicit periodic sweep, already-rotated
+// (closed) log files older than 7 days would only ever get deleted on the next cold start.
+fn prune_old_logs(dir: &std::path::Path) {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return;
+    };
+    let now = std::time::SystemTime::now();
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.extension().and_then(|e| e.to_str()) != Some("log") {
+            continue;
+        }
+        let is_stale = entry
+            .metadata()
+            .and_then(|m| m.modified())
+            .is_ok_and(|modified| now.duration_since(modified).unwrap_or_default() > LOG_MAX_AGE);
+        if is_stale {
+            let _ = std::fs::remove_file(&path);
+        }
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     // Panic hook: if the app crashes, write the reason to a file before exiting
@@ -93,6 +118,8 @@ pub fn run() {
                     tauri_plugin_log::Target::new(tauri_plugin_log::TargetKind::Stderr),
                 ])
                 .level(log::LevelFilter::Info)
+                .max_file_size(10_000_000)
+                .rotation_strategy(tauri_plugin_log::RotationStrategy::KeepAll)
                 .build(),
         )
         .plugin(
@@ -240,6 +267,19 @@ pub fn run() {
         .setup(|app| {
             // Phase 0: brain spawning is removed. The app runs fully in local
             // mode with no external process dependency.
+
+            // Prune log files older than 7 days: once at startup, then every 6h for
+            // the life of the process (see prune_old_logs's doc comment for why the
+            // periodic sweep matters, not just the startup one).
+            if let Ok(log_dir) = app.path().app_log_dir() {
+                prune_old_logs(&log_dir);
+                tauri::async_runtime::spawn(async move {
+                    loop {
+                        tokio::time::sleep(tokio::time::Duration::from_secs(6 * 60 * 60)).await;
+                        prune_old_logs(&log_dir);
+                    }
+                });
+            }
 
             // Non-fatal: if window positioning fails, continue anyway
             if let Err(e) = window::setup_main_window(app) {
