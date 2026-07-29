@@ -3112,7 +3112,7 @@ dependencies = [
 
 [[package]]
 name = "krishna"
-version = "2.1.8"
+version = "2.1.9"
 dependencies = [
  "aes-gcm",
  "anyhow",

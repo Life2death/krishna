@@ -5,7 +5,7 @@
     "packages/core",
     "apps/brain"
   ],
-  "version": "2.1.8",
+  "version": "2.1.9",
   "description": "Krishna — a talking desktop AI assistant. Voice-in, voice-out, open apps/websites/files via voice command.",
   "author": {
     "name": "life2death",

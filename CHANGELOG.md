@@ -12,6 +12,29 @@
 
 ---
 
+## v2.1.9 (2026-07-29)
+
+- **Fixed the CI/release build**: `apps/brain/package.json` had drifted out of sync with the
+  committed lockfile since the 2.1.8 version bump (a dependency edit never got committed alongside
+  it), so `npm ci` failed on every workflow — including the v2.1.8 release build itself, which
+  failed in under a minute with no installers produced. Also added the missing ambient type
+  declaration for `@xenova/transformers@1.4.2`, which ships no bundled types (2.17.2 did).
+- **Log files no longer grow without bound**: the log file had no rotation policy configured (a
+  ~39KB default nobody had tuned), and on Android the app's foreground service keeps the process
+  alive for days/weeks — long enough that the one-time-per-cold-start rotation check effectively
+  never fired, letting a single log balloon unchecked. Now capped at 10MB with dated rotation, plus
+  an explicit sweep (once at startup, then every 6h) that deletes anything older than 7 days.
+- **Travel-time failures were silently marked as successful**: `get_travel_time`'s fallback paths
+  (a live-traffic API error, or no Maps key configured) returned success even though they hadn't
+  actually answered the request, so a failed lookup showed up as "answered" in command history with
+  no visible error — the likely explanation for a reported "asked how long to get home, nothing
+  happened" incident. Now reported honestly; the spoken response and Maps-link fallback are
+  unchanged. Also added 7-day retention to `command_log`/`speech_log`/`audit_log` (previously
+  unbounded) and surfaced the raw error detail in the Status page's recent-activity list, which
+  wasn't shown anywhere before.
+
+---
+
 ## v2.1.8 (2026-07-28)
 
 - **OS-wide dictation:** a global hotkey (default `Ctrl+Shift+J`, also available as an on-screen
