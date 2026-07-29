@@ -8,7 +8,6 @@ export { default as DevSpace } from "./dev";
 export { default as Shortcuts } from "./shortcuts";
 export { default as Audio } from "./audio";
 export { default as Screenshot } from "./screenshot";
-export { default as Presence } from "./presence";
 export { default as Setup } from "./setup";
 export { default as MobileMemories } from "./mobile/Memories";
 export { default as MobileHome } from "./mobile/Home";

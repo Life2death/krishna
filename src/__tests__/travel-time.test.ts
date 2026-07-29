@@ -747,8 +747,8 @@ describe("getTravelTimeTool", () => {
       { vars: {} },
     );
 
-    expect(result.success).toBe(true);
-    expect(result.output).toContain("Add a Maps API key in Settings");
+    expect(result.success).toBe(false);
+    expect(result.error).toContain("Add a Maps API key in Settings");
     expect(result.data?.fallback).toBe("true");
     expect(result.data?.url).toContain("google.com/maps/dir/");
     expect(result.data?.url).toContain("origin=123"); // resolved via saved "home address" memory
@@ -764,9 +764,9 @@ describe("getTravelTimeTool", () => {
       { vars: {} },
     );
 
-    expect(result.success).toBe(true);
-    expect(result.output).toContain("didn't go through this time");
-    expect(result.output).not.toContain("Add a Maps API key");
+    expect(result.success).toBe(false);
+    expect(result.error).toContain("didn't go through this time");
+    expect(result.error).not.toContain("Add a Maps API key");
     expect(result.data?.fallback).toBe("true");
     expect(result.data?.errorDetail).toContain("Google Routes API error (403)");
   });
@@ -783,7 +783,7 @@ describe("getTravelTimeTool", () => {
       { vars: {} },
     );
 
-    expect(result.success).toBe(true);
+    expect(result.success).toBe(false);
     expect(result.data?.fallback).toBe("true");
     expect(result.data?.errorDetail).toContain("No routes found");
   });

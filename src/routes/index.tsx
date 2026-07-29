@@ -11,7 +11,6 @@ import {
   Shortcuts,
   Audio,
   Screenshot,
-  Presence,
   Setup,
   MobileMemories,
   MobileHome,
@@ -61,7 +60,6 @@ export default function AppRoutes() {
   return (
     <Router>
       <Routes>
-        <Route path="/presence" element={<Presence />} />
         <Route path="/setup" element={<Setup />} />
         {isMobileDevice() ? (
           // Mobile: one screen — a big tap-to-talk button. Setup-gated so a

@@ -7,6 +7,7 @@ interface KrishnaChakraProps {
   state?: ChakraState;
   /** Rendered size in px (square). Defaults to 22 — sized for the toolbar button. */
   size?: number;
+  minimal?: boolean;
   className?: string;
   title?: string;
 }
@@ -22,6 +23,7 @@ interface KrishnaChakraProps {
 export function KrishnaChakra({
   state = "idle",
   size = 22,
+  minimal = false,
   className,
   title,
 }: KrishnaChakraProps) {
@@ -34,7 +36,7 @@ export function KrishnaChakra({
       aria-label={title ?? `Krishna ${state}`}
       title={title}
     >
-      {state === "speaking" && (
+      {!minimal && state === "speaking" && (
         <>
           <svg className="krishna-chakra__aura" viewBox="-90 -90 180 180" width="100%" height="100%" aria-hidden="true">
             <circle r="68" fill="currentColor" fillOpacity="0.14" />
@@ -45,13 +47,30 @@ export function KrishnaChakra({
         </>
       )}
 
-      {state === "listening" && (
+      {!minimal && state === "listening" && (
         <svg className="krishna-chakra__halo" viewBox="-90 -90 180 180" width="100%" height="100%" aria-hidden="true">
           <circle r="84" fill="none" stroke="currentColor" strokeWidth="2" strokeOpacity="0.5" strokeDasharray="4 7" />
         </svg>
       )}
 
-      <svg className="krishna-chakra__disc" viewBox="-90 -90 180 180" width="100%" height="100%" aria-hidden="true">
+      <svg
+        className={cn("krishna-chakra__disc", minimal && "krishna-chakra__disc--minimal")}
+        viewBox="-90 -90 180 180"
+        width="100%"
+        height="100%"
+        aria-hidden="true"
+      >
+        <g>
+          {minimal && (
+            <animateTransform
+              attributeName="transform"
+              type="rotate"
+              from="0 0 0"
+              to="360 0 0"
+              dur="60s"
+              repeatCount="indefinite"
+            />
+          )}
         {/* serrated flame rim */}
         <polygon
           points="72,0 57.96,15.53 62.35,36 42.43,42.43 36,62.35 15.53,57.96 0,72 -15.53,57.96 -36,62.35 -42.43,42.43 -62.35,36 -57.96,15.53 -72,0 -57.96,-15.53 -62.35,-36 -42.43,-42.43 -36,-62.35 -15.53,-57.96 0,-72 15.53,-57.96 36,-62.35 42.43,-42.43 62.35,-36 57.96,-15.53"
@@ -88,8 +107,10 @@ export function KrishnaChakra({
           <line x1="0" y1="-12" x2="0" y2="-48" />
           <line x1="8.49" y1="-8.49" x2="33.94" y2="-33.94" />
         </g>
+        {minimal && <path d="M0 -86 L9 -69 L0 -58 L-9 -69 Z" fill="currentColor" />}
         {/* hub */}
         <circle r="11" fill="currentColor" />
+        </g>
       </svg>
     </span>
   );

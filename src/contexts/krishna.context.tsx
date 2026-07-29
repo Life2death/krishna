@@ -34,6 +34,7 @@ import { pickLine } from "@/lib/voice-lines";
 import type { CommandOutcome, FailureReason, SpeechSource } from "@/lib/database";
 import { setConfirmAction, setVerbatimConfirm } from "@krishna/core/tools/mcp-bridge";
 import type { AssistantStatus, StepAction } from "@/types/assistant";
+import type { VadPhase } from "@/lib/voice-state";
 import type { Skill } from "@/types/skill";
 import type { Message, AttachedFile } from "@/types";
 import type { VoiceVerifyResult } from "@/lib/voice-client";
@@ -113,6 +114,16 @@ interface KrishnaContextType {
   clearFiles: () => void;
   captureScreenshot: () => Promise<void>;
   isScreenshotLoading: boolean;
+  /** Classic VAD mic-pipeline phase, pushed up from `KrishnaVAD` (the only
+   * thing that owns `useMicVAD`). Feeds `deriveVoiceState` for the collapsed
+   * overlay icon — see `src/lib/voice-state.ts`. */
+  vadPhase: VadPhase;
+  setVadPhase: (phase: VadPhase) => void;
+  /** Realtime (Live Voice) session phase, pushed up from `LiveVoiceBar` (the
+   * only thing that owns `useLiveVoiceSession`). Empty string when live mode
+   * is off. Also feeds `deriveVoiceState`. */
+  liveVoicePhase: string;
+  setLiveVoicePhase: (phase: string) => void;
 }
 
 const KrishnaContext = createContext<KrishnaContextType | undefined>(undefined);
@@ -489,6 +500,8 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
 
   const [enabled, setEnabled] = useState<boolean>(true);
   const [status, setStatus] = useState<AssistantStatus>("idle");
+  const [vadPhase, setVadPhase] = useState<VadPhase>("quiet");
+  const [liveVoicePhase, setLiveVoicePhase] = useState<string>("");
   const [lastSpoken, setLastSpoken] = useState<string>("");
   const [pendingCommand, setPendingCommand] = useState<string | null>(null);
   const [lastError, setLastError] = useState<string | null>(null);
@@ -2573,30 +2586,6 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
     [selectedAIProvider, allAiProviders, llmFallback, wakeWordEnabled, wakeWord, clearFiles, promptMemoryConfirmation]
   );
 
-  // Presence overlay: show large chakra when active, hide when idle
-  useEffect(() => {
-    if (status === "thinking" || status === "speaking") {
-      const chakraState: "speaking" | "processing" = status === "speaking" ? "speaking" : "processing";
-      invoke("show_presence");
-      emit("presence-state", { state: chakraState });
-    } else if (status === "idle" && !pendingConfirmationRef.current) {
-      invoke("hide_presence");
-    }
-  }, [status]);
-
-  // Presence overlay from VAD: show when user is speaking, hide when idle
-  useEffect(() => {
-    const unlisten = listen<{ speaking: boolean }>("vad-user-speaking", (event) => {
-      if (event.payload.speaking) {
-        invoke("show_presence");
-        emit("presence-state", { state: "listening" });
-      } else if (status === "idle") {
-        invoke("hide_presence");
-      }
-    });
-    return () => { unlisten.then((fn) => fn()); };
-  }, [status]);
-
   // Device relay (bridge P1): execute commands queued for THIS device kind by
   // the other device (desktop ↔ mobile) via the synced device_commands table.
   // A ref keeps the dispatcher on the freshest processCommand without
@@ -2640,6 +2629,8 @@ export function KrishnaProvider({ children }: { children: ReactNode }) {
           clearFiles,
           captureScreenshot,
           isScreenshotLoading,
+          vadPhase, setVadPhase,
+          liveVoicePhase, setLiveVoicePhase,
         }}
       >
       {children}

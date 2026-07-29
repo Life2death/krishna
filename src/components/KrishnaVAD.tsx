@@ -8,7 +8,6 @@ import { fetchSTTWithRetryDefault } from "@/lib/fetch-stt-with-retry";
 import { useApp } from "@/contexts";
 import { useKrishna } from "@/hooks";
 import { isKrishnaSpeaking } from "@/lib/krishna-mutex";
-import { invoke } from "@tauri-apps/api/core";
 import { emit } from "@tauri-apps/api/event";
 import { verifyVoice, getVoiceStatus, isVoiceIdEnabled, considerAddSample } from "@/lib/voice-client";
 import type { VoiceVerifyResult } from "@/lib/voice-client";
@@ -197,15 +196,16 @@ export const KrishnaVAD = () => {
     if (vad.errored) console.error("[KrishnaVAD] VAD error:", vad.errored);
   }, [vad.errored]);
 
-  // Wire VAD userSpeaking to presence overlay
+  // Push the mic pipeline's phase up to the Krishna context — this is the
+  // only place that owns useMicVAD, so it's the only place that can know this.
+  // Feeds deriveVoiceState (src/lib/voice-state.ts) for the collapsed overlay
+  // icon. `transcribing` takes priority: it closes a real gap where `status`
+  // doesn't reach "thinking" until well after the STT call starts, which used
+  // to make the old presence orb (and would make the new icon) show idle for
+  // the whole ~1s+ round-trip right after the user stops talking.
   useEffect(() => {
-    if (vad.userSpeaking) {
-      invoke("show_presence");
-      emit("vad-user-speaking", { speaking: true });
-    } else {
-      emit("vad-user-speaking", { speaking: false });
-    }
-  }, [vad.userSpeaking]);
+    krishna.setVadPhase(isTranscribing ? "transcribing" : vad.userSpeaking ? "speaking" : "quiet");
+  }, [vad.userSpeaking, isTranscribing, krishna.setVadPhase]);
 
   const handleMuteToggle = () => {
     if (muted) {

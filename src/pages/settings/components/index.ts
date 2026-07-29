@@ -8,6 +8,7 @@ export * from "./BrainConnection";
 export * from "./CreateSkillDialog";
 export * from "./PersonaSelector";
 export * from "./ComputerControlToggle";
+export * from "./DictationToggle";
 export * from "./VoiceIdSettings";
 export * from "./MapsSettings";
 export * from "./GmailSettings";

@@ -12,6 +12,23 @@
 
 ---
 
+## v2.1.8 (2026-07-28)
+
+- **OS-wide dictation:** a global hotkey (default `Ctrl+Shift+J`, also available as an on-screen
+  toggle) records speech from anywhere in the OS and types the transcription into whatever app
+  currently has focus, without stealing focus from it. Fixed three real bugs along the way: a
+  Windows key-repeat issue that fired the toggle a dozen times per press, a microphone-device-id
+  mismatch that silently broke recording, and — the significant one — a Windows `SendInput`
+  text-corruption bug in the keystroke-injection path, fixed by switching to a clipboard-write +
+  single paste instead.
+- **Collapsible overlay:** the main bar now launches as a small animated pill instead of the full
+  600px bar, double-click to expand, and it auto-collapses after a reply or when you click away.
+  The old fullscreen "presence" chakra — an always-on-top overlay that could pop up from any
+  ambient mic noise, with a bug that occasionally left it stuck on screen — has been removed
+  entirely in favor of this smaller, calmer indicator.
+
+---
+
 ## v2.1.7 (2026-07-15)
 
 - **Mobile Turso sync, fully working end-to-end:** fixed a duplicate-module vite alias bug

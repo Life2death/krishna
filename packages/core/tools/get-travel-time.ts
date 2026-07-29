@@ -478,9 +478,12 @@ export const getTravelTimeTool: Tool = {
       } catch (err) {
         const errorDetail = err instanceof Error ? err.message : String(err);
         const mapsUrl = buildMapsUrl(origin, destination, mode);
+        // success:false (not true) so command_log records this as a real failure —
+        // the spoken text/Maps-opening behavior is unchanged either way, since
+        // decideActionResponse() reads `output || error` regardless of the flag.
         return {
-          success: true,
-          output: `I've opened the route on Maps — the live traffic lookup didn't go through this time, ${honorific}.`,
+          success: false,
+          error: `I've opened the route on Maps — the live traffic lookup didn't go through this time, ${honorific}.`,
           data: {
             url: mapsUrl,
             fallback: "true",
@@ -492,8 +495,8 @@ export const getTravelTimeTool: Tool = {
 
     const mapsUrl = buildMapsUrl(origin, destination, mode);
     return {
-      success: true,
-      output:
+      success: false,
+      error:
         `I've opened the route on Maps. Add a Maps API key in Settings and I can read out times with live traffic, ${honorific}.`,
       data: {
         url: mapsUrl,

@@ -1,9 +1,10 @@
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { useCallback, useEffect } from "react";
+import { isOverlayCollapsed } from "@/lib/overlay-collapse";
 
 // Helper function to check if any popover is open in the DOM
-const isAnyPopoverOpen = (): boolean => {
+export const isAnyPopoverOpen = (): boolean => {
   const popoverContents = document.querySelectorAll(
     "[data-radix-popper-content-wrapper]"
   );
@@ -13,6 +14,15 @@ const isAnyPopoverOpen = (): boolean => {
 export const useWindowResize = () => {
   const resizeWindow = useCallback(async (expanded: boolean) => {
     try {
+      // While collapsed, the pill owns the window geometry — every height
+      // resize meant for the expanded bar must be a no-op or it snaps the
+      // window back to 600 wide. Rust enforces this too (the real safety
+      // net, since the observer below can call in from outside React); this
+      // guard just avoids the pointless IPC round-trip.
+      if (isOverlayCollapsed()) {
+        return;
+      }
+
       const window = getCurrentWebviewWindow();
 
       if (!expanded && isAnyPopoverOpen()) {
@@ -48,7 +58,9 @@ export const useWindowResize = () => {
         isDragging = false;
 
         setTimeout(() => {
-          if (!isAnyPopoverOpen()) {
+          // Read the collapse flag inside the timeout, not outside — a
+          // collapse that starts during this 100ms window still wins.
+          if (!isOverlayCollapsed() && !isAnyPopoverOpen()) {
             resizeWindow(false);
           }
         }, 100);
@@ -56,7 +68,7 @@ export const useWindowResize = () => {
     };
 
     const observer = new MutationObserver(() => {
-      if (!isAnyPopoverOpen()) {
+      if (!isOverlayCollapsed() && !isAnyPopoverOpen()) {
         resizeWindow(false);
       }
     });

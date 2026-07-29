@@ -207,3 +207,8 @@ export async function deleteAllCommandLog(): Promise<void> {
   const db = await getDatabase();
   await db.execute("DELETE FROM command_log");
 }
+
+export async function pruneOldCommandLog(maxAgeMs: number): Promise<void> {
+  const db = await getDatabase();
+  await db.execute("DELETE FROM command_log WHERE created_at < ?", [Date.now() - maxAgeMs]);
+}

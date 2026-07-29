@@ -9,6 +9,7 @@ import { registerTools } from "@krishna/core/tools";
 import { COMPUTER_TOOLS } from "@krishna/core/tools/computer";
 import { SyncEngine } from "@krishna/core/sync";
 import { createTransport } from "@krishna/core/sync/create-transport";
+import { pruneOldCommandLog, pruneOldSpeechLog, pruneOldAuditEntries } from "@krishna/core/database";
 
 let _syncEngine: SyncEngine | null = null;
 
@@ -62,6 +63,20 @@ export async function initializeCore(): Promise<void> {
     select: (sql, params) => db.select(sql, params),
     execute: (sql, params) => db.execute(sql, params),
   });
+
+  // Same 7-day retention as the Rust flat-file logger — these tables have no
+  // automatic cleanup otherwise (only manual "Clear all" buttons in Settings/
+  // Status/Dev Space), and would grow unbounded on a long-lived install.
+  try {
+    const sevenDaysMs = 7 * 24 * 60 * 60 * 1000;
+    await Promise.all([
+      pruneOldCommandLog(sevenDaysMs),
+      pruneOldSpeechLog(sevenDaysMs),
+      pruneOldAuditEntries(sevenDaysMs),
+    ]);
+  } catch (err) {
+    console.error("[startup] log prune failed:", err);
+  }
 
   setHttpFetch((url, opts) =>
     url.includes("http") ? (tauriFetch as typeof fetch)(url, opts) : fetch(url, opts)

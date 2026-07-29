@@ -11,7 +11,6 @@ export * from "./Empty";
 export * from "./Markdown/copy-button";
 export * from "./Icons";
 export * from "./KrishnaChakra";
-export * from "./KrishnaChakraOrb";
 export * from "./KrishnaVAD";
 export * from "./KrishnaChat";
 export * from "./MobileVoiceButton";

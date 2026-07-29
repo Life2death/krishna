@@ -4,3 +4,4 @@ export * from "./BrainSelector";
 export * from "./SystemPromptSelector";
 export * from "./VoiceModeSelector";
 export * from "./LiveVoiceBar";
+export * from "./CollapsedPill";

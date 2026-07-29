@@ -18,6 +18,9 @@ export interface CustomizableState {
   computerControl: {
     enabled: boolean;
   };
+  dictation: {
+    enabled: boolean;
+  };
   liveVoice: {
     enabled: boolean;
     mode: "classic" | "live";
@@ -37,6 +40,7 @@ export const DEFAULT_CUSTOMIZABLE_STATE: CustomizableState = {
   autostart: { isEnabled: true },
   cursor: { type: "invisible" },
   computerControl: { enabled: false },
+  dictation: { enabled: false },
   liveVoice: {
     enabled: !IS_MOBILE_UA,
     mode: IS_MOBILE_UA ? "classic" : "live",
@@ -64,6 +68,8 @@ export const getCustomizableState = (): CustomizableState => {
       cursor: parsedState.cursor || DEFAULT_CUSTOMIZABLE_STATE.cursor,
       computerControl:
         parsedState.computerControl || DEFAULT_CUSTOMIZABLE_STATE.computerControl,
+      dictation:
+        parsedState.dictation || DEFAULT_CUSTOMIZABLE_STATE.dictation,
       liveVoice: {
         enabled: parsedState.liveVoice?.enabled ?? DEFAULT_CUSTOMIZABLE_STATE.liveVoice.enabled,
         mode: parsedState.liveVoice?.mode ?? DEFAULT_CUSTOMIZABLE_STATE.liveVoice.mode,
@@ -132,6 +138,19 @@ export const updateAutostart = (isEnabled: boolean): CustomizableState => {
 export const updateComputerControl = (enabled: boolean): CustomizableState => {
   const currentState = getCustomizableState();
   const newState = { ...currentState, computerControl: { enabled } };
+  setCustomizableState(newState);
+  return newState;
+};
+
+/**
+ * Update dictation enabled state. Deliberately a separate flag from
+ * computerControl — dictation (typing spoken words into the focused app) is a much
+ * smaller trust surface than full computer control (mouse/keyboard automation), so
+ * it gets its own dedicated permission rather than depending on the broad toggle.
+ */
+export const updateDictationEnabled = (enabled: boolean): CustomizableState => {
+  const currentState = getCustomizableState();
+  const newState = { ...currentState, dictation: { enabled } };
   setCustomizableState(newState);
   return newState;
 };

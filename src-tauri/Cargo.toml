@@ -1,6 +1,6 @@
 [package]
 name = "krishna"
-version = "2.1.7"
+version = "2.1.8"
 description = "Krishna - A talking desktop AI assistant. Voice-in, voice-out, open apps via voice."
 authors = ["life2death"]
 license = "GPL-3.0"
@@ -66,6 +66,8 @@ windows-registry = "0.5"
 windows = { version = "0.58", features = [
     "Win32_Foundation",
     "Win32_Graphics_Gdi",
+    "Win32_System_DataExchange",
+    "Win32_System_Memory",
     "Win32_System_ProcessStatus",
     "Win32_System_Threading",
     "Win32_UI_WindowsAndMessaging",

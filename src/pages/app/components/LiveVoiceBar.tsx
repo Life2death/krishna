@@ -1,5 +1,7 @@
+import { useEffect } from "react";
 import { Button } from "@/components";
 import { useLiveVoiceSession } from "@/hooks/useLiveVoiceSession";
+import { useKrishna } from "@/hooks";
 import { MicIcon, MicOffIcon, Loader2Icon, AlertCircleIcon } from "lucide-react";
 
 interface LiveVoiceBarProps {
@@ -37,6 +39,17 @@ export const LiveVoiceBar = ({
     onLiveAssistantText,
     onTurnComplete,
   });
+
+  // Push the realtime session's phase up to the Krishna context — this is the
+  // only place that owns useLiveVoiceSession, so it's the only place that can
+  // know this. Feeds deriveVoiceState (src/lib/voice-state.ts) for the
+  // collapsed overlay icon. Reset to "" on unmount so switching back to
+  // Classic mode doesn't leave a stale live-session phase behind.
+  const { setLiveVoicePhase } = useKrishna();
+  useEffect(() => {
+    setLiveVoicePhase(state);
+    return () => setLiveVoicePhase("");
+  }, [state, setLiveVoicePhase]);
 
   const stateColor: Record<string, string> = {
     idle: "bg-zinc-400",

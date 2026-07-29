@@ -27,15 +27,193 @@ pub fn set_computer_control_enabled(
     Ok(())
 }
 
+/// Holds the dictation-enabled flag, synced from its own JS settings toggle.
+/// Deliberately separate from `ComputerControlState`: dictation only ever types the
+/// user's own spoken words into whichever window has OS focus — it never moves the
+/// mouse, clicks, or sends key combos — so it is a much narrower trust surface than
+/// full computer control and gets its own dedicated permission instead of silently
+/// piggybacking on (or requiring) the broad Computer Control toggle.
+pub struct DictationState {
+    pub enabled: Mutex<bool>,
+}
+
+/// Shared helper: check the dictation-enabled flag and return an error if disabled.
+fn ensure_dictation_enabled(state: &DictationState) -> Result<(), String> {
+    let enabled = state.enabled.lock().map_err(|e| format!("Lock error: {}", e))?;
+    if !*enabled {
+        return Err("Dictation is disabled. Enable it in Settings → Shortcuts → Dictation.".into());
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub fn set_dictation_enabled(
+    state: tauri::State<'_, DictationState>,
+    enabled: bool,
+) -> Result<(), String> {
+    let mut flag = state.enabled.lock().map_err(|e| format!("Lock error: {}", e))?;
+    *flag = enabled;
+    Ok(())
+}
+
+/// Shared typing implementation used by `computer_type` (gated on
+/// `ComputerControlState`) — types one character at a time via Enigo with a
+/// short pause in between, rather than handing the whole string to
+/// `enigo.text()` in one call. Enigo's Windows backend builds ONE `SendInput`
+/// array covering the entire string (two `KEYEVENTF_UNICODE` events per
+/// character) and fires it in a single syscall — verified live that a large
+/// burst like this gets corrupted by the receiving app's message queue
+/// (dropped shift-state on capitals, characters replaced with '?', wrong
+/// characters substituted), even though `SendInput` itself reports success.
+/// Pacing it reduces (but, on further testing with `dictation_type_text`,
+/// does not fully eliminate) that corruption — see `type_text_via_paste` for
+/// dictation's actual fix, which sidesteps the whole class of bug.
+fn type_text_via_enigo(text: &str) -> Result<String, String> {
+    let mut enigo = Enigo::new(&Settings::default()).map_err(|e| format!("Failed to init Enigo: {}", e))?;
+    for c in text.chars() {
+        enigo
+            .text(&c.to_string())
+            .map_err(|e| format!("Failed to type text: {}", e))?;
+        std::thread::sleep(std::time::Duration::from_millis(8));
+    }
+    Ok(format!("Typed {} characters", text.chars().count()))
+}
+
+/// Dictation's typing implementation: clipboard write + a single Ctrl+V
+/// paste, instead of per-character keystroke injection. `type_text_via_enigo`
+/// (even paced to one character per `SendInput` call) still reproducibly
+/// corrupted longer dictated sentences in real testing — capitalization lost,
+/// characters replaced with '?', wrong characters substituted, mid-string —
+/// a genuine Windows input-queue timing issue with synthetic per-character
+/// events, not something a delay constant can reliably paper over. A paste is
+/// a single, well-tested OS operation regardless of text length, so it
+/// doesn't have this failure mode. The user's existing clipboard content is
+/// saved before and restored after, so dictation doesn't clobber whatever
+/// they had copied.
+#[cfg(target_os = "windows")]
+fn type_text_via_paste(text: &str) -> Result<String, String> {
+    let previous_clipboard = windows_clipboard::get_text();
+
+    windows_clipboard::set_text(text)?;
+
+    // Give the OS clipboard a moment to settle before the paste keystroke
+    // reads it back out, then let Ctrl+V fully land before we restore
+    // whatever was on the clipboard beforehand.
+    std::thread::sleep(std::time::Duration::from_millis(30));
+
+    let mut enigo = Enigo::new(&Settings::default()).map_err(|e| format!("Failed to init Enigo: {}", e))?;
+    enigo
+        .key(Key::Control, Direction::Press)
+        .map_err(|e| format!("Failed to press Ctrl: {}", e))?;
+    enigo
+        .key(Key::Unicode('v'), Direction::Click)
+        .map_err(|e| format!("Failed to send V: {}", e))?;
+    enigo
+        .key(Key::Control, Direction::Release)
+        .map_err(|e| format!("Failed to release Ctrl: {}", e))?;
+
+    std::thread::sleep(std::time::Duration::from_millis(150));
+
+    if let Some(previous) = previous_clipboard {
+        let _ = windows_clipboard::set_text(&previous);
+    }
+
+    Ok(format!("Typed {} characters via paste", text.chars().count()))
+}
+
+#[cfg(target_os = "windows")]
+mod windows_clipboard {
+    use windows::Win32::Foundation::{HANDLE, HGLOBAL};
+    use windows::Win32::System::DataExchange::{
+        CloseClipboard, EmptyClipboard, GetClipboardData, OpenClipboard, SetClipboardData,
+    };
+    use windows::Win32::System::Memory::{GlobalAlloc, GlobalLock, GlobalUnlock, GMEM_MOVEABLE};
+
+    const CF_UNICODETEXT: u32 = 13;
+
+    /// Best-effort read of the current clipboard text (used to restore it
+    /// after dictation's paste). Returns `None` on any failure or if the
+    /// clipboard doesn't currently hold text — never treated as fatal.
+    pub fn get_text() -> Option<String> {
+        unsafe {
+            OpenClipboard(None).ok()?;
+            let result = (|| {
+                let handle = GetClipboardData(CF_UNICODETEXT).ok()?;
+                let ptr = GlobalLock(HGLOBAL(handle.0)) as *const u16;
+                if ptr.is_null() {
+                    return None;
+                }
+                let mut len = 0usize;
+                while *ptr.add(len) != 0 {
+                    len += 1;
+                }
+                let slice = std::slice::from_raw_parts(ptr, len);
+                let text = String::from_utf16_lossy(slice);
+                let _ = GlobalUnlock(HGLOBAL(handle.0));
+                Some(text)
+            })();
+            let _ = CloseClipboard();
+            result
+        }
+    }
+
+    /// Sets the clipboard to `text` as `CF_UNICODETEXT`.
+    pub fn set_text(text: &str) -> Result<(), String> {
+        let utf16: Vec<u16> = text.encode_utf16().chain(std::iter::once(0)).collect();
+        let byte_len = utf16.len() * std::mem::size_of::<u16>();
+
+        unsafe {
+            OpenClipboard(None).map_err(|e| format!("Failed to open clipboard: {}", e))?;
+
+            let result = (|| -> Result<(), String> {
+                EmptyClipboard().map_err(|e| format!("Failed to empty clipboard: {}", e))?;
+
+                let hmem = GlobalAlloc(GMEM_MOVEABLE, byte_len)
+                    .map_err(|e| format!("Failed to allocate clipboard memory: {}", e))?;
+                let ptr = GlobalLock(hmem) as *mut u16;
+                if ptr.is_null() {
+                    return Err("Failed to lock clipboard memory".into());
+                }
+                std::ptr::copy_nonoverlapping(utf16.as_ptr(), ptr, utf16.len());
+                let _ = GlobalUnlock(hmem);
+
+                SetClipboardData(CF_UNICODETEXT, HANDLE(hmem.0))
+                    .map_err(|e| format!("Failed to set clipboard data: {}", e))?;
+                Ok(())
+            })();
+
+            let _ = CloseClipboard();
+            result
+        }
+    }
+}
+
 #[tauri::command]
 pub fn computer_type(
     state: tauri::State<'_, ComputerControlState>,
     text: String,
 ) -> Result<String, String> {
     ensure_enabled(&state)?;
-    let mut enigo = Enigo::new(&Settings::default()).map_err(|e| format!("Failed to init Enigo: {}", e))?;
-    enigo.text(&text).map_err(|e| format!("Failed to type text: {}", e))?;
-    Ok(format!("Typed {} characters", text.len()))
+    type_text_via_enigo(&text)
+}
+
+/// Types dictated speech into whichever window currently has OS focus. Uses its own
+/// `DictationState` gate — NOT `ComputerControlState` — so enabling dictation never
+/// requires the user to also grant full Computer Control, and vice versa.
+#[tauri::command]
+pub fn dictation_type_text(
+    state: tauri::State<'_, DictationState>,
+    text: String,
+) -> Result<String, String> {
+    ensure_dictation_enabled(&state)?;
+    #[cfg(target_os = "windows")]
+    {
+        type_text_via_paste(&text)
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        type_text_via_enigo(&text)
+    }
 }
 
 fn parse_key(key_str: &str) -> Result<Key, String> {

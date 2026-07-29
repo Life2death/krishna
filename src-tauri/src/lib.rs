@@ -61,19 +61,28 @@ fn file_exists(path: String) -> bool {
     std::path::Path::new(&path).exists()
 }
 
-#[tauri::command]
-fn show_presence(app: tauri::AppHandle) {
-    if let Some(w) = app.get_webview_window("presence") {
-        #[cfg(desktop)]
-        let _ = w.set_ignore_cursor_events(true);
-        let _ = w.show();
-    }
-}
-
-#[tauri::command]
-fn hide_presence(app: tauri::AppHandle) {
-    if let Some(w) = app.get_webview_window("presence") {
-        let _ = w.hide();
+const LOG_MAX_AGE: std::time::Duration = std::time::Duration::from_secs(7 * 24 * 60 * 60);
+// tauri-plugin-log only rotates when a fresh logger is acquired (app cold start), which
+// on Android never happens for days/weeks at a time — KrishnaHandsFreeService keeps the
+// process alive as a foreground service. Without an explicit periodic sweep, already-rotated
+// (closed) log files older than 7 days would only ever get deleted on the next cold start.
+fn prune_old_logs(dir: &std::path::Path) {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return;
+    };
+    let now = std::time::SystemTime::now();
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.extension().and_then(|e| e.to_str()) != Some("log") {
+            continue;
+        }
+        let is_stale = entry
+            .metadata()
+            .and_then(|m| m.modified())
+            .is_ok_and(|modified| now.duration_since(modified).unwrap_or_default() > LOG_MAX_AGE);
+        if is_stale {
+            let _ = std::fs::remove_file(&path);
+        }
     }
 }
 
@@ -109,6 +118,8 @@ pub fn run() {
                     tauri_plugin_log::Target::new(tauri_plugin_log::TargetKind::Stderr),
                 ])
                 .level(log::LevelFilter::Info)
+                .max_file_size(10_000_000)
+                .rotation_strategy(tauri_plugin_log::RotationStrategy::KeepAll)
                 .build(),
         )
         .plugin(
@@ -138,6 +149,9 @@ pub fn run() {
         builder = builder.manage(automation::ComputerControlState {
             enabled: Mutex::new(false),
         });
+        builder = builder.manage(automation::DictationState {
+            enabled: Mutex::new(false),
+        });
         let posthog_api_key = option_env!("POSTHOG_API_KEY").unwrap_or("").to_string();
         builder = builder
             .plugin(posthog_init(PostHogConfig {
@@ -160,9 +174,8 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             get_app_version,
             file_exists,
-            show_presence,
-            hide_presence,
             window::set_window_height,
+            window::set_overlay_collapsed,
             window::open_dashboard,
             capture::capture_to_base64,
             capture::start_screen_capture,
@@ -174,6 +187,7 @@ pub fn run() {
             shortcuts::validate_shortcut_key,
             shortcuts::set_license_status,
             shortcuts::set_app_icon_visibility,
+            shortcuts::set_dictation_tray_status,
             shortcuts::set_always_on_top,
             shortcuts::exit_app,
             api::create_system_prompt,
@@ -232,6 +246,10 @@ pub fn run() {
             #[cfg(desktop)]
             automation::computer_type,
             #[cfg(desktop)]
+            automation::set_dictation_enabled,
+            #[cfg(desktop)]
+            automation::dictation_type_text,
+            #[cfg(desktop)]
             automation::computer_key,
             #[cfg(desktop)]
             automation::computer_click,
@@ -250,6 +268,19 @@ pub fn run() {
             // Phase 0: brain spawning is removed. The app runs fully in local
             // mode with no external process dependency.
 
+            // Prune log files older than 7 days: once at startup, then every 6h for
+            // the life of the process (see prune_old_logs's doc comment for why the
+            // periodic sweep matters, not just the startup one).
+            if let Ok(log_dir) = app.path().app_log_dir() {
+                prune_old_logs(&log_dir);
+                tauri::async_runtime::spawn(async move {
+                    loop {
+                        tokio::time::sleep(tokio::time::Duration::from_secs(6 * 60 * 60)).await;
+                        prune_old_logs(&log_dir);
+                    }
+                });
+            }
+
             // Non-fatal: if window positioning fails, continue anyway
             if let Err(e) = window::setup_main_window(app) {
                 eprintln!("Warning: Failed to position main window: {}", e);
@@ -257,35 +288,6 @@ pub fn run() {
 
             #[cfg(target_os = "android")]
             keystore::init();
-
-            // Presence overlay (the desktop orb) is created programmatically and
-            // ONLY on desktop. It used to be a static tauri.conf.json window,
-            // which meant Android ALSO spawned it as a second WebView — and with
-            // two webviews, Tauri's IPC responses misroute to the wrong one on
-            // Android production builds: every `invoke` (starting with the first
-            // Database.load) hangs, initializeCore never resolves, white screen.
-            // Mobile now has exactly one WebView.
-            #[cfg(desktop)]
-            {
-                if app.handle().get_webview_window("presence").is_none() {
-                    let _ = tauri::WebviewWindowBuilder::new(
-                        app.handle(),
-                        "presence",
-                        tauri::WebviewUrl::App("/".into()),
-                    )
-                    .title("")
-                    .transparent(true)
-                    .decorations(false)
-                    .always_on_top(true)
-                    .visible(false)
-                    .resizable(false)
-                    .skip_taskbar(true)
-                    .fullscreen(true)
-                    .focused(false)
-                    .inner_size(800.0, 600.0)
-                    .build();
-                }
-            }
 
             #[cfg(target_os = "macos")]
             init(app.app_handle());
@@ -417,8 +419,32 @@ pub fn run() {
                                     {
                                         shortcuts::start_move_window(app, direction);
                                     } else {
-                                        eprintln!("Shortcut triggered: {}", action_id);
-                                        shortcuts::handle_shortcut_action(app, &action_id);
+                                        // Windows (and other OSes) re-fire `Pressed` on
+                                        // key-repeat while the hotkey is held, with no
+                                        // way to tell a repeat from the initial press.
+                                        // Debounce: only actually trigger on the first
+                                        // Pressed after a Released (or after boot) for
+                                        // this action_id, otherwise a single normal key
+                                        // hold fires the action a dozen+ times, which is
+                                        // fatal for toggle-style actions like dictation
+                                        // and audio_recording (start/stop/start/stop...
+                                        // before the user finishes speaking).
+                                        let already_down = {
+                                            let state =
+                                                app.state::<shortcuts::RegisteredShortcuts>();
+                                            let mut keys_down = match state.keys_down.lock() {
+                                                Ok(guard) => guard,
+                                                Err(poisoned) => poisoned.into_inner(),
+                                            };
+                                            !keys_down.insert(action_id.clone())
+                                        };
+
+                                        if already_down {
+                                            // Key-repeat tick — ignore.
+                                        } else {
+                                            eprintln!("Shortcut triggered: {}", action_id);
+                                            shortcuts::handle_shortcut_action(app, &action_id);
+                                        }
                                     }
                                 }
                                 ShortcutState::Released => {
@@ -426,6 +452,14 @@ pub fn run() {
                                         action_id.strip_prefix("move_window_")
                                     {
                                         shortcuts::stop_move_window(app, direction);
+                                    } else {
+                                        let state =
+                                            app.state::<shortcuts::RegisteredShortcuts>();
+                                        let mut keys_down = match state.keys_down.lock() {
+                                            Ok(guard) => guard,
+                                            Err(poisoned) => poisoned.into_inner(),
+                                        };
+                                        keys_down.remove(&action_id);
                                     }
                                 }
                             }
